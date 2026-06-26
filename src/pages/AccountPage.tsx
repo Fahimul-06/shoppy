@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { ArrowLeft, Check, Loader2, LogOut, Mail, Package, Phone, User } from 'lucide-react';
 import { api, clearSession, getSessionUser, getToken, setSession } from '../lib/api';
 import { fetchUserOrders } from '../lib/db';
+import PasswordOtpPanel from '../components/forms/PasswordOtpPanel';
 
 type AuthUser = { id: string; fullName?: string; email: string; phone?: string; role?: string };
 
@@ -10,6 +11,7 @@ export default function AccountPage() {
   const [user, setUser] = useState<AuthUser | null>(getSessionUser<AuthUser>('user'));
   const [tab, setTab] = useState<'login' | 'register'>('login');
   const [form, setForm] = useState({ name: '', email: '', phone: '', password: '', confirm: '' });
+  const [profileForm, setProfileForm] = useState({ fullName: user?.fullName || '', phone: user?.phone || '' });
   const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState('');
@@ -18,7 +20,7 @@ export default function AccountPage() {
     const token = getToken('user');
     if (!token) return;
     api.get<{ user: AuthUser }>('/auth/me', token)
-      .then(({ user }) => { setUser(user); localStorage.setItem('userUser', JSON.stringify(user)); })
+      .then(({ user }) => { setUser(user); setProfileForm({ fullName: user.fullName || '', phone: user.phone || '' }); localStorage.setItem('userUser', JSON.stringify(user)); })
       .catch(() => { clearSession('user'); setUser(null); });
   }, []);
 
@@ -51,8 +53,8 @@ export default function AccountPage() {
     if (!user) return;
     setLoading(true); setMsg('');
     try {
-      const res = await api.put<{ user: AuthUser }>('/auth/profile', { fullName: form.name || user.fullName, phone: form.phone || user.phone }, getToken('user'));
-      setSession('user', getToken('user') || '', res.user); setUser(res.user); setMsg('Profile updated');
+      const res = await api.put<{ user: AuthUser }>('/auth/profile', { fullName: profileForm.fullName, phone: profileForm.phone }, getToken('user'));
+      setSession('user', getToken('user') || '', res.user); setUser(res.user); setProfileForm({ fullName: res.user.fullName || '', phone: res.user.phone || '' }); setMsg('Profile updated');
     } catch (e) { setMsg(e instanceof Error ? e.message : 'Update failed'); }
     finally { setLoading(false); }
   };
@@ -65,15 +67,16 @@ export default function AccountPage() {
           <div className="flex items-center gap-4"><div className="w-14 h-14 rounded-2xl bg-white/20 flex items-center justify-center font-black text-xl">{(user.fullName || user.email)[0].toUpperCase()}</div>
           <div><h1 className="text-xl font-extrabold">{user.fullName || 'Customer'}</h1><p className="text-orange-100 text-sm">{user.email}</p>{user.phone && <p className="text-orange-100 text-xs">{user.phone}</p>}</div></div>
         </div>
-        <div className="p-6 grid md:grid-cols-2 gap-6">
+        <div className="p-6 grid lg:grid-cols-2 gap-6">
           <div><h2 className="font-bold text-gray-800 mb-3 flex gap-2 items-center"><Package size={17}/> My Orders</h2>
             {orders.length === 0 ? <p className="text-sm text-gray-500 bg-gray-50 rounded-xl p-4">No orders yet.</p> : <div className="space-y-3">{orders.map((o) => <div key={o.id} className="bg-gray-50 rounded-xl p-4 flex justify-between"><div><p className="font-bold text-sm">{o.orderNumber}</p><p className="text-xs text-gray-400">{new Date(o.createdAt).toLocaleDateString()}</p></div><div className="text-right"><p className="font-bold">৳{Number(o.totalAmount).toLocaleString()}</p><p className="text-xs capitalize text-gray-500">{o.status}</p></div></div>)}</div>}
           </div>
-          <div><h2 className="font-bold text-gray-800 mb-3 flex gap-2 items-center"><User size={17}/> Edit Profile</h2>
-            <div className="space-y-3"><input className="w-full border rounded-xl px-4 py-3 text-sm" placeholder="Full name" value={form.name || user.fullName || ''} onChange={(e)=>setForm({...form,name:e.target.value})}/>
-            <input className="w-full border rounded-xl px-4 py-3 text-sm" placeholder="Phone" value={form.phone || user.phone || ''} onChange={(e)=>setForm({...form,phone:e.target.value})}/>
-            {msg && <p className="text-sm text-gray-600">{msg}</p>}<button onClick={saveProfile} disabled={loading} className="w-full bg-orange-500 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2">{loading ? <Loader2 className="animate-spin" size={15}/> : <Check size={15}/>} Save</button></div>
+          <div className="space-y-5"><div><h2 className="font-bold text-gray-800 mb-3 flex gap-2 items-center"><User size={17}/> Edit Profile</h2>
+            <div className="space-y-3"><input className="w-full border rounded-xl px-4 py-3 text-sm" placeholder="Full name" value={profileForm.fullName} onChange={(e)=>setProfileForm({...profileForm,fullName:e.target.value})}/>
+            <input className="w-full border rounded-xl px-4 py-3 text-sm" placeholder="Phone" value={profileForm.phone} onChange={(e)=>setProfileForm({...profileForm,phone:e.target.value})}/>
+            {msg && <p className="text-sm text-gray-600">{msg}</p>}<button onClick={saveProfile} disabled={loading} className="w-full bg-orange-500 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2">{loading ? <Loader2 className="animate-spin" size={15}/> : <Check size={15}/>} Save Profile</button></div>
           </div>
+          <PasswordOtpPanel role="user" basePath="/auth" token={getToken('user')} email={user.email} phone={user.phone}/></div>
         </div>
       </div>
       <button onClick={() => { clearSession('user'); setUser(null); }} className="mt-4 w-full border border-red-100 text-red-500 rounded-xl py-3 font-semibold flex items-center justify-center gap-2"><LogOut size={15}/> Sign Out</button>

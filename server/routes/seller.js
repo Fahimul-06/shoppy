@@ -2,9 +2,36 @@ import express from 'express';
 import bcrypt from 'bcryptjs';
 import Seller from '../models/Seller.js';
 import Product from '../models/Product.js';
+import PasswordOtp from '../models/PasswordOtp.js';
 import { requireSeller, signToken } from '../middleware/auth.js';
+import { sendPasswordOtpEmail } from '../utils/email.js';
+import { sendPasswordOtpSms } from '../utils/sms.js';
+
 const router = express.Router();
-const publicSeller = (s) => ({ id: s.id, name: s.name, email: s.email, phone: s.phone, shopName: s.shopName, shopAddress: s.shopAddress, status: s.status });
+const publicSeller = (s) => ({
+  id: s.id,
+  name: s.name,
+  email: s.email,
+  phone: s.phone,
+  shopName: s.shopName,
+  shopAddress: s.shopAddress,
+  businessType: s.businessType,
+  nidNumber: s.nidNumber,
+  tinNumber: s.tinNumber,
+  bankName: s.bankName,
+  bankAccount: s.bankAccount,
+  documents: s.documents || [],
+  status: s.status,
+});
+  const channel = String(process.env.OTP_CHANNEL || 'auto').toLowerCase();
+  const shouldSendSms = ['auto', 'sms', 'both'].includes(channel) && Boolean(req.user.phone);
+  const shouldSendEmail = ['email', 'both'].includes(channel) || (!shouldSendSms && Boolean(req.user.email));
+  const [smsResult, mailResult] = await Promise.all([
+    shouldSendSms ? sendPasswordOtpSms({ to: req.user.phone, otp, accountType: 'customer' }) : Promise.resolve({ sent: false, reason: 'SMS skipped' }),
+    shouldSendEmail ? sendPasswordOtpEmail({ to: req.user.email, otp, accountType: 'customer' }) : Promise.resolve({ sent: false, reason: 'Email skipped' }),
+  ]);
+  res.json(otpResponse({ mailResult, smsResult, otp }));
+
 router.post('/register', async (req, res) => {
   const { name, email, phone, password, shopName, shopAddress, businessType, nidNumber, tinNumber, bankName, bankAccount, documents } = req.body;
   if (!email || !password) return res.status(400).json({ message: 'Email and password are required' });
@@ -13,6 +40,7 @@ router.post('/register', async (req, res) => {
   const seller = await Seller.create({ name, email, phone, passwordHash: await bcrypt.hash(password, 10), shopName, shopAddress, businessType, nidNumber, tinNumber, bankName, bankAccount, documents: documents || [] });
   res.status(201).json({ seller: publicSeller(seller) });
 });
+
 router.post('/login', async (req, res) => {
   const { email, password } = req.body;
   const seller = await Seller.findOne({ email: String(email || '').toLowerCase() });
@@ -20,7 +48,80 @@ router.post('/login', async (req, res) => {
   if (seller.status === 'blocked') return res.status(403).json({ message: 'Your seller account is blocked' });
   res.json({ token: signToken({ id: seller.id, role: 'seller' }), seller: publicSeller(seller) });
 });
+
 router.get('/me', requireSeller, (req, res) => res.json({ seller: publicSeller(req.seller) }));
+
+router.put('/profile', requireSeller, async (req, res) => {
+  const { name, phone, shopName, shopAddress, businessType, nidNumber, tinNumber, bankName, bankAccount } = req.body;
+  Object.assign(req.seller, {
+    name: name ?? req.seller.name,
+    phone: phone ?? req.seller.phone,
+    shopName: shopName ?? req.seller.shopName,
+    shopAddress: shopAddress ?? req.seller.shopAddress,
+    businessType: businessType ?? req.seller.businessType,
+    nidNumber: nidNumber ?? req.seller.nidNumber,
+    tinNumber: tinNumber ?? req.seller.tinNumber,
+    bankName: bankName ?? req.seller.bankName,
+    bankAccount: bankAccount ?? req.seller.bankAccount,
+  });
+  await req.seller.save();
+  res.json({ seller: publicSeller(req.seller) });
+});
+
+router.post('/password/request-otp', requireSeller, async (req, res) => {
+  const otp = String(Math.floor(100000 + Math.random() * 900000));
+  await PasswordOtp.updateMany({ accountType: 'seller', accountId: req.seller._id, used: false }, { used: true });
+  await PasswordOtp.create({
+    accountType: 'seller',
+    accountId: req.seller._id,
+    email: req.seller.email,
+    phone: req.seller.phone,
+    channel: process.env.OTP_CHANNEL || 'auto',
+    otpHash: await bcrypt.hash(otp, 10),
+    expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+  });
+  const channel = String(process.env.OTP_CHANNEL || 'auto').toLowerCase();
+  const shouldSendSms = ['auto', 'sms', 'both'].includes(channel) && Boolean(req.seller.phone);
+  const shouldSendEmail = ['email', 'both'].includes(channel) || (!shouldSendSms && Boolean(req.seller.email));
+  const [smsResult, mailResult] = await Promise.all([
+    shouldSendSms ? sendPasswordOtpSms({ to: req.seller.phone, otp, accountType: 'seller' }) : Promise.resolve({ sent: false, reason: 'SMS skipped' }),
+    shouldSendEmail ? sendPasswordOtpEmail({ to: req.seller.email, otp, accountType: 'seller' }) : Promise.resolve({ sent: false, reason: 'Email skipped' }),
+  ]);
+  res.json(otpResponse({ mailResult, smsResult, otp }));
+});
+
+router.post('/password/change', requireSeller, async (req, res) => {
+  const { otp, newPassword } = req.body;
+  if (!otp || !newPassword) return res.status(400).json({ message: 'OTP and new password are required' });
+  if (String(newPassword).length < 6) return res.status(400).json({ message: 'Password must be at least 6 characters' });
+
+  const record = await PasswordOtp.findOne({
+    accountType: 'seller',
+    accountId: req.seller._id,
+    used: false,
+    expiresAt: { $gt: new Date() },
+  }).sort({ createdAt: -1 });
+
+  if (!record) return res.status(400).json({ message: 'OTP expired or not found. Request a new OTP.' });
+  if (record.attempts >= 5) {
+    record.used = true;
+    await record.save();
+    return res.status(429).json({ message: 'Too many wrong attempts. Request a new OTP.' });
+  }
+
+  const valid = await bcrypt.compare(String(otp), record.otpHash);
+  if (!valid) {
+    record.attempts += 1;
+    await record.save();
+    return res.status(400).json({ message: 'Invalid OTP' });
+  }
+
+  req.seller.passwordHash = await bcrypt.hash(String(newPassword), 10);
+  record.used = true;
+  await Promise.all([req.seller.save(), record.save()]);
+  res.json({ message: 'Password changed successfully' });
+});
+
 router.get('/products', requireSeller, async (req, res) => res.json({ products: await Product.find({ seller: req.seller.id }).sort({ createdAt: -1 }) }));
 router.post('/products', requireSeller, async (req, res) => res.status(201).json({ product: await Product.create({ ...req.body, seller: req.seller.id }) }));
 router.put('/products/:id', requireSeller, async (req, res) => {

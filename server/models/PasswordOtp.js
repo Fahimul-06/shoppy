@@ -6,6 +6,8 @@ const passwordOtpSchema = new mongoose.Schema({
   accountId: { type: mongoose.Schema.Types.ObjectId, required: true },
   email: { type: String, required: true, lowercase: true, trim: true },
   phone: { type: String, trim: true },
+  targetPhone: { type: String, trim: true },
+  purpose: { type: String, enum: ['password', 'phone'], default: 'password' },
   channel: { type: String, enum: ['auto', 'sms', 'email', 'both'], default: 'auto' },
   otpHash: { type: String, required: true },
   expiresAt: { type: Date, required: true },
@@ -14,7 +16,7 @@ const passwordOtpSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 passwordOtpSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
-passwordOtpSchema.index({ accountType: 1, accountId: 1, used: 1, createdAt: -1 });
+passwordOtpSchema.index({ accountType: 1, accountId: 1, purpose: 1, used: 1, createdAt: -1 });
 
 toJSON(passwordOtpSchema);
 export default mongoose.model('PasswordOtp', passwordOtpSchema);

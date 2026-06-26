@@ -43,19 +43,19 @@ router.post('/login', async (req, res) => {
 router.get('/me', requireUser, (req, res) => res.json({ user: publicUser(req.user) }));
 
 router.put('/profile', requireUser, async (req, res) => {
-  const { fullName, name, phone } = req.body;
+  const { fullName, name } = req.body;
   req.user.fullName = fullName ?? name ?? req.user.fullName;
-  req.user.phone = phone ?? req.user.phone;
   await req.user.save();
   res.json({ user: publicUser(req.user) });
 });
 
 router.post('/password/request-otp', requireUser, async (req, res) => {
   const otp = String(Math.floor(100000 + Math.random() * 900000));
-  await PasswordOtp.updateMany({ accountType: 'user', accountId: req.user._id, used: false }, { used: true });
+  await PasswordOtp.updateMany({ accountType: 'user', accountId: req.user._id, purpose: 'password', used: false }, { used: true });
   await PasswordOtp.create({
     accountType: 'user',
     accountId: req.user._id,
+    purpose: 'password',
     email: req.user.email,
     phone: req.user.phone,
     channel: process.env.OTP_CHANNEL || 'auto',
@@ -72,6 +72,67 @@ router.post('/password/request-otp', requireUser, async (req, res) => {
   res.json(otpResponse({ mailResult, smsResult, otp }));
 });
 
+
+router.post('/phone/request-otp', requireUser, async (req, res) => {
+  const newPhone = String(req.body?.phone || '').trim();
+  if (!newPhone) return res.status(400).json({ message: 'New phone number is required' });
+  if (newPhone === (req.user.phone || '')) return res.status(400).json({ message: 'This phone number is already saved on your profile' });
+
+  const otp = String(Math.floor(100000 + Math.random() * 900000));
+  await PasswordOtp.updateMany({ accountType: 'user', accountId: req.user._id, purpose: 'phone', used: false }, { used: true });
+  await PasswordOtp.create({
+    accountType: 'user',
+    accountId: req.user._id,
+    purpose: 'phone',
+    email: req.user.email,
+    phone: req.user.phone,
+    targetPhone: newPhone,
+    channel: 'sms',
+    otpHash: await bcrypt.hash(otp, 10),
+    expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+  });
+
+  const smsResult = await sendPasswordOtpSms({ to: newPhone, otp, accountType: 'customer phone change' });
+  res.json({
+    message: smsResult?.sent ? 'OTP sent to your new phone number' : 'OTP generated. Configure SMS to send phone-change OTP automatically.',
+    sent: Boolean(smsResult?.sent),
+    smsSent: Boolean(smsResult?.sent),
+    ...(smsResult?.sent ? {} : { devOtp: otp }),
+  });
+});
+
+router.post('/phone/change', requireUser, async (req, res) => {
+  const otp = String(req.body?.otp || '').trim();
+  if (!otp) return res.status(400).json({ message: 'OTP is required' });
+
+  const record = await PasswordOtp.findOne({
+    accountType: 'user',
+    accountId: req.user._id,
+    purpose: 'phone',
+    used: false,
+    expiresAt: { $gt: new Date() },
+  }).sort({ createdAt: -1 });
+
+  if (!record) return res.status(400).json({ message: 'OTP expired or not found. Request a new OTP.' });
+  if (record.attempts >= 5) {
+    record.used = true;
+    await record.save();
+    return res.status(429).json({ message: 'Too many wrong attempts. Request a new OTP.' });
+  }
+
+  const valid = await bcrypt.compare(otp, record.otpHash);
+  if (!valid) {
+    record.attempts += 1;
+    await record.save();
+    return res.status(400).json({ message: 'Invalid OTP' });
+  }
+
+  req.user.phone = record.targetPhone;
+  record.used = true;
+  await Promise.all([req.user.save(), record.save()]);
+  res.json({ message: 'Phone number changed successfully', user: publicUser(req.user) });
+});
+
 router.post('/password/change', requireUser, async (req, res) => {
   const { otp, newPassword } = req.body;
   if (!otp || !newPassword) return res.status(400).json({ message: 'OTP and new password are required' });
@@ -80,6 +141,7 @@ router.post('/password/change', requireUser, async (req, res) => {
   const record = await PasswordOtp.findOne({
     accountType: 'user',
     accountId: req.user._id,
+    purpose: 'password',
     used: false,
     expiresAt: { $gt: new Date() },
   }).sort({ createdAt: -1 });

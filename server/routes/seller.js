@@ -58,10 +58,9 @@ router.post('/login', async (req, res) => {
 router.get('/me', requireSeller, (req, res) => res.json({ seller: publicSeller(req.seller) }));
 
 router.put('/profile', requireSeller, async (req, res) => {
-  const { name, phone, shopName, shopAddress, businessType, nidNumber, tinNumber, bankName, bankAccount } = req.body;
+  const { name, shopName, shopAddress, businessType, nidNumber, tinNumber, bankName, bankAccount } = req.body;
   Object.assign(req.seller, {
     name: name ?? req.seller.name,
-    phone: phone ?? req.seller.phone,
     shopName: shopName ?? req.seller.shopName,
     shopAddress: shopAddress ?? req.seller.shopAddress,
     businessType: businessType ?? req.seller.businessType,
@@ -76,10 +75,11 @@ router.put('/profile', requireSeller, async (req, res) => {
 
 router.post('/password/request-otp', requireSeller, async (req, res) => {
   const otp = String(Math.floor(100000 + Math.random() * 900000));
-  await PasswordOtp.updateMany({ accountType: 'seller', accountId: req.seller._id, used: false }, { used: true });
+  await PasswordOtp.updateMany({ accountType: 'seller', accountId: req.seller._id, purpose: 'password', used: false }, { used: true });
   await PasswordOtp.create({
     accountType: 'seller',
     accountId: req.seller._id,
+    purpose: 'password',
     email: req.seller.email,
     phone: req.seller.phone,
     channel: process.env.OTP_CHANNEL || 'auto',
@@ -96,6 +96,67 @@ router.post('/password/request-otp', requireSeller, async (req, res) => {
   res.json(otpResponse({ mailResult, smsResult, otp }));
 });
 
+
+router.post('/phone/request-otp', requireSeller, async (req, res) => {
+  const newPhone = String(req.body?.phone || '').trim();
+  if (!newPhone) return res.status(400).json({ message: 'New phone number is required' });
+  if (newPhone === (req.seller.phone || '')) return res.status(400).json({ message: 'This phone number is already saved on your profile' });
+
+  const otp = String(Math.floor(100000 + Math.random() * 900000));
+  await PasswordOtp.updateMany({ accountType: 'seller', accountId: req.seller._id, purpose: 'phone', used: false }, { used: true });
+  await PasswordOtp.create({
+    accountType: 'seller',
+    accountId: req.seller._id,
+    purpose: 'phone',
+    email: req.seller.email,
+    phone: req.seller.phone,
+    targetPhone: newPhone,
+    channel: 'sms',
+    otpHash: await bcrypt.hash(otp, 10),
+    expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+  });
+
+  const smsResult = await sendPasswordOtpSms({ to: newPhone, otp, accountType: 'seller phone change' });
+  res.json({
+    message: smsResult?.sent ? 'OTP sent to your new phone number' : 'OTP generated. Configure SMS to send phone-change OTP automatically.',
+    sent: Boolean(smsResult?.sent),
+    smsSent: Boolean(smsResult?.sent),
+    ...(smsResult?.sent ? {} : { devOtp: otp }),
+  });
+});
+
+router.post('/phone/change', requireSeller, async (req, res) => {
+  const otp = String(req.body?.otp || '').trim();
+  if (!otp) return res.status(400).json({ message: 'OTP is required' });
+
+  const record = await PasswordOtp.findOne({
+    accountType: 'seller',
+    accountId: req.seller._id,
+    purpose: 'phone',
+    used: false,
+    expiresAt: { $gt: new Date() },
+  }).sort({ createdAt: -1 });
+
+  if (!record) return res.status(400).json({ message: 'OTP expired or not found. Request a new OTP.' });
+  if (record.attempts >= 5) {
+    record.used = true;
+    await record.save();
+    return res.status(429).json({ message: 'Too many wrong attempts. Request a new OTP.' });
+  }
+
+  const valid = await bcrypt.compare(otp, record.otpHash);
+  if (!valid) {
+    record.attempts += 1;
+    await record.save();
+    return res.status(400).json({ message: 'Invalid OTP' });
+  }
+
+  req.seller.phone = record.targetPhone;
+  record.used = true;
+  await Promise.all([req.seller.save(), record.save()]);
+  res.json({ message: 'Phone number changed successfully', seller: publicSeller(req.seller) });
+});
+
 router.post('/password/change', requireSeller, async (req, res) => {
   const { otp, newPassword } = req.body;
   if (!otp || !newPassword) return res.status(400).json({ message: 'OTP and new password are required' });
@@ -104,6 +165,7 @@ router.post('/password/change', requireSeller, async (req, res) => {
   const record = await PasswordOtp.findOne({
     accountType: 'seller',
     accountId: req.seller._id,
+    purpose: 'password',
     used: false,
     expiresAt: { $gt: new Date() },
   }).sort({ createdAt: -1 });

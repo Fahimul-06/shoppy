@@ -5,6 +5,7 @@ import { api, clearSession, getSessionUser, getToken } from '../../lib/api';
 import { categories } from '../../data/categories';
 import ImageUploader from '../../components/forms/ImageUploader';
 import PasswordOtpPanel from '../../components/forms/PasswordOtpPanel';
+import PhoneOtpPanel from '../../components/forms/PhoneOtpPanel';
 
 const EMPTY = {
   name: '',
@@ -151,7 +152,7 @@ export default function SellerDashboardPage() {
             <h2 className="font-black text-lg flex items-center gap-2 mb-4"><User size={18}/> Seller Profile</h2>
             <div className="grid sm:grid-cols-2 gap-3">
               <input className="border rounded-xl p-3 text-sm" placeholder="Seller name" value={profileForm.name || ''} onChange={(e) => updateProfile('name', e.target.value)} />
-              <input className="border rounded-xl p-3 text-sm" placeholder="Phone" value={profileForm.phone || ''} onChange={(e) => updateProfile('phone', e.target.value)} />
+              <p className="border rounded-xl p-3 text-sm text-gray-500 bg-gray-50">Phone: <b>{seller?.phone || 'Not added'}</b><br/><span className="text-xs">Change it below using OTP verification.</span></p>
               <input className="border rounded-xl p-3 text-sm" placeholder="Shop name" value={profileForm.shopName || ''} onChange={(e) => updateProfile('shopName', e.target.value)} />
               <input className="border rounded-xl p-3 text-sm" placeholder="Business type" value={profileForm.businessType || ''} onChange={(e) => updateProfile('businessType', e.target.value)} />
               <input className="border rounded-xl p-3 text-sm sm:col-span-2" placeholder="Shop address" value={profileForm.shopAddress || ''} onChange={(e) => updateProfile('shopAddress', e.target.value)} />
@@ -166,7 +167,10 @@ export default function SellerDashboardPage() {
             </button>
           </div>
 
-          <PasswordOtpPanel role="seller" basePath="/seller" token={getToken('seller')} email={seller?.email} phone={seller?.phone} />
+          <div className="space-y-5">
+            <PhoneOtpPanel role="seller" basePath="/seller" token={getToken('seller')} currentPhone={seller?.phone} onChanged={(updated) => { setSeller(updated); setProfileForm({ ...emptyProfile, ...updated }); localStorage.setItem('sellerUser', JSON.stringify(updated)); }} />
+            <PasswordOtpPanel role="seller" basePath="/seller" token={getToken('seller')} email={seller?.email} phone={seller?.phone} />
+          </div>
         </div>
 
         <div className="flex justify-between mb-3">

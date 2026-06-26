@@ -4,6 +4,7 @@ import { ArrowLeft, Check, Loader2, LogOut, Mail, Package, Phone, User } from 'l
 import { api, clearSession, getSessionUser, getToken, setSession } from '../lib/api';
 import { fetchUserOrders } from '../lib/db';
 import PasswordOtpPanel from '../components/forms/PasswordOtpPanel';
+import PhoneOtpPanel from '../components/forms/PhoneOtpPanel';
 
 type AuthUser = { id: string; fullName?: string; email: string; phone?: string; role?: string };
 
@@ -53,7 +54,7 @@ export default function AccountPage() {
     if (!user) return;
     setLoading(true); setMsg('');
     try {
-      const res = await api.put<{ user: AuthUser }>('/auth/profile', { fullName: profileForm.fullName, phone: profileForm.phone }, getToken('user'));
+      const res = await api.put<{ user: AuthUser }>('/auth/profile', { fullName: profileForm.fullName }, getToken('user'));
       setSession('user', getToken('user') || '', res.user); setUser(res.user); setProfileForm({ fullName: res.user.fullName || '', phone: res.user.phone || '' }); setMsg('Profile updated');
     } catch (e) { setMsg(e instanceof Error ? e.message : 'Update failed'); }
     finally { setLoading(false); }
@@ -73,9 +74,10 @@ export default function AccountPage() {
           </div>
           <div className="space-y-5"><div><h2 className="font-bold text-gray-800 mb-3 flex gap-2 items-center"><User size={17}/> Edit Profile</h2>
             <div className="space-y-3"><input className="w-full border rounded-xl px-4 py-3 text-sm" placeholder="Full name" value={profileForm.fullName} onChange={(e)=>setProfileForm({...profileForm,fullName:e.target.value})}/>
-            <input className="w-full border rounded-xl px-4 py-3 text-sm" placeholder="Phone" value={profileForm.phone} onChange={(e)=>setProfileForm({...profileForm,phone:e.target.value})}/>
+            <p className="text-xs text-gray-500 bg-gray-50 rounded-xl p-3">Phone: <b>{user.phone || 'Not added'}</b>. Use the OTP section below to change it safely.</p>
             {msg && <p className="text-sm text-gray-600">{msg}</p>}<button onClick={saveProfile} disabled={loading} className="w-full bg-orange-500 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2">{loading ? <Loader2 className="animate-spin" size={15}/> : <Check size={15}/>} Save Profile</button></div>
           </div>
+          <PhoneOtpPanel role="user" basePath="/auth" token={getToken('user')} currentPhone={user.phone} onChanged={(updated) => { setSession('user', getToken('user') || '', updated); setUser(updated); setProfileForm({ fullName: updated.fullName || '', phone: updated.phone || '' }); }} />
           <PasswordOtpPanel role="user" basePath="/auth" token={getToken('user')} email={user.email} phone={user.phone}/></div>
         </div>
       </div>

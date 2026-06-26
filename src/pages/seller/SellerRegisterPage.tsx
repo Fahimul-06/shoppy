@@ -161,6 +161,7 @@ export default function SellerRegisterPage() {
       const { data: authData, error: signUpErr } = await supabase.auth.signUp({
         email,
         password: form.password,
+        options: { data: { role: 'seller' } },
       });
       if (signUpErr) throw signUpErr;
       if (!authData.user) throw new Error('Account creation failed.');

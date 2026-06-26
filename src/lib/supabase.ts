@@ -1,7 +1,7 @@
 type AuthUser = { id: string; email: string; role?: string };
 type Filter = { field: string; op: 'eq'; value: unknown };
 
-const API_BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined) || 'http://localhost:5000/api';
+const API_BASE = (import.meta.env.VITE_API_BASE_URL as string | undefined) || '/api';
 const STORAGE_TOKEN = 'shoppy_auth_token';
 const STORAGE_USER = 'shoppy_auth_user';
 

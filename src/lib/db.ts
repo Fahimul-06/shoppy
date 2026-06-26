@@ -89,6 +89,26 @@ export interface OrderPayload {
   }>;
 }
 
+
+export interface PromoValidationResult {
+  valid: boolean;
+  code?: string;
+  discount_amount?: number;
+  final_total?: number;
+  message?: string;
+}
+
+export async function validatePromoCode(code: string, subtotal: number, items: OrderPayload['items'] = []): Promise<PromoValidationResult> {
+  const response = await fetch(`${(import.meta.env.VITE_API_BASE_URL as string | undefined) || '/api'}/promo-codes/validate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ code, subtotal, items }),
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) return { valid: false, message: result.error || 'Promo code could not be validated' };
+  return result as PromoValidationResult;
+}
+
 export async function placeOrder(payload: OrderPayload) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error('Not authenticated');

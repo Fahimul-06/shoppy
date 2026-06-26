@@ -4,10 +4,13 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "concurrently \"npm run server\" \"npm run client\"",
+    "dev": "concurrently \"npm run server:dev\" \"npm run client\"",
     "client": "vite",
     "server": "node server/index.js",
+    "server:dev": "NODE_ENV=development node server/index.js",
+    "start": "NODE_ENV=production node server/index.js",
     "build": "vite build",
+    "deploy:check": "npm run typecheck && npm run build && node --check server/index.js",
     "lint": "eslint .",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.app.json"
@@ -45,5 +48,9 @@
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.0",
     "@types/jsonwebtoken": "^9.0.7"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
   }
 }

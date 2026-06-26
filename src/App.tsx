@@ -65,7 +65,7 @@ export default function App() {
           {/* Seller routes */}
           <Route path="/seller/register" element={<SellerRegisterPage />} />
           <Route path="/seller/login" element={<SellerLoginPage />} />
-          <Route path="/seller/dashboard" element={<SellerDashboardPage />} />
+          <Route path="/seller/dashboard/*" element={<SellerDashboardPage />} />
 
           {/* Admin routes. These are intentionally outside StoreLayout so the admin login page always renders cleanly. */}
           <Route path="/admin/login" element={<AdminLoginPage />} />

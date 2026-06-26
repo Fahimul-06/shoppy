@@ -83,3 +83,13 @@ export async function fetchWishlistStatus(productId: string): Promise<boolean> {
   const { wishlisted } = await api.get<{ wishlisted: boolean }>(`/wishlist/${productId}/status`, getToken('user'));
   return wishlisted;
 }
+
+export async function fetchUserReturns() {
+  const { returns } = await api.get<{ returns: any[] }>('/orders/returns/my', getToken('user'));
+  return returns;
+}
+
+export async function requestReturn(payload: { orderId: string; orderItemId: string; reason: string; details?: string; quantity?: number }) {
+  const { returnRequest } = await api.post<{ returnRequest: any }>('/orders/returns', payload, getToken('user'));
+  return returnRequest;
+}

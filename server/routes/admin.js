@@ -5,6 +5,7 @@ import Seller from '../models/Seller.js';
 import Product from '../models/Product.js';
 import Order from '../models/Order.js';
 import PromoCode from '../models/PromoCode.js';
+import ReturnRequest from '../models/ReturnRequest.js';
 import { requireAdmin, signToken } from '../middleware/auth.js';
 const router = express.Router();
 const adminUser = (u) => ({ id: u.id, fullName: u.fullName, email: u.email, phone: u.phone, role: u.role });
@@ -43,6 +44,35 @@ router.put('/products/:id', requireAdmin, async (req, res) => res.json({ product
 router.delete('/products/:id', requireAdmin, async (req, res) => { await Product.findByIdAndDelete(req.params.id); res.json({ ok: true }); });
 router.get('/orders', requireAdmin, async (_req, res) => res.json({ orders: await Order.find().populate('user').sort({ createdAt: -1 }) }));
 router.patch('/orders/:id', requireAdmin, async (req, res) => res.json({ order: await Order.findByIdAndUpdate(req.params.id, req.body, { new: true }) }));
+
+router.get('/returns', requireAdmin, async (_req, res) => {
+  const returns = await ReturnRequest.find()
+    .populate('user')
+    .populate('seller')
+    .populate('product')
+    .populate('order')
+    .sort({ createdAt: -1 });
+  res.json({ returns });
+});
+
+router.patch('/returns/:id', requireAdmin, async (req, res) => {
+  const { status, adminNote } = req.body || {};
+  const allowed = ['requested', 'approved', 'denied', 'received', 'refunded', 'cancelled'];
+  if (!allowed.includes(status)) return res.status(400).json({ message: 'Invalid return status' });
+
+  const update = { status, adminNote: adminNote || '' };
+  if (['approved', 'denied'].includes(status)) update.decidedAt = new Date();
+  if (status === 'approved') update.approvedAt = new Date();
+  if (status === 'denied') update.deniedAt = new Date();
+
+  const returnRequest = await ReturnRequest.findByIdAndUpdate(req.params.id, update, { new: true })
+    .populate('user')
+    .populate('seller')
+    .populate('product')
+    .populate('order');
+  if (!returnRequest) return res.status(404).json({ message: 'Return request not found' });
+  res.json({ message: 'Return request updated', returnRequest });
+});
 router.get('/promos', requireAdmin, async (_req, res) => res.json({ promos: await PromoCode.find().sort({ createdAt: -1 }) }));
 router.post('/promos', requireAdmin, async (req, res) => res.status(201).json({ promo: await PromoCode.create(req.body) }));
 router.put('/promos/:id', requireAdmin, async (req, res) => res.json({ promo: await PromoCode.findByIdAndUpdate(req.params.id, req.body, { new: true }) }));

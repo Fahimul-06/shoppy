@@ -2,6 +2,7 @@ import express from 'express';
 import bcrypt from 'bcryptjs';
 import Seller from '../models/Seller.js';
 import Product from '../models/Product.js';
+import ReturnRequest from '../models/ReturnRequest.js';
 import PasswordOtp from '../models/PasswordOtp.js';
 import { requireSeller, signToken } from '../middleware/auth.js';
 import { sendPasswordOtpEmail } from '../utils/email.js';
@@ -188,6 +189,15 @@ router.post('/password/change', requireSeller, async (req, res) => {
   record.used = true;
   await Promise.all([req.seller.save(), record.save()]);
   res.json({ message: 'Password changed successfully' });
+});
+
+router.get('/returns', requireSeller, async (req, res) => {
+  const returns = await ReturnRequest.find({ seller: req.seller.id })
+    .populate('user')
+    .populate('product')
+    .populate('order')
+    .sort({ createdAt: -1 });
+  res.json({ returns });
 });
 
 router.get('/products', requireSeller, async (req, res) => res.json({ products: await Product.find({ seller: req.seller.id }).sort({ createdAt: -1 }) }));

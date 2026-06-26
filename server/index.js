@@ -17,7 +17,21 @@ const JWT_SECRET = process.env.JWT_SECRET || 'change-this-secret-before-producti
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-app.use(cors({ origin: process.env.CLIENT_ORIGIN || true, credentials: true }));
+
+const allowedOrigins = (process.env.CLIENT_ORIGIN || '')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
+app.use(cors({
+  origin(origin, callback) {
+    if (!origin || allowedOrigins.length === 0 || allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    return callback(new Error(`CORS blocked origin: ${origin}`));
+  },
+  credentials: true,
+}));
 app.use(express.json({ limit: '10mb' }));
 
 const productSchema = new mongoose.Schema({
@@ -424,9 +438,15 @@ if (!MONGODB_URI) {
 
 mongoose.connect(MONGODB_URI).then(async () => {
   await seedDatabase();
-  const distPath = path.join(__dirname, '..', 'dist');
-  app.use(express.static(distPath));
-  app.get('*', (_req, res) => res.sendFile(path.join(distPath, 'index.html')));
+
+  if (process.env.SERVE_FRONTEND === 'true') {
+    const distPath = path.join(__dirname, '..', 'dist');
+    app.use(express.static(distPath));
+    app.get('*', (_req, res) => res.sendFile(path.join(distPath, 'index.html')));
+  } else {
+    app.get('/', (_req, res) => res.json({ ok: true, service: 'shoppy-api' }));
+  }
+
   app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
 }).catch((err) => {
   console.error('MongoDB connection failed:', err);

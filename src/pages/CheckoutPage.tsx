@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { Check, ChevronRight, MapPin, CreditCard, Package } from 'lucide-react';
 import { useCart } from '../context/CartContext';
-import { placeOrder as saveOrder } from '../lib/db';
+import { placeOrder as submitOrder } from '../lib/db';
 
 const steps = ['Delivery Address', 'Payment Method', 'Confirmation'];
 
@@ -14,57 +14,45 @@ const paymentMethods = [
 ];
 
 export default function CheckoutPage() {
-  const { state, totalPrice, clearCart } = useCart();
-  const navigate = useNavigate();
+  const { state, totalPrice } = useCart();
   const [step, setStep] = useState(0);
   const [payment, setPayment] = useState('bkash');
   const [address, setAddress] = useState({ name: '', phone: '', division: '', district: '', area: '', address: '' });
   const [ordered, setOrdered] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState('');
   const [orderNumber, setOrderNumber] = useState('');
+  const [placing, setPlacing] = useState(false);
+  const [error, setError] = useState('');
 
   const shipping = totalPrice > 2000 ? 0 : 120;
   const total = totalPrice + shipping;
 
   const placeOrder = async () => {
+    setPlacing(true);
     setError('');
-    if (!address.name.trim() || !address.phone.trim() || !address.address.trim()) {
-      setError('Please fill in your name, phone number, and street address.');
-      setStep(0);
-      return;
-    }
-    setSubmitting(true);
     try {
-      const order = await saveOrder({
+      const order = await submitOrder({
         subtotal: totalPrice,
-        discount_amount: 0,
-        delivery_fee: shipping,
-        total_amount: total,
-        payment_method: payment,
-        shipping_address: address,
+        discountAmount: 0,
+        deliveryFee: shipping,
+        totalAmount: total,
+        paymentMethod: payment,
+        shippingAddress: address,
+        customer: { name: address.name, phone: address.phone },
         items: state.items.map(({ product, quantity }) => ({
-          product_id: product.id,
-          product_snapshot: product as unknown as Record<string, unknown>,
+          productId: product.id,
+          productSnapshot: product as unknown as Record<string, unknown>,
           quantity,
-          unit_price: product.price,
-          total_price: product.price * quantity,
+          unitPrice: product.price,
+          totalPrice: product.price * quantity,
         })),
-      }) as Record<string, unknown>;
-      setOrderNumber(String(order.order_number || order.id || 'confirmed'));
-      clearCart();
+      }) as { order_number?: string };
+      setOrderNumber(order.order_number || '');
       setOrdered(true);
       setStep(2);
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Could not place order';
-      if (message.toLowerCase().includes('authenticated')) {
-        setError('Please login or create an account before placing the order.');
-        navigate('/account');
-      } else {
-        setError(message);
-      }
+      setError(err instanceof Error ? err.message : 'Failed to place order');
     } finally {
-      setSubmitting(false);
+      setPlacing(false);
     }
   };
 
@@ -144,13 +132,12 @@ export default function CheckoutPage() {
                   </div>
                 </div>
                 <button
-                  onClick={() => { setError(''); if (!address.name.trim() || !address.phone.trim() || !address.address.trim()) setError('Please fill in your name, phone number, and street address.'); else setStep(1); }}
+                  onClick={() => setStep(1)}
                   className="mt-5 w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 transition-colors active:scale-95"
                 >
                   Continue to Payment
                   <ChevronRight size={16} />
                 </button>
-                {error && step === 0 ? <p className="text-sm text-red-500 mt-3">{error}</p> : null}
               </div>
             )}
 
@@ -171,15 +158,15 @@ export default function CheckoutPage() {
                     </label>
                   ))}
                 </div>
+                {error && <p className="mt-4 text-sm text-red-600 bg-red-50 border border-red-100 rounded-xl px-3 py-2">{error}</p>}
                 <div className="flex gap-3 mt-5">
                   <button onClick={() => setStep(0)} className="flex-1 border border-gray-200 text-gray-700 font-semibold py-3 rounded-xl hover:border-gray-300 transition-colors">
                     Back
                   </button>
-                  <button disabled={submitting} onClick={placeOrder} className="flex-1 bg-orange-500 hover:bg-orange-600 disabled:bg-orange-300 text-white font-bold py-3 rounded-xl transition-colors active:scale-95">
-                    {submitting ? 'Placing...' : 'Place Order'}
+                  <button onClick={placeOrder} disabled={placing} className="flex-1 bg-orange-500 hover:bg-orange-600 disabled:bg-orange-300 text-white font-bold py-3 rounded-xl transition-colors active:scale-95">
+                    {placing ? 'Placing...' : 'Place Order'}
                   </button>
                 </div>
-                {error && step === 1 ? <p className="text-sm text-red-500 mt-3">{error}</p> : null}
               </div>
             )}
 
@@ -191,7 +178,7 @@ export default function CheckoutPage() {
                 <h2 className="text-2xl font-bold text-gray-900 mb-2">Order Placed!</h2>
                 <p className="text-gray-500 mb-1">Thank you for your order.</p>
                 <p className="text-gray-500 text-sm mb-6">
-                  Order <span className="font-bold text-gray-800">#{orderNumber}</span> has been confirmed.
+                  Order <span className="font-bold text-gray-800">#{orderNumber || 'confirmed'}</span> has been confirmed.
                 </p>
                 <p className="text-sm text-gray-500 mb-6">
                   You will receive a confirmation SMS at your registered number shortly.

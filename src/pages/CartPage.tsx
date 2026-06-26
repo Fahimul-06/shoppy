@@ -8,31 +8,23 @@ export default function CartPage() {
   const { state, removeItem, updateQuantity, totalPrice, totalItems } = useCart();
   const [coupon, setCoupon] = useState('');
   const [couponApplied, setCouponApplied] = useState(false);
-  const [couponMessage, setCouponMessage] = useState('');
-  const [discount, setDiscount] = useState(0);
+  const [couponError, setCouponError] = useState('');
+  const [discountAmount, setDiscountAmount] = useState(0);
+  const discount = couponApplied ? discountAmount : 0;
   const shipping = totalPrice > 2000 ? 0 : 120;
   const finalTotal = totalPrice - discount + shipping;
 
   const applyCoupon = async () => {
-    setCouponMessage('');
-    const code = coupon.trim();
-    if (!code) return;
-    const result = await validatePromoCode(code, totalPrice, state.items.map(({ product, quantity }) => ({
-      product_id: product.id,
-      product_snapshot: product as unknown as Record<string, unknown>,
-      quantity,
-      unit_price: product.price,
-      total_price: product.price * quantity,
-    })));
-    if (!result.valid) {
+    setCouponError('');
+    try {
+      const result = await validatePromoCode(coupon, totalPrice);
+      setDiscountAmount(result.discountAmount);
+      setCouponApplied(true);
+    } catch (err) {
       setCouponApplied(false);
-      setDiscount(0);
-      setCouponMessage(result.message || 'Invalid coupon code');
-      return;
+      setDiscountAmount(0);
+      setCouponError(err instanceof Error ? err.message : 'Invalid coupon');
     }
-    setCouponApplied(true);
-    setDiscount(Number(result.discount_amount || 0));
-    setCouponMessage(`${result.code || code.toUpperCase()} applied!`);
   };
 
   return (
@@ -116,8 +108,8 @@ export default function CartPage() {
                 </div>
                 {couponApplied ? (
                   <div className="flex items-center justify-between bg-green-50 border border-green-200 rounded-xl px-3 py-2.5">
-                    <span className="text-green-700 font-semibold text-sm">{couponMessage || 'Coupon applied!'}</span>
-                    <button onClick={() => { setCouponApplied(false); setCoupon(''); setDiscount(0); setCouponMessage(''); }} className="text-gray-400 hover:text-red-500 transition-colors">
+                    <span className="text-green-700 font-semibold text-sm">CARTUP10 applied!</span>
+                    <button onClick={() => { setCouponApplied(false); setCoupon(''); setDiscountAmount(0); }} className="text-gray-400 hover:text-red-500 transition-colors">
                       <Trash2 size={14} />
                     </button>
                   </div>
@@ -136,7 +128,7 @@ export default function CartPage() {
                     </button>
                   </div>
                 )}
-                {couponMessage && !couponApplied ? <p className="text-xs text-red-500 mt-2">{couponMessage}</p> : null}
+                {couponError && <p className="text-xs text-red-500 mt-2">{couponError}</p>}
                 <p className="text-xs text-gray-400 mt-2">Try: <span className="font-mono font-semibold text-gray-600">CARTUP10</span></p>
               </div>
 
@@ -150,7 +142,7 @@ export default function CartPage() {
                   </div>
                   {couponApplied && (
                     <div className="flex justify-between text-green-600">
-                      <span>Discount</span>
+                      <span>Discount (10%)</span>
                       <span className="font-medium">-৳{discount.toLocaleString()}</span>
                     </div>
                   )}

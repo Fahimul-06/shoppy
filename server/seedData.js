@@ -1,5 +1,3 @@
-// Generated from src/data/*.ts for MongoDB seeding.
-
 export const heroSlides = [
   {
     id: '1',
@@ -595,7 +593,6 @@ export const products = [
   },
 ];
 
-
 export const categories = [
   {
     id: '1',
@@ -682,4 +679,3 @@ export const categories = [
     slug: 'phones',
   },
 ];
-

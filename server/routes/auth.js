@@ -7,7 +7,29 @@ import { sendPasswordOtpEmail } from '../utils/email.js';
 import { sendPasswordOtpSms } from '../utils/sms.js';
 
 const router = express.Router();
-const publicUser = (u) => ({ id: u.id, fullName: u.fullName, email: u.email, phone: u.phone, profilePhoto: u.profilePhoto, role: u.role });
+const publicAddress = (a) => ({
+  id: a.id,
+  label: a.label,
+  name: a.name,
+  phone: a.phone,
+  division: a.division,
+  district: a.district,
+  area: a.area,
+  address: a.address,
+  landmark: a.landmark,
+  latitude: a.latitude,
+  longitude: a.longitude,
+  isDefault: Boolean(a.isDefault),
+});
+const publicUser = (u) => ({
+  id: u.id,
+  fullName: u.fullName,
+  email: u.email,
+  phone: u.phone,
+  profilePhoto: u.profilePhoto,
+  role: u.role,
+  addresses: (u.addresses || []).map(publicAddress),
+});
 const makeOtp = () => String(Math.floor(100000 + Math.random() * 900000));
 const otpResponse = ({ mailResult, smsResult, otp }) => {
   const smsSent = Boolean(smsResult?.sent);
@@ -121,6 +143,83 @@ router.post('/email/change', requireUser, async (req, res) => {
   req.user.email = result.record.targetEmail;
   await req.user.save();
   res.json({ message: 'Email changed successfully', user: publicUser(req.user) });
+});
+
+
+router.get('/reverse-geocode', requireUser, async (req, res) => {
+  const lat = Number(req.query.lat);
+  const lng = Number(req.query.lng);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return res.status(400).json({ message: 'Valid latitude and longitude are required' });
+  try {
+    const url = new URL('https://nominatim.openstreetmap.org/reverse');
+    url.searchParams.set('format', 'jsonv2');
+    url.searchParams.set('lat', String(lat));
+    url.searchParams.set('lon', String(lng));
+    url.searchParams.set('addressdetails', '1');
+    const response = await fetch(url, { headers: { 'User-Agent': `${process.env.APP_NAME || 'Shoppy'} customer-address/1.0` } });
+    if (!response.ok) throw new Error('Reverse geocoding failed');
+    const data = await response.json();
+    const a = data.address || {};
+    res.json({
+      address: {
+        latitude: lat,
+        longitude: lng,
+        address: data.display_name || '',
+        division: a.state || a.division || '',
+        district: a.city || a.town || a.village || a.county || a.municipality || '',
+        area: a.suburb || a.neighbourhood || a.quarter || a.road || '',
+      }
+    });
+  } catch (error) {
+    res.json({ address: { latitude: lat, longitude: lng, address: '', division: '', district: '', area: '' }, warning: 'Location captured, but address text could not be detected automatically.' });
+  }
+});
+
+router.get('/addresses', requireUser, (req, res) => {
+  res.json({ addresses: (req.user.addresses || []).map(publicAddress) });
+});
+
+router.post('/addresses', requireUser, async (req, res) => {
+  const payload = req.body || {};
+  if (!payload.address && (!payload.latitude || !payload.longitude)) return res.status(400).json({ message: 'Address text or current location is required' });
+  if (payload.isDefault || !req.user.addresses?.length) req.user.addresses.forEach((a) => { a.isDefault = false; });
+  req.user.addresses.push({
+    label: payload.label || 'Home',
+    name: payload.name || req.user.fullName || '',
+    phone: payload.phone || req.user.phone || '',
+    division: payload.division || '',
+    district: payload.district || '',
+    area: payload.area || '',
+    address: payload.address || '',
+    landmark: payload.landmark || '',
+    latitude: payload.latitude,
+    longitude: payload.longitude,
+    isDefault: payload.isDefault || !req.user.addresses.length,
+  });
+  await req.user.save();
+  res.status(201).json({ addresses: req.user.addresses.map(publicAddress), user: publicUser(req.user) });
+});
+
+router.put('/addresses/:id', requireUser, async (req, res) => {
+  const address = req.user.addresses.id(req.params.id);
+  if (!address) return res.status(404).json({ message: 'Address not found' });
+  const payload = req.body || {};
+  ['label','name','phone','division','district','area','address','landmark','latitude','longitude'].forEach((key) => {
+    if (payload[key] !== undefined) address[key] = payload[key];
+  });
+  if (payload.isDefault) req.user.addresses.forEach((a) => { a.isDefault = String(a._id) === String(address._id); });
+  await req.user.save();
+  res.json({ addresses: req.user.addresses.map(publicAddress), user: publicUser(req.user) });
+});
+
+router.delete('/addresses/:id', requireUser, async (req, res) => {
+  const address = req.user.addresses.id(req.params.id);
+  if (!address) return res.status(404).json({ message: 'Address not found' });
+  const wasDefault = address.isDefault;
+  address.deleteOne();
+  if (wasDefault && req.user.addresses.length) req.user.addresses[0].isDefault = true;
+  await req.user.save();
+  res.json({ addresses: req.user.addresses.map(publicAddress), user: publicUser(req.user) });
 });
 
 export default router;

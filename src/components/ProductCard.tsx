@@ -1,8 +1,10 @@
-import React from 'react';
-import { Link } from 'react-router-dom';
-import { Star, ShoppingCart, Heart } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { Star, ShoppingCart, Heart, Loader2 } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { Product } from '../types';
+import { fetchWishlistStatus, toggleWishlist } from '../lib/db';
+import { getToken } from '../lib/api';
 
 const badgeStyles: Record<string, string> = {
   sale: 'bg-red-500 text-white',
@@ -16,6 +18,32 @@ interface Props {
 
 export default function ProductCard({ product }: Props) {
   const { addItem } = useCart();
+  const navigate = useNavigate();
+  const [wishlisted, setWishlisted] = useState(false);
+  const [wishlistLoading, setWishlistLoading] = useState(false);
+
+  useEffect(() => {
+    const token = getToken('user');
+    if (!token || !product.id) return;
+    fetchWishlistStatus(product.id).then(setWishlisted).catch(() => setWishlisted(false));
+  }, [product.id]);
+
+  const onWishlist = async (event: React.MouseEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!getToken('user')) {
+      navigate('/account');
+      return;
+    }
+    setWishlistLoading(true);
+    try {
+      const next = await toggleWishlist(product.id);
+      setWishlisted(next);
+      window.dispatchEvent(new CustomEvent('wishlist:changed', { detail: { productId: product.id, wishlisted: next } }));
+    } finally {
+      setWishlistLoading(false);
+    }
+  };
 
   return (
     <div className="bg-white rounded-2xl overflow-hidden border border-gray-100 hover:shadow-lg hover:border-orange-200 transition-all duration-200 group flex flex-col">
@@ -36,10 +64,12 @@ export default function ProductCard({ product }: Props) {
           </span>
         )}
         <button
-          onClick={(e) => e.preventDefault()}
-          className="absolute bottom-2 right-2 w-8 h-8 bg-white rounded-full flex items-center justify-center shadow-md opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-50 hover:text-red-500"
+          onClick={onWishlist}
+          disabled={wishlistLoading}
+          title={wishlisted ? 'Remove from wishlist' : 'Add to wishlist'}
+          className={`absolute bottom-2 right-2 w-8 h-8 bg-white rounded-full flex items-center justify-center shadow-md transition-all hover:bg-red-50 hover:text-red-500 ${wishlisted ? 'opacity-100 text-red-500' : 'opacity-0 group-hover:opacity-100'}`}
         >
-          <Heart size={15} />
+          {wishlistLoading ? <Loader2 size={14} className="animate-spin"/> : <Heart size={15} className={wishlisted ? 'fill-red-500' : ''} />}
         </button>
       </Link>
 

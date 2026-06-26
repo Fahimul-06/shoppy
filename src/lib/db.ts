@@ -72,3 +72,14 @@ export async function toggleWishlist(productId: string): Promise<boolean> {
   const { wishlisted } = await api.post<{ wishlisted: boolean }>('/wishlist/toggle', { productId }, getToken('user'));
   return wishlisted;
 }
+
+
+export async function fetchWishlistIds(): Promise<string[]> {
+  const { productIds } = await api.get<{ productIds: string[] }>('/wishlist/ids', getToken('user'));
+  return productIds;
+}
+
+export async function fetchWishlistStatus(productId: string): Promise<boolean> {
+  const { wishlisted } = await api.get<{ wishlisted: boolean }>(`/wishlist/${productId}/status`, getToken('user'));
+  return wishlisted;
+}

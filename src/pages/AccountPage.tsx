@@ -6,8 +6,9 @@ import PasswordOtpPanel from '../components/forms/PasswordOtpPanel';
 import PhoneOtpPanel from '../components/forms/PhoneOtpPanel';
 import EmailOtpPanel from '../components/forms/EmailOtpPanel';
 import ImageUploader from '../components/forms/ImageUploader';
+import AddressManager from '../components/forms/AddressManager';
 
-type AuthUser = { id: string; fullName?: string; email: string; phone?: string; profilePhoto?: string; role?: string };
+type AuthUser = { id: string; fullName?: string; email: string; phone?: string; profilePhoto?: string; role?: string; addresses?: any[] };
 
 const profileLinks = [
   { to: '/orders', label: 'My Orders', icon: Package },
@@ -102,6 +103,8 @@ export default function AccountPage() {
               <button onClick={saveProfile} disabled={loading} className="sm:col-span-2 bg-orange-500 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2">{loading ? <Loader2 className="animate-spin" size={15}/> : <Check size={15}/>} Save Profile</button>
             </div>
           </section>
+
+          <AddressManager token={getToken('user')} user={user} onChanged={updateUserState} />
 
           <div className="grid lg:grid-cols-3 gap-5">
             <PhoneOtpPanel role="user" basePath="/auth" token={getToken('user')} currentPhone={user.phone} onChanged={updateUserState} />

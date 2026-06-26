@@ -1,9 +1,31 @@
 import React, { useState, useMemo } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useSearchParams } from 'react-router-dom';
 import { ChevronRight, SlidersHorizontal, ChevronDown, X } from 'lucide-react';
 import { categories } from '../data/categories';
 import ProductCard from '../components/ProductCard';
 import { useProducts } from '../hooks/useProducts';
+
+
+const cleanLabel = (value?: string | null) => (value || '').trim();
+const norm = (value?: string | null) => cleanLabel(value).toLowerCase().replace(/[-_]+/g, ' ');
+
+function productMatchesLabel(product: any, label: string) {
+  const q = norm(label);
+  if (!q) return true;
+  const fields = [
+    product.name,
+    product.brand,
+    product.description,
+    product.category,
+    product.subCategory,
+    product.subcategory,
+    product.subSubCategory,
+    product.childCategory,
+    ...(Array.isArray(product.features) ? product.features : []),
+    ...Object.values(product.specifications || {}),
+  ];
+  return fields.some((field) => norm(String(field || '')).includes(q));
+}
 
 const sortOptions = [
   { label: 'Most Popular', value: 'popular' },
@@ -15,6 +37,9 @@ const sortOptions = [
 
 export default function CategoryPage() {
   const { slug } = useParams<{ slug: string }>();
+  const [searchParams] = useSearchParams();
+  const selectedSub = cleanLabel(searchParams.get('sub'));
+  const selectedChild = cleanLabel(searchParams.get('child'));
   const [sort, setSort] = useState('popular');
   const [maxPrice, setMaxPrice] = useState(200000);
   const [minRating, setMinRating] = useState(0);
@@ -26,16 +51,27 @@ export default function CategoryPage() {
 
   const filtered = useMemo(() => {
     let list = isAll ? products : products.filter((p) => p.category === slug);
+
+    if (selectedSub) {
+      list = list.filter((p) => productMatchesLabel(p, selectedSub));
+    }
+
+    if (selectedChild) {
+      list = list.filter((p) => productMatchesLabel(p, selectedChild));
+    }
+
     list = list.filter((p) => p.price <= maxPrice && p.rating >= minRating);
     switch (sort) {
       case 'price-asc': return [...list].sort((a, b) => a.price - b.price);
       case 'price-desc': return [...list].sort((a, b) => b.price - a.price);
       case 'rating': return [...list].sort((a, b) => b.rating - a.rating);
+      case 'newest': return [...list].reverse();
       default: return list;
     }
-  }, [slug, isAll, sort, maxPrice, minRating]);
+  }, [slug, isAll, sort, maxPrice, minRating, products, selectedSub, selectedChild]);
 
   const categoryName = isAll ? 'All Products' : category?.name ?? slug?.replace(/-/g, ' ');
+  const pageTitle = selectedChild || selectedSub || categoryName;
 
   const FilterPanel = () => (
     <div className="space-y-6">
@@ -116,7 +152,7 @@ export default function CategoryPage() {
           <img src={category.image} alt={category.name} className="w-full h-full object-cover" />
           <div className="absolute inset-0 bg-gradient-to-r from-black/70 to-black/30 flex items-center px-6 sm:px-12">
             <div>
-              <h1 className="text-white text-2xl sm:text-3xl font-bold">{category.name}</h1>
+              <h1 className="text-white text-2xl sm:text-3xl font-bold">{pageTitle}</h1>
               <p className="text-gray-300 text-sm mt-1">{filtered.length} products available</p>
             </div>
           </div>
@@ -128,7 +164,7 @@ export default function CategoryPage() {
         <nav className="flex items-center gap-1.5 text-sm text-gray-500 mb-5">
           <Link to="/" className="hover:text-orange-500 transition-colors">Home</Link>
           <ChevronRight size={14} />
-          <span className="text-gray-800 font-medium capitalize">{categoryName}</span>
+          <span className="text-gray-800 font-medium capitalize">{pageTitle}</span>
         </nav>
 
         <div className="flex gap-6">

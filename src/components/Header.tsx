@@ -180,8 +180,17 @@ const subSubMap: Record<string, Record<string, string[]>> = {
   },
 };
 
+const categoryUrl = (categorySlug: string, sub?: string, child?: string) => {
+  const params = new URLSearchParams();
+  if (sub) params.set('sub', sub);
+  if (child) params.set('child', child);
+  const qs = params.toString();
+  return `/category/${categorySlug}${qs ? `?${qs}` : ''}`;
+};
+
 // ── 3-column Mega Dropdown ────────────────────────────────────────────────────
 function MegaDropdown({ onClose }: { onClose: () => void }) {
+  const navigate = useNavigate();
   const [activeCatSlug, setActiveCatSlug] = useState(categories[0].slug);
   const [activeSub, setActiveSub] = useState<string>(() => {
     const subs = Object.keys(subSubMap[categories[0].slug] ?? {});
@@ -192,6 +201,11 @@ function MegaDropdown({ onClose }: { onClose: () => void }) {
     setActiveCatSlug(slug);
     const subs = Object.keys(subSubMap[slug] ?? {});
     setActiveSub(subs[0] ?? '');
+  };
+
+  const goToCategory = (path: string) => {
+    navigate(path);
+    onClose();
   };
 
   const activeCategory = categories.find((c) => c.slug === activeCatSlug)!;
@@ -213,7 +227,7 @@ function MegaDropdown({ onClose }: { onClose: () => void }) {
             <button
               key={cat.id}
               onMouseEnter={() => handleCatEnter(cat.slug)}
-              onClick={onClose}
+              onClick={() => goToCategory(categoryUrl(cat.slug))}
               className={`w-full flex items-center gap-2.5 px-3 py-2 text-left transition-colors group ${
                 active ? 'bg-white border-r-2 border-orange-500' : 'hover:bg-white'
               }`}
@@ -237,7 +251,7 @@ function MegaDropdown({ onClose }: { onClose: () => void }) {
         <div className="flex items-center justify-between px-3 pt-1 pb-2">
           <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{activeCategory.name}</p>
           <Link
-            to={`/category/${activeCatSlug}`}
+            to={categoryUrl(activeCatSlug)}
             onClick={onClose}
             className="text-[10px] font-semibold text-orange-500 hover:text-orange-600 transition-colors"
           >
@@ -250,7 +264,7 @@ function MegaDropdown({ onClose }: { onClose: () => void }) {
             <button
               key={sub}
               onMouseEnter={() => setActiveSub(sub)}
-              onClick={onClose}
+              onClick={() => goToCategory(categoryUrl(activeCatSlug, sub))}
               className={`w-full flex items-center justify-between gap-2 px-3 py-2 text-left text-xs font-medium transition-colors group ${
                 active ? 'bg-orange-50 text-orange-600 border-r-2 border-orange-500' : 'text-gray-600 hover:bg-orange-50 hover:text-orange-500'
               }`}
@@ -268,7 +282,7 @@ function MegaDropdown({ onClose }: { onClose: () => void }) {
         <div className="flex items-center justify-between mb-3">
           <h3 className="font-bold text-gray-900 text-sm">{activeSub || activeCategory.name}</h3>
           <Link
-            to={`/category/${activeCatSlug}`}
+            to={categoryUrl(activeCatSlug, activeSub || undefined)}
             onClick={onClose}
             className="text-xs font-semibold text-orange-500 hover:text-orange-600 flex items-center gap-1 transition-colors"
           >
@@ -282,7 +296,7 @@ function MegaDropdown({ onClose }: { onClose: () => void }) {
             {subSubItems.map((item) => (
               <Link
                 key={item}
-                to={`/category/${activeCatSlug}`}
+                to={categoryUrl(activeCatSlug, activeSub, item)}
                 onClick={onClose}
                 className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg hover:bg-orange-50 hover:text-orange-600 text-xs text-gray-600 transition-colors group"
               >
@@ -534,7 +548,7 @@ function MobileCategoryRow({
       {open && (
         <div className="pl-11 pr-2 pb-1">
           <Link
-            to={`/category/${cat.slug}`}
+            to={categoryUrl(cat.slug)}
             onClick={onNavigate}
             className="block text-xs font-semibold text-orange-500 hover:underline py-1 mb-1"
           >
@@ -545,19 +559,29 @@ function MobileCategoryRow({
             const subOpen = openSub === sub;
             return (
               <div key={sub}>
-                <button
-                  className="w-full flex items-center justify-between py-1.5 px-2 rounded-lg hover:bg-orange-50 transition-colors"
-                  onClick={() => setOpenSub(subOpen ? null : sub)}
-                >
-                  <span className="text-xs font-medium text-gray-600 hover:text-orange-500">{sub}</span>
-                  <ChevronDown size={12} className={`text-gray-400 transition-transform ${subOpen ? 'rotate-180' : ''}`} />
-                </button>
+                <div className="flex items-center gap-1">
+                  <Link
+                    to={categoryUrl(cat.slug, sub)}
+                    onClick={onNavigate}
+                    className="flex-1 py-1.5 px-2 rounded-lg text-xs font-medium text-gray-600 hover:text-orange-500 hover:bg-orange-50 transition-colors"
+                  >
+                    {sub}
+                  </Link>
+                  <button
+                    type="button"
+                    aria-label={`Show ${sub} subcategories`}
+                    className="p-1.5 rounded-lg hover:bg-orange-50 transition-colors"
+                    onClick={() => setOpenSub(subOpen ? null : sub)}
+                  >
+                    <ChevronDown size={12} className={`text-gray-400 transition-transform ${subOpen ? 'rotate-180' : ''}`} />
+                  </button>
+                </div>
                 {subOpen && (
                   <div className="pl-3 pb-1 grid grid-cols-2 gap-x-2 gap-y-0.5">
                     {subItems.map((item) => (
                       <Link
                         key={item}
-                        to={`/category/${cat.slug}`}
+                        to={categoryUrl(cat.slug, sub, item)}
                         onClick={onNavigate}
                         className="text-[11px] text-gray-500 hover:text-orange-500 py-1 px-1.5 flex items-center gap-1 transition-colors"
                       >

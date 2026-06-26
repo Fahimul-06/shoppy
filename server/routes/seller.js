@@ -23,14 +23,20 @@ const publicSeller = (s) => ({
   documents: s.documents || [],
   status: s.status,
 });
-  const channel = String(process.env.OTP_CHANNEL || 'auto').toLowerCase();
-  const shouldSendSms = ['auto', 'sms', 'both'].includes(channel) && Boolean(req.user.phone);
-  const shouldSendEmail = ['email', 'both'].includes(channel) || (!shouldSendSms && Boolean(req.user.email));
-  const [smsResult, mailResult] = await Promise.all([
-    shouldSendSms ? sendPasswordOtpSms({ to: req.user.phone, otp, accountType: 'customer' }) : Promise.resolve({ sent: false, reason: 'SMS skipped' }),
-    shouldSendEmail ? sendPasswordOtpEmail({ to: req.user.email, otp, accountType: 'customer' }) : Promise.resolve({ sent: false, reason: 'Email skipped' }),
-  ]);
-  res.json(otpResponse({ mailResult, smsResult, otp }));
+
+const otpResponse = ({ mailResult, smsResult, otp }) => {
+  const smsSent = Boolean(smsResult?.sent);
+  const emailSent = Boolean(mailResult?.sent);
+  const sent = smsSent || emailSent;
+  const target = smsSent && emailSent ? 'your phone and email' : smsSent ? 'your phone' : emailSent ? 'your email' : 'dev mode';
+  return {
+    message: sent ? `OTP sent to ${target}` : 'OTP generated. Configure SMS or SMTP to send OTP automatically.',
+    sent,
+    smsSent,
+    emailSent,
+    ...(sent ? {} : { devOtp: otp }),
+  };
+};
 
 router.post('/register', async (req, res) => {
   const { name, email, phone, password, shopName, shopAddress, businessType, nidNumber, tinNumber, bankName, bankAccount, documents } = req.body;

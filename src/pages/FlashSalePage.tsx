@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Zap, ChevronRight, Clock, LayoutGrid } from 'lucide-react';
-import { products } from '../data/products';
 import { categories } from '../data/categories';
 import ProductCard from '../components/ProductCard';
+import { useProducts } from '../hooks/useProducts';
 
 function useCountdown(targetHours: number) {
   const getTimeLeft = () => {
@@ -40,6 +40,7 @@ function TimeUnit({ value, label }: { value: number; label: string }) {
 
 export default function FlashSalePage() {
   const { hours, minutes, seconds } = useCountdown(23);
+  const { products, loading } = useProducts();
   const saleProducts = products
     .filter((p) => p.badge === 'sale')
     .sort((a, b) => (b.discount ?? 0) - (a.discount ?? 0));
@@ -58,7 +59,8 @@ export default function FlashSalePage() {
   const countForCat = (slug: string) =>
     saleProducts.filter((p) => p.category === slug).length;
 
-  const maxDiscount = Math.max(...saleProducts.map((p) => p.discount ?? 0));
+  const maxDiscount = saleProducts.length ? Math.max(...saleProducts.map((p) => p.discount ?? 0)) : 0;
+  const minDiscount = saleProducts.length ? Math.min(...saleProducts.map((p) => p.discount ?? 0)) : 0;
 
   return (
     <div className="bg-gray-50 min-h-screen">
@@ -110,7 +112,7 @@ export default function FlashSalePage() {
           {[
             { label: 'Products on Sale', value: saleProducts.length },
             { label: 'Max Discount', value: `${maxDiscount}%` },
-            { label: 'Min Discount', value: `${Math.min(...saleProducts.map((p) => p.discount ?? 0))}%` },
+            { label: 'Min Discount', value: `${minDiscount}%` },
           ].map((stat) => (
             <div key={stat.label} className="bg-white rounded-2xl border border-gray-100 p-4 text-center shadow-sm">
               <p className="text-2xl font-bold text-red-500">{stat.value}</p>
@@ -197,11 +199,17 @@ export default function FlashSalePage() {
         </div>
 
         {/* Products grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4">
-          {filtered.map((p) => (
-            <ProductCard key={p.id} product={p} />
-          ))}
-        </div>
+        {loading ? (
+          <div className="bg-white rounded-2xl border border-gray-100 p-16 text-center text-gray-400">Loading products...</div>
+        ) : filtered.length === 0 ? (
+          <div className="bg-white rounded-2xl border border-gray-100 p-16 text-center text-gray-400">No sale products found.</div>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4">
+            {filtered.map((p) => (
+              <ProductCard key={p.id} product={p} />
+            ))}
+          </div>
+        )}
 
         {/* Also check out */}
         <div className="mt-12">

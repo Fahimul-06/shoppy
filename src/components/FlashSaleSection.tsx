@@ -1,13 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Zap, Clock, ChevronRight, ShoppingCart, Star } from 'lucide-react';
-import { products } from '../data/products';
 import { useCart } from '../context/CartContext';
-
-const saleProducts = products
-  .filter((p) => p.badge === 'sale')
-  .sort((a, b) => (b.discount ?? 0) - (a.discount ?? 0))
-  .slice(0, 8);
+import { useProducts } from '../hooks/useProducts';
 
 function useCountdown() {
   const getTimeLeft = () => {
@@ -43,6 +38,11 @@ function TimeUnit({ v, label }: { v: number; label: string }) {
 
 export default function FlashSaleSection() {
   const { addItem } = useCart();
+  const { products, loading } = useProducts();
+  const saleProducts = products
+    .filter((p) => p.badge === 'sale')
+    .sort((a, b) => (b.discount ?? 0) - (a.discount ?? 0))
+    .slice(0, 8);
   const { h, m, s } = useCountdown();
 
   return (
@@ -90,7 +90,11 @@ export default function FlashSaleSection() {
 
       {/* Products — horizontal scroll on mobile, wrap on larger screens */}
       <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-none sm:grid sm:grid-cols-4 lg:grid-cols-5 xl:grid-cols-8 sm:overflow-visible sm:pb-0">
-        {saleProducts.map((product) => (
+        {loading ? (
+          <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center text-gray-400 w-full">Loading sale products...</div>
+        ) : saleProducts.length === 0 ? (
+          <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center text-gray-400 w-full">No sale products yet.</div>
+        ) : saleProducts.map((product) => (
           <div
             key={product.id}
             className="bg-white rounded-2xl border border-gray-100 hover:shadow-lg hover:border-red-200 transition-all duration-200 group flex-shrink-0 w-40 sm:w-auto flex flex-col overflow-hidden"
@@ -124,15 +128,15 @@ export default function FlashSaleSection() {
                   <Star
                     key={i}
                     size={10}
-                    className={i < Math.floor(product.rating) ? 'text-orange-400 fill-orange-400' : 'text-gray-200 fill-gray-200'}
+                    className={i < Math.floor(product.rating ?? 0) ? 'text-orange-400 fill-orange-400' : 'text-gray-200 fill-gray-200'}
                   />
                 ))}
               </div>
 
               <div className="mb-2.5">
-                <span className="text-sm font-bold text-gray-900 block">৳{product.price.toLocaleString()}</span>
+                <span className="text-sm font-bold text-gray-900 block">৳{Number(product.price ?? 0).toLocaleString()}</span>
                 {product.originalPrice && (
-                  <span className="text-xs text-gray-400 line-through">৳{product.originalPrice.toLocaleString()}</span>
+                  <span className="text-xs text-gray-400 line-through">৳{Number(product.originalPrice).toLocaleString()}</span>
                 )}
               </div>
 

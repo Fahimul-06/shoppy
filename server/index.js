@@ -18,6 +18,7 @@ import uploadRoutes from './routes/uploads.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const app = express();
+app.set('trust proxy', 1);
 const PORT = process.env.PORT || 5000;
 
 app.use(cors({ origin: process.env.CLIENT_URL?.split(',') || true, credentials: true }));

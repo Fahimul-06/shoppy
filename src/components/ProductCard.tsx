@@ -55,16 +55,16 @@ export default function ProductCard({ product }: Props) {
             <Star
               key={i}
               size={12}
-              className={i < Math.floor(product.rating) ? 'text-orange-400 fill-orange-400' : 'text-gray-200 fill-gray-200'}
+              className={i < Math.floor(product.rating ?? 0) ? 'text-orange-400 fill-orange-400' : 'text-gray-200 fill-gray-200'}
             />
           ))}
-          <span className="text-xs text-gray-500 ml-1">({product.reviewCount.toLocaleString()})</span>
+          <span className="text-xs text-gray-500 ml-1">({Number(product.reviewCount ?? 0).toLocaleString()})</span>
         </div>
 
         <div className="flex items-end gap-2 mb-3">
-          <span className="text-base font-bold text-gray-900">৳{product.price.toLocaleString()}</span>
+          <span className="text-base font-bold text-gray-900">৳{Number(product.price ?? 0).toLocaleString()}</span>
           {product.originalPrice && (
-            <span className="text-xs text-gray-400 line-through">৳{product.originalPrice.toLocaleString()}</span>
+            <span className="text-xs text-gray-400 line-through">৳{Number(product.originalPrice).toLocaleString()}</span>
           )}
         </div>
 

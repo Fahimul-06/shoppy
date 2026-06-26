@@ -1,9 +1,11 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { Star, ShoppingCart, Heart, Share2, Shield, Truck, RotateCcw, ChevronRight, Minus, Plus, Check } from 'lucide-react';
-import { products } from '../data/products';
 import { useCart } from '../context/CartContext';
 import ProductCard from '../components/ProductCard';
+import type { Product } from '../types';
+import { fetchProductById } from '../lib/db';
+import { useProducts } from '../hooks/useProducts';
 
 const mockReviews = [
   { id: '1', author: 'Rahim Ahmed', rating: 5, date: '2024-03-10', comment: 'Excellent product! Exactly as described. Fast delivery and well packed.', verified: true },
@@ -15,11 +17,33 @@ const mockReviews = [
 export default function ProductPage() {
   const { id } = useParams<{ id: string }>();
   const { addItem } = useCart();
-  const product = products.find((p) => p.id === id);
+  const { products } = useProducts();
+  const [product, setProduct] = useState<Product | null>(null);
+  const [loading, setLoading] = useState(true);
   const [activeImage, setActiveImage] = useState(0);
   const [quantity, setQuantity] = useState(1);
   const [activeTab, setActiveTab] = useState<'description' | 'specs' | 'reviews'>('description');
   const [added, setAdded] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    setLoading(true);
+    setActiveImage(0);
+    if (!id) {
+      setProduct(null);
+      setLoading(false);
+      return;
+    }
+    fetchProductById(id)
+      .then((row) => { if (alive) setProduct(row); })
+      .catch(() => { if (alive) setProduct(null); })
+      .finally(() => { if (alive) setLoading(false); });
+    return () => { alive = false; };
+  }, [id]);
+
+  if (loading) {
+    return <div className="min-h-[60vh] flex items-center justify-center text-gray-400">Loading product...</div>;
+  }
 
   if (!product) {
     return (
@@ -94,18 +118,18 @@ export default function ProductPage() {
             <div className="flex items-center gap-3">
               <div className="flex items-center gap-1">
                 {[...Array(5)].map((_, i) => (
-                  <Star key={i} size={16} className={i < Math.floor(product.rating) ? 'text-orange-400 fill-orange-400' : 'text-gray-200 fill-gray-200'} />
+                  <Star key={i} size={16} className={i < Math.floor((product.rating ?? 0)) ? 'text-orange-400 fill-orange-400' : 'text-gray-200 fill-gray-200'} />
                 ))}
               </div>
-              <span className="text-sm font-semibold text-gray-700">{product.rating}</span>
-              <span className="text-sm text-gray-500">({product.reviewCount.toLocaleString()} reviews)</span>
+              <span className="text-sm font-semibold text-gray-700">{(product.rating ?? 0)}</span>
+              <span className="text-sm text-gray-500">({Number(product.reviewCount ?? 0).toLocaleString()} reviews)</span>
             </div>
 
             <div className="bg-orange-50 rounded-2xl p-4">
               <div className="flex items-end gap-3">
-                <span className="text-3xl font-bold text-gray-900">৳{product.price.toLocaleString()}</span>
+                <span className="text-3xl font-bold text-gray-900">৳{Number(product.price ?? 0).toLocaleString()}</span>
                 {product.originalPrice && (
-                  <span className="text-lg text-gray-400 line-through mb-0.5">৳{product.originalPrice.toLocaleString()}</span>
+                  <span className="text-lg text-gray-400 line-through mb-0.5">৳{Number(product.originalPrice).toLocaleString()}</span>
                 )}
                 {product.discount && (
                   <span className="bg-red-500 text-white text-sm font-bold px-2.5 py-1 rounded-lg mb-0.5">
@@ -115,7 +139,7 @@ export default function ProductPage() {
               </div>
               {product.originalPrice && (
                 <p className="text-green-600 text-sm font-semibold mt-1">
-                  You save ৳{(product.originalPrice - product.price).toLocaleString()}
+                  You save ৳{(Number(product.originalPrice) - Number(product.price ?? 0)).toLocaleString()}
                 </p>
               )}
             </div>
@@ -251,13 +275,13 @@ export default function ProductPage() {
               <div className="space-y-5">
                 <div className="flex items-center gap-6 pb-5 border-b border-gray-100">
                   <div className="text-center">
-                    <div className="text-5xl font-bold text-gray-900">{product.rating}</div>
+                    <div className="text-5xl font-bold text-gray-900">{(product.rating ?? 0)}</div>
                     <div className="flex items-center justify-center gap-0.5 my-1">
                       {[...Array(5)].map((_, i) => (
-                        <Star key={i} size={14} className={i < Math.floor(product.rating) ? 'text-orange-400 fill-orange-400' : 'text-gray-200 fill-gray-200'} />
+                        <Star key={i} size={14} className={i < Math.floor((product.rating ?? 0)) ? 'text-orange-400 fill-orange-400' : 'text-gray-200 fill-gray-200'} />
                       ))}
                     </div>
-                    <div className="text-xs text-gray-500">{product.reviewCount.toLocaleString()} reviews</div>
+                    <div className="text-xs text-gray-500">{Number(product.reviewCount ?? 0).toLocaleString()} reviews</div>
                   </div>
                   <div className="flex-1 space-y-1.5">
                     {[5, 4, 3, 2, 1].map((star) => {

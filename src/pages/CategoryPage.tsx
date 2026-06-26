@@ -1,9 +1,9 @@
 import React, { useState, useMemo } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { ChevronRight, SlidersHorizontal, ChevronDown, X } from 'lucide-react';
-import { products } from '../data/products';
 import { categories } from '../data/categories';
 import ProductCard from '../components/ProductCard';
+import { useProducts } from '../hooks/useProducts';
 
 const sortOptions = [
   { label: 'Most Popular', value: 'popular' },
@@ -19,6 +19,7 @@ export default function CategoryPage() {
   const [maxPrice, setMaxPrice] = useState(200000);
   const [minRating, setMinRating] = useState(0);
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const { products, loading } = useProducts();
 
   const category = categories.find((c) => c.slug === slug);
   const isAll = slug === 'all';
@@ -170,7 +171,9 @@ export default function CategoryPage() {
               </div>
             </div>
 
-            {filtered.length === 0 ? (
+            {loading ? (
+              <div className="bg-white rounded-2xl p-16 text-center border border-gray-100 text-gray-400">Loading products...</div>
+            ) : filtered.length === 0 ? (
               <div className="bg-white rounded-2xl p-16 text-center border border-gray-100">
                 <p className="text-gray-400 text-lg mb-2">No products found</p>
                 <p className="text-gray-400 text-sm mb-5">Try adjusting your filters</p>

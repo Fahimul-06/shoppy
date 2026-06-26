@@ -5,7 +5,8 @@ const esc = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 router.get('/', async (req, res) => {
   const { category, badge, search, includeInactive } = req.query;
-  const filter = includeInactive === 'true' ? {} : { active: true };
+  // Treat missing `active` as public because older seller-created products may not have this field.
+  const filter = includeInactive === 'true' ? {} : { active: { $ne: false } };
   if (category) filter.category = category;
   if (badge) filter.badge = badge;
   if (search) filter.$or = [

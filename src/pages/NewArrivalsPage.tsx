@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Sparkles, ChevronRight, LayoutGrid } from 'lucide-react';
-import { products } from '../data/products';
 import { categories } from '../data/categories';
 import ProductCard from '../components/ProductCard';
+import { useProducts } from '../hooks/useProducts';
 
 export default function NewArrivalsPage() {
+  const { products, loading } = useProducts();
   const newProducts = products.filter((p) => p.badge === 'new');
   const [activeCat, setActiveCat] = useState('all');
 
@@ -124,7 +125,9 @@ export default function NewArrivalsPage() {
         </div>
 
         {/* Products grid */}
-        {filtered.length === 0 ? (
+        {loading ? (
+          <div className="bg-white rounded-2xl border border-gray-100 p-16 text-center text-gray-400">Loading products...</div>
+        ) : filtered.length === 0 ? (
           <div className="bg-white rounded-2xl border border-gray-100 p-16 text-center">
             <Sparkles size={48} className="text-gray-200 mx-auto mb-4" />
             <p className="text-gray-500 font-semibold">No new arrivals in this category yet.</p>

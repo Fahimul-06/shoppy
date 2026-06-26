@@ -218,59 +218,18 @@ function requireRole(...roles) {
   };
 }
 
-async function ensureAdminFromEnv() {
-  const adminEmail = String(process.env.ADMIN_EMAIL || '').trim().toLowerCase();
-  const adminPassword = String(process.env.ADMIN_PASSWORD || '');
-
-  if (!adminEmail || !adminPassword) {
-    console.warn('ADMIN_EMAIL or ADMIN_PASSWORD is missing. Admin login will not be auto-created.');
-    return;
-  }
-
-  if (adminPassword.length < 8) {
-    console.warn('ADMIN_PASSWORD should be at least 8 characters. Admin user was not created.');
-    return;
-  }
-
-  const existing = await User.findOne({ email: adminEmail });
-  const passwordHash = await bcrypt.hash(adminPassword, 10);
-
-  if (existing) {
-    existing.role = 'admin';
-    existing.sellerStatus = 'none';
-    existing.fullName = existing.fullName || 'Admin';
-    if (process.env.SYNC_ADMIN_PASSWORD === 'true') {
-      existing.passwordHash = passwordHash;
-    }
-    await existing.save();
-    console.log(`Admin account ready: ${adminEmail}`);
-    return;
-  }
-
-  await User.create({
-    email: adminEmail,
-    passwordHash,
-    fullName: 'Admin',
-    role: 'admin',
-    sellerStatus: 'none',
-  });
-  console.log(`Admin account created: ${adminEmail}`);
-}
-
 async function seedDatabase() {
-  if (!(await Category.countDocuments())) {
-    await Category.insertMany(seedCategories.map((c, i) => ({ legacyId: c.id, name: c.name, image: c.image, slug: c.slug, sortOrder: i })));
+  if (await Product.countDocuments()) return;
+  await Category.insertMany(seedCategories.map((c, i) => ({ legacyId: c.id, name: c.name, image: c.image, slug: c.slug, sortOrder: i })));
+  await HeroSlide.insertMany(seedHeroSlides.map((h, i) => ({ legacyId: h.id, image: h.image, title: h.title, subtitle: h.subtitle, sortOrder: i, active: true })));
+  await Product.insertMany(seedProducts.map((p) => ({ ...p, legacyId: p.id, active: true })));
+  await PromoCode.create({ code: 'CARTUP10', description: '10% off demo coupon', discountType: 'percentage', discountValue: 10, minOrder: 0, appliesTo: 'all', active: true });
+  const adminEmail = process.env.ADMIN_EMAIL;
+  const adminPassword = process.env.ADMIN_PASSWORD;
+  if (adminEmail && adminPassword) {
+    const passwordHash = await bcrypt.hash(adminPassword, 10);
+    await User.create({ email: adminEmail, passwordHash, fullName: 'Admin', role: 'admin' });
   }
-  if (!(await HeroSlide.countDocuments())) {
-    await HeroSlide.insertMany(seedHeroSlides.map((h, i) => ({ legacyId: h.id, image: h.image, title: h.title, subtitle: h.subtitle, sortOrder: i, active: true })));
-  }
-  if (!(await Product.countDocuments())) {
-    await Product.insertMany(seedProducts.map((p) => ({ ...p, legacyId: p.id, active: true })));
-  }
-  if (!(await PromoCode.findOne({ code: 'CARTUP10' }))) {
-    await PromoCode.create({ code: 'CARTUP10', description: '10% off demo coupon', discountType: 'percentage', discountValue: 10, minOrder: 0, appliesTo: 'all', active: true });
-  }
-  await ensureAdminFromEnv();
 }
 
 app.get('/api/health', (_req, res) => res.json({ ok: true, database: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected' }));
@@ -318,10 +277,20 @@ app.patch('/api/auth/password', auth, async (req, res) => {
 
 function publicUser(user) {
   return {
-    id: String(user._id), fullName: user.fullName, email: user.email, phone: user.phone,
-    role: user.role, sellerStatus: user.sellerStatus, shopName: user.shopName,
-    businessType: user.businessType, address: user.address, documentUrl: user.documentUrl,
+    id: String(user._id),
+    fullName: user.fullName,
+    email: user.email,
+    phone: user.phone,
+    role: user.role,
+    sellerStatus: user.sellerStatus,
+    shopName: user.shopName,
+    businessType: user.businessType,
+    nidNumber: user.nidNumber,
+    tradeLicense: user.tradeLicense,
+    address: user.address,
+    documentUrl: user.documentUrl,
     createdAt: user.createdAt,
+    updatedAt: user.updatedAt,
   };
 }
 
@@ -444,10 +413,32 @@ function toPromo(p) {
 }
 
 app.get('/api/admin/stats', auth, requireRole('admin'), async (_req, res) => {
-  const [sellers, pendingSellers, products, orders, paidOrders, activePromos] = await Promise.all([
-    User.countDocuments({ role: 'seller' }), User.countDocuments({ role: 'seller', sellerStatus: 'pending' }), Product.countDocuments(), Order.countDocuments(), Order.find({ paymentStatus: 'paid' }), PromoCode.countDocuments({ active: true }),
+  const [users, customers, admins, sellers, pendingSellers, approvedSellers, products, activeProducts, orders, paidOrders, activePromos] = await Promise.all([
+    User.countDocuments(),
+    User.countDocuments({ role: 'customer' }),
+    User.countDocuments({ role: 'admin' }),
+    User.countDocuments({ role: 'seller' }),
+    User.countDocuments({ role: 'seller', sellerStatus: 'pending' }),
+    User.countDocuments({ role: 'seller', sellerStatus: 'approved' }),
+    Product.countDocuments(),
+    Product.countDocuments({ active: true }),
+    Order.countDocuments(),
+    Order.find({ paymentStatus: 'paid' }),
+    PromoCode.countDocuments({ active: true }),
   ]);
-  res.json({ sellers, pendingSellers, products, orders, revenue: paidOrders.reduce((s, o) => s + (o.totalAmount || 0), 0), activePromos });
+  res.json({
+    users,
+    customers,
+    admins,
+    sellers,
+    pendingSellers,
+    approvedSellers,
+    products,
+    activeProducts,
+    orders,
+    revenue: paidOrders.reduce((s, o) => s + (o.totalAmount || 0), 0),
+    activePromos,
+  });
 });
 
 app.get('/api/admin/orders', auth, requireRole('admin'), async (req, res) => {
@@ -463,12 +454,60 @@ app.patch('/api/admin/orders/:id', auth, requireRole('admin'), async (req, res) 
   res.json(toOrder(order));
 });
 
+app.get('/api/admin/users', auth, requireRole('admin'), async (req, res) => {
+  const filter = {};
+  if (req.query.role && ['customer', 'seller', 'admin'].includes(String(req.query.role))) filter.role = req.query.role;
+  if (req.query.search) {
+    const rx = new RegExp(String(req.query.search).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+    filter.$or = [{ fullName: rx }, { email: rx }, { phone: rx }, { shopName: rx }];
+  }
+  const users = await User.find(filter).sort({ createdAt: -1 }).limit(Number(req.query.limit) || 500);
+  res.json(users.map(publicUser));
+});
+
+app.patch('/api/admin/users/:id', auth, requireRole('admin'), async (req, res) => {
+  const allowed = ['fullName', 'phone', 'address', 'role', 'sellerStatus', 'shopName', 'businessType', 'nidNumber', 'tradeLicense', 'documentUrl'];
+  const patch = {};
+  for (const key of allowed) if (key in req.body) patch[key] = req.body[key];
+
+  if (patch.role && !['customer', 'seller', 'admin'].includes(patch.role)) return res.status(400).json({ message: 'Invalid role' });
+  if (patch.sellerStatus && !['none', 'pending', 'approved', 'rejected'].includes(patch.sellerStatus)) return res.status(400).json({ message: 'Invalid seller status' });
+  if (patch.role === 'seller' && !patch.sellerStatus) patch.sellerStatus = 'pending';
+  if (patch.role === 'customer') patch.sellerStatus = 'none';
+
+  const user = await User.findByIdAndUpdate(req.params.id, patch, { new: true });
+  if (!user) return res.status(404).json({ message: 'User not found' });
+  res.json(publicUser(user));
+});
+
+app.patch('/api/admin/users/:id/password', auth, requireRole('admin'), async (req, res) => {
+  const password = String(req.body.password || '');
+  if (password.length < 6) return res.status(400).json({ message: 'Password must be at least 6 characters' });
+  const user = await User.findById(req.params.id);
+  if (!user) return res.status(404).json({ message: 'User not found' });
+  user.passwordHash = await bcrypt.hash(password, 10);
+  await user.save();
+  res.json({ ok: true });
+});
+
+app.delete('/api/admin/users/:id', auth, requireRole('admin'), async (req, res) => {
+  if (String(req.user._id) === String(req.params.id)) return res.status(400).json({ message: 'You cannot delete your own admin account while logged in' });
+  const user = await User.findById(req.params.id);
+  if (!user) return res.status(404).json({ message: 'User not found' });
+  if (user.role === 'seller') await Product.updateMany({ sellerId: user._id }, { sellerId: null, active: false });
+  await User.findByIdAndDelete(req.params.id);
+  res.json({ ok: true });
+});
+
 app.get('/api/admin/sellers', auth, requireRole('admin'), async (_req, res) => {
   const sellers = await User.find({ role: 'seller' }).sort({ createdAt: -1 });
   res.json(sellers.map(publicUser));
 });
 app.patch('/api/admin/sellers/:id', auth, requireRole('admin'), async (req, res) => {
-  const seller = await User.findByIdAndUpdate(req.params.id, { sellerStatus: req.body.status }, { new: true });
+  const status = req.body.status || req.body.sellerStatus;
+  if (!['pending', 'approved', 'rejected'].includes(status)) return res.status(400).json({ message: 'Invalid seller status' });
+  const seller = await User.findOneAndUpdate({ _id: req.params.id, role: 'seller' }, { sellerStatus: status }, { new: true });
+  if (!seller) return res.status(404).json({ message: 'Seller not found' });
   res.json(publicUser(seller));
 });
 

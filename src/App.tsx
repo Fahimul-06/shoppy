@@ -19,7 +19,6 @@ import SellerLoginPage from './pages/seller/SellerLoginPage';
 import SellerDashboardPage from './pages/seller/SellerDashboardPage';
 import AdminLoginPage from './pages/admin/AdminLoginPage';
 import AdminPage from './pages/admin/AdminPage';
-import AdminProtectedRoute from './components/AdminProtectedRoute';
 
 function Layout({ children }: { children: React.ReactNode }) {
   return (
@@ -43,7 +42,7 @@ export default function App() {
           <Route path="/seller/login" element={<SellerLoginPage />} />
           <Route path="/seller/dashboard" element={<SellerDashboardPage />} />
           <Route path="/admin/login" element={<AdminLoginPage />} />
-          <Route path="/admin" element={<AdminProtectedRoute><AdminPage /></AdminProtectedRoute>} />
+          <Route path="/admin" element={<AdminPage />} />
           <Route path="*" element={
             <Layout>
               <Routes>

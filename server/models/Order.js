@@ -19,6 +19,8 @@ const orderSchema = new mongoose.Schema({
   paymentStatus: { type: String, enum: ['pending', 'paid', 'failed', 'refunded'], default: 'pending' },
   status: { type: String, enum: ['pending', 'processing', 'shipped', 'delivered', 'cancelled'], default: 'pending' },
   shippingAddress: Object,
+  cancelReason: String,
+  cancelledAt: Date,
 }, { timestamps: true });
 orderSchema.pre('save', function(next) {
   if (!this.orderNumber) this.orderNumber = `ORD-${Date.now()}-${Math.floor(Math.random() * 9000 + 1000)}`;

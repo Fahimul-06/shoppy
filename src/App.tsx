@@ -14,6 +14,11 @@ import CheckoutPage from './pages/CheckoutPage';
 import SearchPage from './pages/SearchPage';
 import NewArrivalsPage from './pages/NewArrivalsPage';
 import FlashSalePage from './pages/FlashSalePage';
+import OrdersPage from './pages/OrdersPage';
+import WishlistPage from './pages/WishlistPage';
+import CouponsPage from './pages/CouponsPage';
+import ReturnsPage from './pages/ReturnsPage';
+import CancellationsPage from './pages/CancellationsPage';
 import SellerRegisterPage from './pages/seller/SellerRegisterPage';
 import SellerLoginPage from './pages/seller/SellerLoginPage';
 import SellerDashboardPage from './pages/seller/SellerDashboardPage';
@@ -51,6 +56,11 @@ export default function App() {
           <Route path="/new-arrivals" element={<StorePage><NewArrivalsPage /></StorePage>} />
           <Route path="/flash-sale" element={<StorePage><FlashSalePage /></StorePage>} />
           <Route path="/account" element={<AccountPage />} />
+          <Route path="/orders" element={<StorePage><OrdersPage /></StorePage>} />
+          <Route path="/wishlist" element={<StorePage><WishlistPage /></StorePage>} />
+          <Route path="/coupons" element={<StorePage><CouponsPage /></StorePage>} />
+          <Route path="/returns" element={<StorePage><ReturnsPage /></StorePage>} />
+          <Route path="/cancellations" element={<StorePage><CancellationsPage /></StorePage>} />
 
           {/* Seller routes */}
           <Route path="/seller/register" element={<SellerRegisterPage />} />

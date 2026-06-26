@@ -14,6 +14,7 @@ import adminRoutes from './routes/admin.js';
 import sellerRoutes from './routes/seller.js';
 import wishlistRoutes from './routes/wishlist.js';
 import uploadRoutes from './routes/uploads.js';
+import promoRoutes from './routes/promos.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -35,6 +36,7 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/seller', sellerRoutes);
 app.use('/api/wishlist', wishlistRoutes);
 app.use('/api/uploads', uploadRoutes);
+app.use('/api/promos', promoRoutes);
 
 const possibleClientDistPaths = [
   path.join(process.cwd(), 'dist'),

@@ -2,6 +2,7 @@ import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { connectDB } from './models/index.js';
 import authRoutes from './routes/auth.js';
@@ -34,12 +35,31 @@ app.use('/api/seller', sellerRoutes);
 app.use('/api/wishlist', wishlistRoutes);
 app.use('/api/uploads', uploadRoutes);
 
-const clientDist = path.join(__dirname, '..', 'dist');
-app.use(express.static(clientDist));
-app.get('*', (req, res, next) => {
-  if (req.path.startsWith('/api')) return next();
-  res.sendFile(path.join(clientDist, 'index.html'));
-});
+const possibleClientDistPaths = [
+  path.join(process.cwd(), 'dist'),
+  path.join(__dirname, '..', 'dist'),
+  path.join(__dirname, '..', '..', 'dist'),
+];
+
+const clientDist = possibleClientDistPaths.find((distPath) =>
+  fs.existsSync(path.join(distPath, 'index.html'))
+);
+
+if (clientDist) {
+  app.use(express.static(clientDist));
+
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api')) return next();
+    res.sendFile(path.join(clientDist, 'index.html'));
+  });
+} else {
+  console.warn('Frontend build not found. Checked:', possibleClientDistPaths);
+
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api')) return next();
+    res.status(500).send('Frontend build not found. Run npm run build before starting the server.');
+  });
+}
 
 connectDB().then(() => {
   app.listen(PORT, () => console.log(`API running on port ${PORT}`));

@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Shield, Mail, Lock, Eye, EyeOff, AlertCircle, Loader2 } from 'lucide-react';
-import { login } from '../../lib/api';
+import { getStoredUser, login } from '../../lib/api';
 
 export default function AdminLoginPage() {
   const navigate = useNavigate();
@@ -11,12 +11,22 @@ export default function AdminLoginPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
+  useEffect(() => {
+    const user = getStoredUser<any>();
+    if (user?.role === 'admin') navigate('/admin', { replace: true });
+  }, [navigate]);
+
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setLoading(true);
     try {
-      await login(email, password, 'admin');
+      if (!email.trim() || !password) {
+        setError('Please enter admin email and password.');
+        return;
+      }
+      await login(email.trim(), password, 'admin');
       navigate('/admin');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed');
@@ -36,7 +46,7 @@ export default function AdminLoginPage() {
           <div><label className="block text-sm font-semibold text-slate-300 mb-1.5">Password</label><div className="relative"><Lock size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500" /><input type={showPw ? 'text' : 'password'} value={password} onChange={(e) => setPassword(e.target.value)} className="w-full pl-10 pr-10 py-3 bg-slate-900/60 border border-slate-600 rounded-xl text-sm text-white" /><button type="button" onClick={() => setShowPw(!showPw)} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-500">{showPw ? <EyeOff size={15} /> : <Eye size={15} />}</button></div></div>
           {error && <div className="bg-red-900/30 border border-red-800 rounded-xl p-3 flex items-start gap-2"><AlertCircle size={14} className="text-red-400 mt-0.5" /><p className="text-red-300 text-xs">{error}</p></div>}
           <button disabled={loading} className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-800 text-white font-bold py-3 rounded-xl text-sm flex items-center justify-center gap-2">{loading ? <><Loader2 size={15} className="animate-spin" /> Signing in...</> : 'Sign In'}</button>
-          <p className="text-slate-500 text-xs text-center">Create first admin using ADMIN_EMAIL and ADMIN_PASSWORD env variables before first deploy.</p>
+          <p className="text-slate-500 text-xs text-center">Use the ADMIN_EMAIL and ADMIN_PASSWORD values from your Render backend environment variables.</p>
         </form>
         <div className="text-center mt-6"><Link to="/" className="text-slate-500 text-sm hover:text-slate-300">← Back to Shop</Link></div>
       </div>

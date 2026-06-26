@@ -218,18 +218,59 @@ function requireRole(...roles) {
   };
 }
 
-async function seedDatabase() {
-  if (await Product.countDocuments()) return;
-  await Category.insertMany(seedCategories.map((c, i) => ({ legacyId: c.id, name: c.name, image: c.image, slug: c.slug, sortOrder: i })));
-  await HeroSlide.insertMany(seedHeroSlides.map((h, i) => ({ legacyId: h.id, image: h.image, title: h.title, subtitle: h.subtitle, sortOrder: i, active: true })));
-  await Product.insertMany(seedProducts.map((p) => ({ ...p, legacyId: p.id, active: true })));
-  await PromoCode.create({ code: 'CARTUP10', description: '10% off demo coupon', discountType: 'percentage', discountValue: 10, minOrder: 0, appliesTo: 'all', active: true });
-  const adminEmail = process.env.ADMIN_EMAIL;
-  const adminPassword = process.env.ADMIN_PASSWORD;
-  if (adminEmail && adminPassword) {
-    const passwordHash = await bcrypt.hash(adminPassword, 10);
-    await User.create({ email: adminEmail, passwordHash, fullName: 'Admin', role: 'admin' });
+async function ensureAdminFromEnv() {
+  const adminEmail = String(process.env.ADMIN_EMAIL || '').trim().toLowerCase();
+  const adminPassword = String(process.env.ADMIN_PASSWORD || '');
+
+  if (!adminEmail || !adminPassword) {
+    console.warn('ADMIN_EMAIL or ADMIN_PASSWORD is missing. Admin login will not be auto-created.');
+    return;
   }
+
+  if (adminPassword.length < 8) {
+    console.warn('ADMIN_PASSWORD should be at least 8 characters. Admin user was not created.');
+    return;
+  }
+
+  const existing = await User.findOne({ email: adminEmail });
+  const passwordHash = await bcrypt.hash(adminPassword, 10);
+
+  if (existing) {
+    existing.role = 'admin';
+    existing.sellerStatus = 'none';
+    existing.fullName = existing.fullName || 'Admin';
+    if (process.env.SYNC_ADMIN_PASSWORD === 'true') {
+      existing.passwordHash = passwordHash;
+    }
+    await existing.save();
+    console.log(`Admin account ready: ${adminEmail}`);
+    return;
+  }
+
+  await User.create({
+    email: adminEmail,
+    passwordHash,
+    fullName: 'Admin',
+    role: 'admin',
+    sellerStatus: 'none',
+  });
+  console.log(`Admin account created: ${adminEmail}`);
+}
+
+async function seedDatabase() {
+  if (!(await Category.countDocuments())) {
+    await Category.insertMany(seedCategories.map((c, i) => ({ legacyId: c.id, name: c.name, image: c.image, slug: c.slug, sortOrder: i })));
+  }
+  if (!(await HeroSlide.countDocuments())) {
+    await HeroSlide.insertMany(seedHeroSlides.map((h, i) => ({ legacyId: h.id, image: h.image, title: h.title, subtitle: h.subtitle, sortOrder: i, active: true })));
+  }
+  if (!(await Product.countDocuments())) {
+    await Product.insertMany(seedProducts.map((p) => ({ ...p, legacyId: p.id, active: true })));
+  }
+  if (!(await PromoCode.findOne({ code: 'CARTUP10' }))) {
+    await PromoCode.create({ code: 'CARTUP10', description: '10% off demo coupon', discountType: 'percentage', discountValue: 10, minOrder: 0, appliesTo: 'all', active: true });
+  }
+  await ensureAdminFromEnv();
 }
 
 app.get('/api/health', (_req, res) => res.json({ ok: true, database: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected' }));

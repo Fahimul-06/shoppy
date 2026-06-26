@@ -89,6 +89,7 @@ const userSchema = new mongoose.Schema({
 
 const orderItemSchema = new mongoose.Schema({
   productId: { type: mongoose.Schema.Types.ObjectId, ref: 'Product', default: null },
+  originalProductId: String,
   productSnapshot: mongoose.Schema.Types.Mixed,
   quantity: Number,
   unitPrice: Number,
@@ -180,6 +181,7 @@ function toOrder(doc) {
     items: (o.items || []).map((item) => ({
       id: String(item._id),
       product_id: item.productId ? String(item.productId) : null,
+      original_product_id: item.originalProductId || null,
       product_snapshot: item.productSnapshot,
       quantity: item.quantity,
       unit_price: item.unitPrice,
@@ -313,6 +315,21 @@ app.get('/api/hero-slides', async (_req, res) => {
   res.json(slides.map((s) => ({ id: String(s._id), image: s.image, title: s.title, subtitle: s.subtitle })));
 });
 
+async function findProductByAnyId(value) {
+  if (!value) return null;
+  const id = String(value);
+  if (mongoose.Types.ObjectId.isValid(id)) {
+    const byObjectId = await Product.findById(id);
+    if (byObjectId) return byObjectId;
+  }
+  return Product.findOne({ legacyId: id });
+}
+
+function toNumber(value, fallback = 0) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
 app.post('/api/orders', async (req, res) => {
   try {
     let user = null;
@@ -320,10 +337,48 @@ app.post('/api/orders', async (req, res) => {
     if (header.startsWith('Bearer ')) {
       try { user = await User.findById(jwt.verify(header.slice(7), JWT_SECRET).id); } catch {}
     }
+
+    const incomingItems = Array.isArray(req.body.items) ? req.body.items : [];
+    if (!incomingItems.length) return res.status(400).json({ message: 'Order must contain at least one item' });
+
+    const items = await Promise.all(incomingItems.map(async (item) => {
+      const product = await findProductByAnyId(item.productId || item.product_id);
+      const snapshot = item.productSnapshot || item.product_snapshot || {};
+      const quantity = Math.max(1, toNumber(item.quantity, 1));
+      const unitPrice = toNumber(item.unitPrice ?? item.unit_price ?? snapshot.price ?? product?.price, 0);
+
+      return {
+        productId: product?._id || null,
+        originalProductId: item.productId || item.product_id ? String(item.productId || item.product_id) : null,
+        productSnapshot: product ? toProduct(product) : snapshot,
+        quantity,
+        unitPrice,
+        totalPrice: toNumber(item.totalPrice ?? item.total_price, unitPrice * quantity),
+      };
+    }));
+
+    const subtotal = toNumber(req.body.subtotal, items.reduce((sum, item) => sum + item.totalPrice, 0));
+    const deliveryFee = toNumber(req.body.deliveryFee ?? req.body.delivery_fee, 0);
+    const discountAmount = toNumber(req.body.discountAmount ?? req.body.discount_amount, 0);
+    const totalAmount = toNumber(req.body.totalAmount ?? req.body.total_amount, subtotal + deliveryFee - discountAmount);
+
     const orderNumber = `ORD-${Date.now()}-${Math.floor(Math.random() * 900 + 100)}`;
-    const order = await Order.create({ ...req.body, orderNumber, userId: user?._id || null });
+    const order = await Order.create({
+      orderNumber,
+      userId: user?._id || null,
+      customer: req.body.customer || {},
+      shippingAddress: req.body.shippingAddress || req.body.shipping_address || {},
+      paymentMethod: req.body.paymentMethod || req.body.payment_method || 'cod',
+      subtotal,
+      deliveryFee,
+      discountAmount,
+      totalAmount,
+      items,
+    });
     res.status(201).json(toOrder(order));
-  } catch (err) { res.status(500).json({ message: err.message }); }
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
 });
 
 app.get('/api/orders/my', auth, async (req, res) => {

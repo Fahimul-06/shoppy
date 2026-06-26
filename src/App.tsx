@@ -20,7 +20,7 @@ import SellerDashboardPage from './pages/seller/SellerDashboardPage';
 import AdminLoginPage from './pages/admin/AdminLoginPage';
 import AdminPage from './pages/admin/AdminPage';
 
-function Layout({ children }: { children: React.ReactNode }) {
+function StoreLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-gray-50 pb-16 lg:pb-0 flex flex-col">
       <Header />
@@ -32,31 +32,38 @@ function Layout({ children }: { children: React.ReactNode }) {
   );
 }
 
+function StorePage({ children }: { children: React.ReactNode }) {
+  return <StoreLayout>{children}</StoreLayout>;
+}
+
 export default function App() {
   return (
     <BrowserRouter>
       <CartProvider>
         <Routes>
+          {/* Public store routes */}
+          <Route path="/" element={<StorePage><HomePage /></StorePage>} />
+          <Route path="/product/:id" element={<StorePage><ProductPage /></StorePage>} />
+          <Route path="/category/:slug" element={<StorePage><CategoryPage /></StorePage>} />
+          <Route path="/cart" element={<StorePage><CartPage /></StorePage>} />
+          <Route path="/checkout" element={<StorePage><CheckoutPage /></StorePage>} />
+          <Route path="/search" element={<StorePage><SearchPage /></StorePage>} />
+          <Route path="/new-arrivals" element={<StorePage><NewArrivalsPage /></StorePage>} />
+          <Route path="/flash-sale" element={<StorePage><FlashSalePage /></StorePage>} />
           <Route path="/account" element={<AccountPage />} />
+
+          {/* Seller routes */}
           <Route path="/seller/register" element={<SellerRegisterPage />} />
           <Route path="/seller/login" element={<SellerLoginPage />} />
           <Route path="/seller/dashboard" element={<SellerDashboardPage />} />
+
+          {/* Admin routes. These are intentionally outside StoreLayout so the admin login page always renders cleanly. */}
           <Route path="/admin/login" element={<AdminLoginPage />} />
+          <Route path="/admin-login" element={<AdminLoginPage />} />
           <Route path="/admin" element={<AdminPage />} />
-          <Route path="*" element={
-            <Layout>
-              <Routes>
-                <Route path="/" element={<HomePage />} />
-                <Route path="/product/:id" element={<ProductPage />} />
-                <Route path="/category/:slug" element={<CategoryPage />} />
-                <Route path="/cart" element={<CartPage />} />
-                <Route path="/checkout" element={<CheckoutPage />} />
-                <Route path="/search" element={<SearchPage />} />
-                <Route path="/new-arrivals" element={<NewArrivalsPage />} />
-                <Route path="/flash-sale" element={<FlashSalePage />} />
-              </Routes>
-            </Layout>
-          } />
+          <Route path="/admin/*" element={<AdminPage />} />
+
+          <Route path="*" element={<StorePage><HomePage /></StorePage>} />
         </Routes>
       </CartProvider>
     </BrowserRouter>

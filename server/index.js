@@ -46,6 +46,7 @@ const clientDist = possibleClientDistPaths.find((distPath) =>
 );
 
 if (clientDist) {
+  console.log('Serving frontend from:', clientDist);
   app.use(express.static(clientDist));
 
   app.get('*', (req, res, next) => {

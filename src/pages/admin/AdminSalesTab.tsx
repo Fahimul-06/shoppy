@@ -1,168 +1,239 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, Loader2, Search, Tags } from 'lucide-react';
+import { CheckCircle2, Loader2, Search, ShoppingBag, Zap } from 'lucide-react';
 import { api, getToken } from '../../lib/api';
-import { categories } from '../../data/categories';
 
-type Product = any;
 type SaleType = 'daily' | 'flash';
+type Product = {
+  id: string;
+  _id?: string;
+  name: string;
+  image?: string;
+  price?: number;
+  originalPrice?: number;
+  brand?: string;
+  category?: string;
+  subcategory?: string;
+  childCategory?: string;
+  stock?: number;
+  active?: boolean;
+  saleTags?: string[];
+  dailySaleDiscount?: number;
+  flashSaleDiscount?: number;
+};
 
-const saleLabel = (type: SaleType) => (type === 'daily' ? 'Daily Sale' : 'Flash Sale');
-const categoryLabel = (slug?: string) => categories.find((c) => c.slug === slug)?.name || slug || 'Uncategorized';
+const saleConfig = {
+  daily: {
+    label: 'Daily Sale',
+    icon: ShoppingBag,
+    border: 'border-orange-200',
+    bg: 'bg-orange-50',
+    active: 'bg-orange-600 text-white border-orange-600',
+  },
+  flash: {
+    label: 'Flash Sale',
+    icon: Zap,
+    border: 'border-red-200',
+    bg: 'bg-red-50',
+    active: 'bg-red-600 text-white border-red-600',
+  },
+} as const;
 
 export default function AdminSalesTab() {
+  const [saleType, setSaleType] = useState<SaleType>('daily');
   const [products, setProducts] = useState<Product[]>([]);
+  const [selected, setSelected] = useState<string[]>([]);
+  const [discount, setDiscount] = useState('');
+  const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [saleType, setSaleType] = useState<SaleType>('daily');
-  const [discount, setDiscount] = useState('10');
-  const [query, setQuery] = useState('');
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
 
   const load = async () => {
     setLoading(true);
     setError('');
-    try {
-      const r = await api.get<{ products: Product[] }>('/admin/products', getToken('admin'));
-      setProducts(r.products || []);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not load products');
-    } finally {
-      setLoading(false);
-    }
+    const r = await api.get<{ products: Product[] }>('/admin/products', getToken('admin'));
+    setProducts(r.products || []);
+    setLoading(false);
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load().catch((e) => {
+      setError(e instanceof Error ? e.message : 'Failed to load products');
+      setLoading(false);
+    });
+  }, []);
+
+  useEffect(() => {
+    const current = products.filter((p) => Array.isArray(p.saleTags) && p.saleTags.includes(saleType));
+    setSelected(current.map((p) => p.id || p._id || '').filter(Boolean));
+    setDiscount(String(saleType === 'daily' ? (current[0]?.dailySaleDiscount || '') : (current[0]?.flashSaleDiscount || '')));
+    setMessage('');
+    setError('');
+  }, [saleType, products]);
 
   const filteredProducts = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return products;
-    return products.filter((p) => [
-      p.name,
-      p.brand,
-      p.category,
-      p.subcategory,
-      p.childCategory,
-      p.seller?.shopName,
-      p.seller?.name,
-    ].filter(Boolean).join(' ').toLowerCase().includes(q));
+    return products.filter((p) => [p.name, p.brand, p.category, p.subcategory, p.childCategory]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase()
+      .includes(q));
   }, [products, query]);
 
-  const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
-  const visibleIds = filteredProducts.map((p) => p.id).filter(Boolean);
-  const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedSet.has(id));
+  const selectedSet = useMemo(() => new Set(selected), [selected]);
+  const selectedProducts = useMemo(() => products.filter((p) => selectedSet.has(p.id || p._id || '')), [products, selectedSet]);
 
   const toggleProduct = (id: string) => {
-    setSelectedIds((current) => current.includes(id) ? current.filter((x) => x !== id) : [...current, id]);
+    setSelected((current) => current.includes(id) ? current.filter((x) => x !== id) : [...current, id]);
   };
 
-  const toggleVisible = () => {
-    setSelectedIds((current) => {
-      const currentSet = new Set(current);
-      if (allVisibleSelected) {
-        visibleIds.forEach((id) => currentSet.delete(id));
-      } else {
-        visibleIds.forEach((id) => currentSet.add(id));
-      }
-      return Array.from(currentSet);
-    });
+  const selectVisible = () => {
+    const ids = filteredProducts.map((p) => p.id || p._id || '').filter(Boolean);
+    setSelected((current) => Array.from(new Set([...current, ...ids])));
   };
 
-  const applySale = async () => {
-    setMessage('');
+  const clearVisible = () => {
+    const ids = new Set(filteredProducts.map((p) => p.id || p._id || '').filter(Boolean));
+    setSelected((current) => current.filter((id) => !ids.has(id)));
+  };
+
+  const save = async () => {
+    setSaving(true);
     setError('');
-    const numericDiscount = Number(discount);
-    if (!selectedIds.length) { setError('Please select at least one product.'); return; }
-    if (!Number.isFinite(numericDiscount) || numericDiscount < 0 || numericDiscount > 100) { setError('Discount must be between 0 and 100.'); return; }
-
+    setMessage('');
     try {
-      setSaving(true);
-      const r = await api.patch<{ message: string; updatedCount: number }>('/admin/products/sale-bulk', {
+      await api.post('/admin/sales/apply', {
         saleType,
-        discount: numericDiscount,
-        productIds: selectedIds,
+        discount: Number(discount || 0),
+        productIds: selected,
+        replaceExisting: true,
       }, getToken('admin'));
-      setMessage(r.message || `${saleLabel(saleType)} updated for ${r.updatedCount || selectedIds.length} product(s).`);
-      setSelectedIds([]);
+      setMessage(`${saleConfig[saleType].label} updated for ${selected.length} product(s).`);
       await load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not update sale products');
+      setError(e instanceof Error ? e.message : 'Sale update failed');
     } finally {
       setSaving(false);
     }
   };
 
-  return <div className="space-y-5">
-    <div className="grid lg:grid-cols-3 gap-4">
-      <button onClick={() => setSaleType('daily')} className={`rounded-2xl border p-5 text-left ${saleType === 'daily' ? 'bg-orange-600 text-white border-orange-600' : 'bg-white hover:bg-orange-50'}`}>
-        <div className="flex items-center gap-3"><Tags size={22}/><h2 className="text-lg font-black">Daily Sale</h2></div>
-        <p className={`text-sm mt-2 ${saleType === 'daily' ? 'text-orange-50' : 'text-gray-500'}`}>Select many products and apply one daily-sale discount.</p>
-      </button>
-      <button onClick={() => setSaleType('flash')} className={`rounded-2xl border p-5 text-left ${saleType === 'flash' ? 'bg-red-600 text-white border-red-600' : 'bg-white hover:bg-red-50'}`}>
-        <div className="flex items-center gap-3"><Tags size={22}/><h2 className="text-lg font-black">Flash Sale</h2></div>
-        <p className={`text-sm mt-2 ${saleType === 'flash' ? 'text-red-50' : 'text-gray-500'}`}>Select many products and apply one flash-sale discount.</p>
-      </button>
-      <div className="bg-white border rounded-2xl p-5">
-        <label className="block text-sm font-black text-gray-700 mb-2">Discount percentage</label>
-        <div className="flex gap-2">
-          <input type="number" min="0" max="100" className="w-full border rounded-xl px-4 py-3 font-bold" value={discount} onChange={(e) => setDiscount(e.target.value)} />
-          <span className="border rounded-xl px-4 py-3 font-black bg-gray-50">%</span>
-        </div>
-        <button onClick={applySale} disabled={saving || !selectedIds.length} className="mt-3 w-full bg-blue-600 disabled:bg-gray-300 text-white rounded-xl py-3 font-black flex items-center justify-center gap-2">
-          {saving ? <Loader2 size={16} className="animate-spin"/> : <CheckCircle2 size={16}/>} Apply to {selectedIds.length} product(s)
-        </button>
-      </div>
-    </div>
+  const CurrentIcon = saleConfig[saleType].icon;
 
-    <div className="bg-white rounded-2xl border p-4">
-      <div className="flex flex-col lg:flex-row gap-3 lg:items-center lg:justify-between mb-4">
-        <div>
-          <h2 className="text-xl font-black">Select Products for {saleLabel(saleType)}</h2>
-          <p className="text-sm text-gray-500">Use the big product dropdown/list below. Search by product, brand, category, seller, or shop.</p>
-        </div>
-        <div className="relative lg:w-96">
-          <Search size={16} className="absolute left-3 top-3.5 text-gray-400"/>
-          <input className="w-full border rounded-xl pl-10 pr-3 py-3 text-sm" placeholder="Search all products..." value={query} onChange={(e) => setQuery(e.target.value)} />
+  return (
+    <div className="space-y-5">
+      <div className="bg-white rounded-2xl border p-5">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+          <div>
+            <h2 className="text-xl font-black text-gray-900">Daily Sale / Flash Sale</h2>
+            <p className="text-sm text-gray-500 mt-1">Select sale type, set one discount, choose multiple products, then submit.</p>
+          </div>
+          <div className="grid grid-cols-2 gap-2 min-w-[260px]">
+            {(['daily', 'flash'] as SaleType[]).map((type) => {
+              const Icon = saleConfig[type].icon;
+              return (
+                <button
+                  key={type}
+                  onClick={() => setSaleType(type)}
+                  className={`border rounded-2xl p-4 font-black flex items-center justify-center gap-2 ${saleType === type ? saleConfig[type].active : `${saleConfig[type].bg} ${saleConfig[type].border} text-gray-700`}`}
+                >
+                  <Icon size={18} /> {saleConfig[type].label}
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
 
-      {message && <div className="mb-3 rounded-xl bg-green-50 text-green-700 px-4 py-3 text-sm font-semibold">{message}</div>}
-      {error && <div className="mb-3 rounded-xl bg-red-50 text-red-700 px-4 py-3 text-sm font-semibold">{error}</div>}
-
-      {loading ? <div className="p-12 flex justify-center"><Loader2 className="animate-spin"/></div> : <>
-        <div className="flex items-center justify-between border rounded-xl px-4 py-3 mb-3 bg-gray-50">
-          <label className="flex items-center gap-3 font-bold text-sm cursor-pointer">
-            <input type="checkbox" checked={allVisibleSelected} onChange={toggleVisible}/>
-            Select all visible products ({filteredProducts.length})
-          </label>
-          <span className="text-xs font-bold text-gray-500">Selected: {selectedIds.length}</span>
-        </div>
-        <div className="border rounded-2xl max-h-[520px] overflow-y-auto divide-y">
-          {filteredProducts.length === 0 ? <div className="p-8 text-center text-gray-500">No products found.</div> : filteredProducts.map((p) => {
-            const isSelected = selectedSet.has(p.id);
-            const daily = Array.isArray(p.saleTags) && p.saleTags.includes('daily');
-            const flash = Array.isArray(p.saleTags) && p.saleTags.includes('flash');
-            return <label key={p.id} className={`flex gap-3 p-3 cursor-pointer hover:bg-gray-50 ${isSelected ? 'bg-blue-50' : ''}`}>
-              <input type="checkbox" className="mt-6" checked={isSelected} onChange={() => toggleProduct(p.id)} />
-              <img src={p.image || p.images?.[0] || 'https://via.placeholder.com/80'} className="w-16 h-16 rounded-xl object-cover bg-gray-100" />
-              <div className="min-w-0 flex-1">
-                <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-1">
-                  <h3 className="font-black text-gray-900 truncate">{p.name}</h3>
-                  <p className="font-black text-blue-700">৳{Number(p.price || 0).toLocaleString()}</p>
-                </div>
-                <p className="text-xs text-gray-500 mt-1">{categoryLabel(p.category)}{p.subcategory ? ` / ${p.subcategory}` : ''}{p.childCategory ? ` / ${p.childCategory}` : ''}</p>
-                <div className="flex flex-wrap gap-2 mt-2 text-[11px] font-bold">
-                  {p.brand && <span className="px-2 py-1 rounded-full bg-gray-100 text-gray-600">Brand: {p.brand}</span>}
-                  {p.seller?.shopName && <span className="px-2 py-1 rounded-full bg-purple-50 text-purple-700">Seller: {p.seller.shopName}</span>}
-                  {daily && <span className="px-2 py-1 rounded-full bg-orange-100 text-orange-700">Daily Sale {p.dailySaleDiscount ? `-${p.dailySaleDiscount}%` : ''}</span>}
-                  {flash && <span className="px-2 py-1 rounded-full bg-red-100 text-red-700">Flash Sale {p.flashSaleDiscount ? `-${p.flashSaleDiscount}%` : ''}</span>}
-                </div>
+      <div className="grid lg:grid-cols-[1fr_340px] gap-5">
+        <div className="bg-white rounded-2xl border overflow-hidden">
+          <div className={`p-5 border-b ${saleConfig[saleType].bg}`}>
+            <div className="flex flex-col md:flex-row md:items-end gap-3 justify-between">
+              <div>
+                <div className="flex items-center gap-2 text-lg font-black text-gray-900"><CurrentIcon size={20} /> Manage {saleConfig[saleType].label}</div>
+                <p className="text-sm text-gray-600 mt-1">Current selected products will replace the existing {saleConfig[saleType].label.toLowerCase()} list.</p>
               </div>
-            </label>;
-          })}
+              <div className="w-full md:w-56">
+                <label className="text-xs font-bold text-gray-600">Discount percentage</label>
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  className="mt-1 w-full border rounded-xl p-3 text-sm font-bold"
+                  placeholder="Example: 15"
+                  value={discount}
+                  onChange={(e) => setDiscount(e.target.value)}
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="p-5 border-b flex flex-col md:flex-row gap-3 md:items-center md:justify-between">
+            <div className="relative flex-1">
+              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input
+                className="w-full border rounded-xl pl-9 pr-3 py-3 text-sm"
+                placeholder="Search product name, brand, category..."
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+              />
+            </div>
+            <div className="flex gap-2">
+              <button onClick={selectVisible} className="px-4 py-3 rounded-xl bg-gray-900 text-white font-bold text-sm">Select visible</button>
+              <button onClick={clearVisible} className="px-4 py-3 rounded-xl bg-gray-100 text-gray-700 font-bold text-sm">Clear visible</button>
+            </div>
+          </div>
+
+          {loading ? (
+            <div className="p-12 flex justify-center"><Loader2 className="animate-spin" /></div>
+          ) : (
+            <div className="max-h-[560px] overflow-y-auto divide-y">
+              {filteredProducts.map((product) => {
+                const id = product.id || product._id || '';
+                const isSelected = selectedSet.has(id);
+                return (
+                  <label key={id} className={`flex items-center gap-4 p-4 cursor-pointer hover:bg-gray-50 ${isSelected ? 'bg-blue-50' : ''}`}>
+                    <input type="checkbox" className="w-5 h-5" checked={isSelected} onChange={() => toggleProduct(id)} />
+                    <img src={product.image || '/placeholder.png'} className="w-14 h-14 rounded-xl object-cover bg-gray-100" />
+                    <div className="min-w-0 flex-1">
+                      <p className="font-bold text-gray-900 truncate">{product.name}</p>
+                      <p className="text-xs text-gray-500 truncate">{[product.brand, product.category, product.subcategory, product.childCategory].filter(Boolean).join(' • ') || 'No category'}</p>
+                      <p className="text-xs text-gray-500">Stock: {product.stock ?? 0} · ৳{Number(product.price || 0).toLocaleString()}</p>
+                    </div>
+                    {Array.isArray(product.saleTags) && product.saleTags.length > 0 && (
+                      <div className="hidden sm:block text-right text-[11px] font-bold text-orange-600">
+                        {product.saleTags.map((tag) => tag === 'daily' ? `Daily ${product.dailySaleDiscount || 0}%` : `Flash ${product.flashSaleDiscount || 0}%`).join(' + ')}
+                      </div>
+                    )}
+                  </label>
+                );
+              })}
+              {!filteredProducts.length && <div className="p-10 text-center text-gray-500 text-sm">No products found.</div>}
+            </div>
+          )}
         </div>
-      </>}
+
+        <aside className="bg-white rounded-2xl border p-5 h-fit sticky top-4">
+          <h3 className="font-black text-gray-900 mb-2">Selected Products</h3>
+          <p className="text-sm text-gray-500 mb-4">{selectedProducts.length} product(s) selected for {saleConfig[saleType].label}.</p>
+          <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+            {selectedProducts.map((p) => (
+              <div key={p.id || p._id} className="flex items-center gap-2 bg-gray-50 rounded-xl p-2">
+                <img src={p.image || '/placeholder.png'} className="w-9 h-9 rounded-lg object-cover" />
+                <div className="min-w-0 flex-1"><p className="text-xs font-bold truncate">{p.name}</p><p className="text-[11px] text-gray-500">৳{Number(p.price || 0).toLocaleString()}</p></div>
+                <button onClick={() => toggleProduct(p.id || p._id || '')} className="text-red-500 text-xs font-bold">Remove</button>
+              </div>
+            ))}
+            {!selectedProducts.length && <p className="text-sm text-gray-400 bg-gray-50 rounded-xl p-4 text-center">No products selected yet.</p>}
+          </div>
+          {message && <p className="mt-4 text-sm text-green-700 bg-green-50 p-3 rounded-xl">{message}</p>}
+          {error && <p className="mt-4 text-sm text-red-700 bg-red-50 p-3 rounded-xl">{error}</p>}
+          <button onClick={save} disabled={saving} className="mt-4 w-full bg-blue-600 disabled:bg-blue-300 text-white rounded-xl py-3 font-black flex justify-center items-center gap-2">
+            {saving ? <Loader2 size={17} className="animate-spin" /> : <CheckCircle2 size={17} />} Submit {saleConfig[saleType].label}
+          </button>
+        </aside>
+      </div>
     </div>
-  </div>;
+  );
 }

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BarChart3, Bell, Headphones, LogOut, MessageCircle, Package, RotateCcw, Settings, ShieldX, ShoppingBag, Tag, Tags, UserRound, Users } from 'lucide-react';
+import { BarChart3, Bell, Headphones, LogOut, MessageCircle, Package, RotateCcw, Settings, ShieldX, ShoppingBag, Tag, UserRound, Users, Percent } from 'lucide-react';
 import { api, clearSession, getSessionUser, getToken, setSession } from '../../lib/api';
 import AdminSellersTab from './AdminSellersTab';
 import AdminProductsTab from './AdminProductsTab';
@@ -43,7 +43,7 @@ export default function AdminPage() {
   }, []);
   const logout = () => { clearSession('admin'); navigate('/admin/login'); };
   const saveSettings = async () => { const res = await api.put<{ user: any }>('/admin/settings', settings, getToken('admin')); setSession('admin', getToken('admin') || '', res.user); setAdmin(res.user); setMsg('Settings saved'); };
-  const nav = [ ['dashboard', BarChart3], ['sellers', Users], ['customers', UserRound], ['products', Package], ['sales', Tags], ['orders', ShoppingBag], ['returns', RotateCcw], ['cancellations', ShieldX], ['messages', MessageCircle], ['customerCare', Headphones], ['promos', Tag], ['notifications', Bell], ['settings', Settings] ] as const;
+  const nav = [ ['dashboard', BarChart3], ['sellers', Users], ['customers', UserRound], ['products', Package], ['sales', Percent], ['orders', ShoppingBag], ['returns', RotateCcw], ['cancellations', ShieldX], ['messages', MessageCircle], ['customerCare', Headphones], ['promos', Tag], ['notifications', Bell], ['settings', Settings] ] as const;
 
   return <div className="min-h-screen bg-gray-100">
     <header className="bg-slate-950 text-white"><div className="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center"><div><h1 className="text-xl font-black">Admin Dashboard</h1><p className="text-xs text-slate-300">{admin?.email}</p></div><button onClick={logout} className="flex items-center gap-2 bg-white/10 px-4 py-2 rounded-xl text-sm"><LogOut size={15}/> Logout</button></div></header>

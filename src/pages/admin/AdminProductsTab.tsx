@@ -18,10 +18,7 @@ const EMPTY = {
   brand: '',
   stock: '1',
   badge: '',
-  saleTags: [] as string[],
   discount: '',
-  dailySaleDiscount: '',
-  flashSaleDiscount: '',
   description: '',
   features: '',
   active: true,
@@ -67,10 +64,7 @@ export default function AdminProductsTab() {
       brand: p.brand || '',
       stock: p.stock ?? 0,
       badge: p.badge || '',
-      saleTags: Array.isArray(p.saleTags) ? p.saleTags : [],
       discount: p.discount || '',
-      dailySaleDiscount: p.dailySaleDiscount || '',
-      flashSaleDiscount: p.flashSaleDiscount || '',
       description: p.description || '',
       features: (p.features || []).join('\n'),
       active: p.active !== false,
@@ -87,12 +81,9 @@ export default function AdminProductsTab() {
         originalPrice: form.originalPrice ? Number(form.originalPrice) : undefined,
         stock: Number(form.stock),
         discount: form.discount ? Number(form.discount) : undefined,
-        dailySaleDiscount: form.dailySaleDiscount ? Number(form.dailySaleDiscount) : 0,
-        flashSaleDiscount: form.flashSaleDiscount ? Number(form.flashSaleDiscount) : 0,
         features: String(form.features || '').split('\n').map((x) => x.trim()).filter(Boolean),
         images: [form.image].filter(Boolean),
         badge: form.badge || null,
-        saleTags: Array.isArray(form.saleTags) ? form.saleTags : [],
         subcategory: form.subcategory || '',
         childCategory: form.childCategory || '',
       };
@@ -167,54 +158,6 @@ export default function AdminProductsTab() {
                 />
               </div>
               <input className="border rounded-xl p-3 text-sm sm:col-span-2" placeholder="Brand" value={form.brand} onChange={(e) => setForm({ ...form, brand: e.target.value })} />
-              <div className="sm:col-span-2 grid sm:grid-cols-2 gap-3">
-                <div className="border rounded-xl p-3 bg-orange-50 border-orange-100 space-y-2">
-                  <label className="flex items-center gap-3 text-sm font-semibold">
-                    <input
-                      type="checkbox"
-                      checked={Array.isArray(form.saleTags) && form.saleTags.includes('daily')}
-                      onChange={(e) => {
-                        const current = Array.isArray(form.saleTags) ? form.saleTags : [];
-                        setForm({ ...form, saleTags: e.target.checked ? Array.from(new Set([...current, 'daily'])) : current.filter((x: string) => x !== 'daily') });
-                      }}
-                    />
-                    Show in Daily Sale
-                  </label>
-                  <input
-                    className="border rounded-lg p-2 text-sm w-full bg-white"
-                    placeholder="Daily sale discount %"
-                    type="number"
-                    min="0"
-                    max="100"
-                    value={form.dailySaleDiscount}
-                    onChange={(e) => setForm({ ...form, dailySaleDiscount: e.target.value })}
-                    disabled={!Array.isArray(form.saleTags) || !form.saleTags.includes('daily')}
-                  />
-                </div>
-                <div className="border rounded-xl p-3 bg-red-50 border-red-100 space-y-2">
-                  <label className="flex items-center gap-3 text-sm font-semibold">
-                    <input
-                      type="checkbox"
-                      checked={Array.isArray(form.saleTags) && form.saleTags.includes('flash')}
-                      onChange={(e) => {
-                        const current = Array.isArray(form.saleTags) ? form.saleTags : [];
-                        setForm({ ...form, saleTags: e.target.checked ? Array.from(new Set([...current, 'flash'])) : current.filter((x: string) => x !== 'flash') });
-                      }}
-                    />
-                    Show in Flash Sale
-                  </label>
-                  <input
-                    className="border rounded-lg p-2 text-sm w-full bg-white"
-                    placeholder="Flash sale discount %"
-                    type="number"
-                    min="0"
-                    max="100"
-                    value={form.flashSaleDiscount}
-                    onChange={(e) => setForm({ ...form, flashSaleDiscount: e.target.value })}
-                    disabled={!Array.isArray(form.saleTags) || !form.saleTags.includes('flash')}
-                  />
-                </div>
-              </div>
               <select className="border rounded-xl p-3 text-sm sm:col-span-2" value={form.badge} onChange={(e) => setForm({ ...form, badge: e.target.value })}>
                 <option value="">No badge</option>
                 <option value="sale">Sale badge</option>

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Zap, Clock, ChevronRight, ShoppingCart, Star } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { useProducts } from '../hooks/useProducts';
+import { getDisplayOriginalPrice, getSaleDiscount, getSalePrice, withSalePricing } from '../utils/salePricing';
 
 function useCountdown() {
   const getTimeLeft = () => {
@@ -41,7 +42,7 @@ export default function FlashSaleSection() {
   const { products, loading } = useProducts();
   const saleProducts = products
     .filter((p) => Array.isArray(p.saleTags) && p.saleTags.includes('flash'))
-    .sort((a, b) => (b.discount ?? 0) - (a.discount ?? 0))
+    .sort((a, b) => getSaleDiscount(b, 'flash') - getSaleDiscount(a, 'flash'))
     .slice(0, 8);
   const { h, m, s } = useCountdown();
 
@@ -109,9 +110,9 @@ export default function FlashSaleSection() {
                 alt={product.name}
                 className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
               />
-              {product.discount && (
+              {getSaleDiscount(product, 'flash') > 0 && (
                 <div className="absolute top-0 left-0 right-0 bg-gradient-to-b from-red-600/90 to-transparent py-1.5 flex items-center justify-center">
-                  <span className="text-white font-extrabold text-sm">-{product.discount}%</span>
+                  <span className="text-white font-extrabold text-sm">-{getSaleDiscount(product, 'flash')}%</span>
                 </div>
               )}
             </Link>
@@ -134,14 +135,14 @@ export default function FlashSaleSection() {
               </div>
 
               <div className="mb-2.5">
-                <span className="text-sm font-bold text-gray-900 block">৳{Number(product.price ?? 0).toLocaleString()}</span>
-                {product.originalPrice && (
-                  <span className="text-xs text-gray-400 line-through">৳{Number(product.originalPrice).toLocaleString()}</span>
+                <span className="text-sm font-bold text-gray-900 block">৳{Number(getSalePrice(product, 'flash') ?? 0).toLocaleString()}</span>
+                {getDisplayOriginalPrice(product, 'flash') && (
+                  <span className="text-xs text-gray-400 line-through">৳{Number(getDisplayOriginalPrice(product, 'flash')).toLocaleString()}</span>
                 )}
               </div>
 
               <button
-                onClick={() => addItem(product)}
+                onClick={() => addItem(withSalePricing(product, 'flash'))}
                 className="mt-auto w-full bg-red-50 hover:bg-red-500 text-red-500 hover:text-white border border-red-200 hover:border-red-500 text-xs font-semibold py-1.5 rounded-xl flex items-center justify-center gap-1.5 transition-all duration-200 active:scale-95"
               >
                 <ShoppingCart size={12} />

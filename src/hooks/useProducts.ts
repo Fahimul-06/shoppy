@@ -11,6 +11,9 @@ function normalizeProduct(product: Product): Product {
     price: Number(product.price ?? 0),
     originalPrice: product.originalPrice === undefined || product.originalPrice === null ? undefined : Number(product.originalPrice),
     stock: Number(product.stock ?? 0),
+    discount: product.discount === undefined || product.discount === null ? undefined : Number(product.discount),
+    dailySaleDiscount: product.dailySaleDiscount === undefined || product.dailySaleDiscount === null ? undefined : Number(product.dailySaleDiscount),
+    flashSaleDiscount: product.flashSaleDiscount === undefined || product.flashSaleDiscount === null ? undefined : Number(product.flashSaleDiscount),
     images: product.images?.length ? product.images : [product.image].filter(Boolean),
   };
 }

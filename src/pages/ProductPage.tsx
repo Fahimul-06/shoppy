@@ -6,6 +6,7 @@ import ProductCard from '../components/ProductCard';
 import type { Product } from '../types';
 import { fetchProductById, fetchProductReviews, fetchRelatedProducts } from '../lib/db';
 import { useProducts } from '../hooks/useProducts';
+import { getDisplayOriginalPrice, getSaleDiscount, getSalePrice, withSalePricing } from '../utils/salePricing';
 
 export default function ProductPage() {
   const { id } = useParams<{ id: string }>();
@@ -84,6 +85,10 @@ export default function ProductPage() {
   }
 
   const images = product.images?.length ? product.images : [product.image];
+  const displayPrice = getSalePrice(product);
+  const displayOriginalPrice = getDisplayOriginalPrice(product);
+  const displayDiscount = getSaleDiscount(product);
+  const productForCart = withSalePricing(product);
 
   const seller = product.seller && typeof product.seller === 'object' ? product.seller : null;
   const sellerShopLogo = seller?.shopLogo || '';
@@ -105,7 +110,7 @@ export default function ProductPage() {
   const related = (relatedProducts.length ? relatedProducts : clientRelated).filter((p) => p.id !== product.id).slice(0, 10);
 
   const handleAddToCart = () => {
-    for (let i = 0; i < quantity; i++) addItem(product);
+    for (let i = 0; i < quantity; i++) addItem(productForCart);
     setAdded(true);
     setTimeout(() => setAdded(false), 2000);
   };
@@ -187,19 +192,19 @@ export default function ProductPage() {
 
             <div className="bg-orange-50 rounded-2xl p-4">
               <div className="flex items-end gap-3">
-                <span className="text-3xl font-bold text-gray-900">৳{Number(product.price ?? 0).toLocaleString()}</span>
-                {product.originalPrice && (
-                  <span className="text-lg text-gray-400 line-through mb-0.5">৳{Number(product.originalPrice).toLocaleString()}</span>
+                <span className="text-3xl font-bold text-gray-900">৳{Number(displayPrice ?? 0).toLocaleString()}</span>
+                {displayOriginalPrice && (
+                  <span className="text-lg text-gray-400 line-through mb-0.5">৳{Number(displayOriginalPrice).toLocaleString()}</span>
                 )}
-                {product.discount && (
+                {displayDiscount > 0 && (
                   <span className="bg-red-500 text-white text-sm font-bold px-2.5 py-1 rounded-lg mb-0.5">
-                    -{product.discount}% OFF
+                    -{displayDiscount}% OFF
                   </span>
                 )}
               </div>
-              {product.originalPrice && (
+              {displayOriginalPrice && (
                 <p className="text-green-600 text-sm font-semibold mt-1">
-                  You save ৳{(Number(product.originalPrice) - Number(product.price ?? 0)).toLocaleString()}
+                  You save ৳{(Number(displayOriginalPrice) - Number(displayPrice ?? 0)).toLocaleString()}
                 </p>
               )}
             </div>
@@ -260,7 +265,7 @@ export default function ProductPage() {
 
             <Link
               to="/checkout"
-              onClick={() => addItem(product)}
+              onClick={() => addItem(productForCart)}
               className="block w-full text-center border-2 border-orange-500 text-orange-500 hover:bg-orange-500 hover:text-white font-bold py-3 rounded-xl transition-all duration-200 active:scale-95"
             >
               Buy Now

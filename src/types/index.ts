@@ -23,6 +23,11 @@ export interface Product {
   badge?: 'sale' | 'new' | 'hot';
   saleTags?: Array<'daily' | 'flash'>;
   discount?: number;
+  dailySaleDiscount?: number;
+  flashSaleDiscount?: number;
+  currentSaleType?: 'daily' | 'flash';
+  currentSaleDiscount?: number;
+  currentSalePrice?: number;
   brand?: string;
   description?: string;
   specifications?: Record<string, string>;

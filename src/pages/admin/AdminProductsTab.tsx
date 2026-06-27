@@ -20,6 +20,8 @@ const EMPTY = {
   badge: '',
   saleTags: [] as string[],
   discount: '',
+  dailySaleDiscount: '',
+  flashSaleDiscount: '',
   description: '',
   features: '',
   active: true,
@@ -67,6 +69,8 @@ export default function AdminProductsTab() {
       badge: p.badge || '',
       saleTags: Array.isArray(p.saleTags) ? p.saleTags : [],
       discount: p.discount || '',
+      dailySaleDiscount: p.dailySaleDiscount || '',
+      flashSaleDiscount: p.flashSaleDiscount || '',
       description: p.description || '',
       features: (p.features || []).join('\n'),
       active: p.active !== false,
@@ -83,6 +87,8 @@ export default function AdminProductsTab() {
         originalPrice: form.originalPrice ? Number(form.originalPrice) : undefined,
         stock: Number(form.stock),
         discount: form.discount ? Number(form.discount) : undefined,
+        dailySaleDiscount: form.dailySaleDiscount ? Number(form.dailySaleDiscount) : 0,
+        flashSaleDiscount: form.flashSaleDiscount ? Number(form.flashSaleDiscount) : 0,
         features: String(form.features || '').split('\n').map((x) => x.trim()).filter(Boolean),
         images: [form.image].filter(Boolean),
         badge: form.badge || null,
@@ -134,7 +140,7 @@ export default function AdminProductsTab() {
                   </td>
                   <td className="text-center">৳{Number(p.price).toLocaleString()}</td>
                   <td className="text-center">{p.stock}</td>
-                  <td className="text-center"><div>{p.active ? 'Active' : 'Hidden'}</div>{Array.isArray(p.saleTags) && p.saleTags.length > 0 && <div className="text-[11px] text-orange-600 font-bold mt-1">{p.saleTags.map((x: string) => x === 'daily' ? 'Daily Sale' : 'Flash Sale').join(' + ')}</div>}</td>
+                  <td className="text-center"><div>{p.active ? 'Active' : 'Hidden'}</div>{Array.isArray(p.saleTags) && p.saleTags.length > 0 && <div className="text-[11px] text-orange-600 font-bold mt-1">{p.saleTags.map((x: string) => x === 'daily' ? `Daily Sale${p.dailySaleDiscount ? ` -${p.dailySaleDiscount}%` : ''}` : `Flash Sale${p.flashSaleDiscount ? ` -${p.flashSaleDiscount}%` : ''}`).join(' + ')}</div>}</td>
                   <td className="p-3 text-right"><button onClick={() => openEdit(p)} className="p-2 text-blue-600"><Edit2 size={16} /></button><button onClick={() => del(p.id)} className="p-2 text-red-500"><Trash2 size={16} /></button></td>
                 </tr>
               ))}
@@ -162,28 +168,52 @@ export default function AdminProductsTab() {
               </div>
               <input className="border rounded-xl p-3 text-sm sm:col-span-2" placeholder="Brand" value={form.brand} onChange={(e) => setForm({ ...form, brand: e.target.value })} />
               <div className="sm:col-span-2 grid sm:grid-cols-2 gap-3">
-                <label className="flex items-center gap-3 border rounded-xl p-3 text-sm font-semibold bg-orange-50 border-orange-100">
+                <div className="border rounded-xl p-3 bg-orange-50 border-orange-100 space-y-2">
+                  <label className="flex items-center gap-3 text-sm font-semibold">
+                    <input
+                      type="checkbox"
+                      checked={Array.isArray(form.saleTags) && form.saleTags.includes('daily')}
+                      onChange={(e) => {
+                        const current = Array.isArray(form.saleTags) ? form.saleTags : [];
+                        setForm({ ...form, saleTags: e.target.checked ? Array.from(new Set([...current, 'daily'])) : current.filter((x: string) => x !== 'daily') });
+                      }}
+                    />
+                    Show in Daily Sale
+                  </label>
                   <input
-                    type="checkbox"
-                    checked={Array.isArray(form.saleTags) && form.saleTags.includes('daily')}
-                    onChange={(e) => {
-                      const current = Array.isArray(form.saleTags) ? form.saleTags : [];
-                      setForm({ ...form, saleTags: e.target.checked ? Array.from(new Set([...current, 'daily'])) : current.filter((x: string) => x !== 'daily') });
-                    }}
+                    className="border rounded-lg p-2 text-sm w-full bg-white"
+                    placeholder="Daily sale discount %"
+                    type="number"
+                    min="0"
+                    max="100"
+                    value={form.dailySaleDiscount}
+                    onChange={(e) => setForm({ ...form, dailySaleDiscount: e.target.value })}
+                    disabled={!Array.isArray(form.saleTags) || !form.saleTags.includes('daily')}
                   />
-                  Show in Daily Sale
-                </label>
-                <label className="flex items-center gap-3 border rounded-xl p-3 text-sm font-semibold bg-red-50 border-red-100">
+                </div>
+                <div className="border rounded-xl p-3 bg-red-50 border-red-100 space-y-2">
+                  <label className="flex items-center gap-3 text-sm font-semibold">
+                    <input
+                      type="checkbox"
+                      checked={Array.isArray(form.saleTags) && form.saleTags.includes('flash')}
+                      onChange={(e) => {
+                        const current = Array.isArray(form.saleTags) ? form.saleTags : [];
+                        setForm({ ...form, saleTags: e.target.checked ? Array.from(new Set([...current, 'flash'])) : current.filter((x: string) => x !== 'flash') });
+                      }}
+                    />
+                    Show in Flash Sale
+                  </label>
                   <input
-                    type="checkbox"
-                    checked={Array.isArray(form.saleTags) && form.saleTags.includes('flash')}
-                    onChange={(e) => {
-                      const current = Array.isArray(form.saleTags) ? form.saleTags : [];
-                      setForm({ ...form, saleTags: e.target.checked ? Array.from(new Set([...current, 'flash'])) : current.filter((x: string) => x !== 'flash') });
-                    }}
+                    className="border rounded-lg p-2 text-sm w-full bg-white"
+                    placeholder="Flash sale discount %"
+                    type="number"
+                    min="0"
+                    max="100"
+                    value={form.flashSaleDiscount}
+                    onChange={(e) => setForm({ ...form, flashSaleDiscount: e.target.value })}
+                    disabled={!Array.isArray(form.saleTags) || !form.saleTags.includes('flash')}
                   />
-                  Show in Flash Sale
-                </label>
+                </div>
               </div>
               <select className="border rounded-xl p-3 text-sm sm:col-span-2" value={form.badge} onChange={(e) => setForm({ ...form, badge: e.target.value })}>
                 <option value="">No badge</option>

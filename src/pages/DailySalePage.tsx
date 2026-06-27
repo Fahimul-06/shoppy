@@ -4,11 +4,10 @@ import { ChevronRight, Flame, LayoutGrid, Tag } from 'lucide-react';
 import ProductCard from '../components/ProductCard';
 import { useProducts } from '../hooks/useProducts';
 import { categories } from '../data/categories';
+import { getSaleDiscount, withSalePricing } from '../utils/salePricing';
 
 function discountOf(product: any) {
-  if (product.discount && product.discount > 0) return Math.round(product.discount);
-  if (product.originalPrice && product.originalPrice > product.price) return Math.round(((product.originalPrice - product.price) / product.originalPrice) * 100);
-  return 0;
+  return getSaleDiscount(product, 'daily');
 }
 
 export default function DailySalePage() {
@@ -71,7 +70,7 @@ export default function DailySalePage() {
           </div>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4">
-            {dailyProducts.map((product) => <ProductCard key={product.id} product={product} />)}
+            {dailyProducts.map((product) => <ProductCard key={product.id} product={withSalePricing(product, 'daily')} />)}
           </div>
         )}
       </div>

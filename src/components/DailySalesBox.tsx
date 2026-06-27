@@ -2,14 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { Flame, Tag } from 'lucide-react';
 import { useProducts } from '../hooks/useProducts';
-
-function getDiscountPercent(price: number, originalPrice?: number, discount?: number) {
-  if (discount && discount > 0) return Math.round(discount);
-  if (originalPrice && originalPrice > price) {
-    return Math.round(((originalPrice - price) / originalPrice) * 100);
-  }
-  return 0;
-}
+import { getDisplayOriginalPrice, getSaleDiscount, getSalePrice } from '../utils/salePricing';
 
 export default function DailySalesBox() {
   const { products, loading } = useProducts();
@@ -45,7 +38,9 @@ export default function DailySalesBox() {
           ) : (
             <div className="flex gap-3 overflow-x-auto px-4 sm:px-5 py-4 scrollbar-thin">
               {displayProducts.map((product) => {
-                const discount = getDiscountPercent(product.price, product.originalPrice, product.discount);
+                const discount = getSaleDiscount(product, 'daily');
+                const salePrice = getSalePrice(product, 'daily');
+                const originalPrice = getDisplayOriginalPrice(product, 'daily');
                 return (
                   <Link
                     key={product.id}
@@ -67,9 +62,9 @@ export default function DailySalesBox() {
                     <div className="p-3">
                       <h3 className="text-sm font-medium text-gray-800 line-clamp-2 min-h-[2.5rem]">{product.name}</h3>
                       <div className="mt-2 flex items-baseline gap-2">
-                        <span className="text-orange-600 font-bold">৳{product.price.toLocaleString()}</span>
-                        {product.originalPrice && product.originalPrice > product.price && (
-                          <span className="text-xs text-gray-400 line-through">৳{product.originalPrice.toLocaleString()}</span>
+                        <span className="text-orange-600 font-bold">৳{salePrice.toLocaleString()}</span>
+                        {originalPrice && (
+                          <span className="text-xs text-gray-400 line-through">৳{originalPrice.toLocaleString()}</span>
                         )}
                       </div>
                     </div>

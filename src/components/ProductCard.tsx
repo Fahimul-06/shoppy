@@ -5,6 +5,7 @@ import { useCart } from '../context/CartContext';
 import { Product } from '../types';
 import { fetchWishlistStatus, toggleWishlist } from '../lib/db';
 import { getToken } from '../lib/api';
+import { getDisplayOriginalPrice, getSaleDiscount, getSalePrice, withSalePricing } from '../utils/salePricing';
 
 const badgeStyles: Record<string, string> = {
   sale: 'bg-red-500 text-white',
@@ -27,6 +28,9 @@ export default function ProductCard({ product }: Props) {
   const [wishlistLoading, setWishlistLoading] = useState(false);
   const sellerLogo = shopLogo(product);
   const sellerShopName = shopName(product);
+  const displayPrice = getSalePrice(product);
+  const displayOriginalPrice = getDisplayOriginalPrice(product);
+  const displayDiscount = getSaleDiscount(product);
 
   useEffect(() => {
     const token = getToken('user');
@@ -64,9 +68,9 @@ export default function ProductCard({ product }: Props) {
             {product.badge}
           </span>
         )}
-        {product.discount && (
+        {displayDiscount > 0 && (
           <span className="absolute top-2 right-2 bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-lg">
-            -{product.discount}%
+            -{displayDiscount}%
           </span>
         )}
         <button
@@ -109,14 +113,14 @@ export default function ProductCard({ product }: Props) {
         </div>
 
         <div className="flex items-end gap-2 mb-3">
-          <span className="text-base font-bold text-gray-900">৳{Number(product.price ?? 0).toLocaleString()}</span>
-          {product.originalPrice && (
-            <span className="text-xs text-gray-400 line-through">৳{Number(product.originalPrice).toLocaleString()}</span>
+          <span className="text-base font-bold text-gray-900">৳{Number(displayPrice ?? 0).toLocaleString()}</span>
+          {displayOriginalPrice && (
+            <span className="text-xs text-gray-400 line-through">৳{Number(displayOriginalPrice).toLocaleString()}</span>
           )}
         </div>
 
         <button
-          onClick={() => addItem(product)}
+          onClick={() => addItem(withSalePricing(product))}
           className="w-full bg-orange-50 hover:bg-orange-500 text-orange-500 hover:text-white border border-orange-200 hover:border-orange-500 text-sm font-semibold py-2 rounded-xl flex items-center justify-center gap-2 transition-all duration-200 active:scale-95"
         >
           <ShoppingCart size={15} />

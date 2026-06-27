@@ -4,6 +4,7 @@ import { Zap, ChevronRight, Clock, LayoutGrid } from 'lucide-react';
 import { categories } from '../data/categories';
 import ProductCard from '../components/ProductCard';
 import { useProducts } from '../hooks/useProducts';
+import { getSaleDiscount, withSalePricing } from '../utils/salePricing';
 
 function useCountdown(targetHours: number) {
   const getTimeLeft = () => {
@@ -43,7 +44,7 @@ export default function FlashSalePage() {
   const { products, loading } = useProducts();
   const saleProducts = products
     .filter((p) => Array.isArray(p.saleTags) && p.saleTags.includes('flash'))
-    .sort((a, b) => (b.discount ?? 0) - (a.discount ?? 0));
+    .sort((a, b) => getSaleDiscount(b, 'flash') - getSaleDiscount(a, 'flash'));
 
   const [activeCat, setActiveCat] = useState('all');
 
@@ -59,8 +60,8 @@ export default function FlashSalePage() {
   const countForCat = (slug: string) =>
     saleProducts.filter((p) => p.category === slug).length;
 
-  const maxDiscount = saleProducts.length ? Math.max(...saleProducts.map((p) => p.discount ?? 0)) : 0;
-  const minDiscount = saleProducts.length ? Math.min(...saleProducts.map((p) => p.discount ?? 0)) : 0;
+  const maxDiscount = saleProducts.length ? Math.max(...saleProducts.map((p) => getSaleDiscount(p, 'flash'))) : 0;
+  const minDiscount = saleProducts.length ? Math.min(...saleProducts.map((p) => getSaleDiscount(p, 'flash'))) : 0;
 
   return (
     <div className="bg-gray-50 min-h-screen">
@@ -206,7 +207,7 @@ export default function FlashSalePage() {
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4">
             {filtered.map((p) => (
-              <ProductCard key={p.id} product={p} />
+              <ProductCard key={p.id} product={withSalePricing(p, 'flash')} />
             ))}
           </div>
         )}
@@ -219,7 +220,7 @@ export default function FlashSalePage() {
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4">
             {products.filter((p) => p.badge === 'hot').map((p) => (
-              <ProductCard key={p.id} product={p} />
+              <ProductCard key={p.id} product={withSalePricing(p, 'flash')} />
             ))}
           </div>
         </div>

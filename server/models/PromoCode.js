@@ -5,7 +5,7 @@ const promoCodeSchema = new mongoose.Schema({
   code: { type: String, required: true, unique: true, uppercase: true, trim: true },
   description: String,
   discountType: { type: String, enum: ['percentage', 'fixed'], required: true },
-  discountValue: { type: Number, required: true },
+  discountValue: { type: Number, required: true, min: 0 },
   minOrderAmount: { type: Number, default: 0 },
   maxDiscountAmount: { type: Number, default: 0 },
   maxUses: Number,
@@ -28,8 +28,8 @@ const promoCodeSchema = new mongoose.Schema({
   product: { type: mongoose.Schema.Types.ObjectId, ref: 'Product', default: null },
   categorySlug: String,
 
-  startsAt: Date,
-  expiresAt: Date,
+  startsAt: { type: Date, default: null },
+  expiresAt: { type: Date, default: null },
   active: { type: Boolean, default: true },
 }, { timestamps: true });
 

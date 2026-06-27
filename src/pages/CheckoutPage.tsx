@@ -111,6 +111,7 @@ export default function CheckoutPage() {
         delivery_fee: shipping,
         total_amount: total,
         payment_method: payment,
+        promo_code: promoInfo?.code || '',
         shipping_address: address,
         items: checkoutItems.map(({ product, quantity }) => ({
           product_id: product.id,

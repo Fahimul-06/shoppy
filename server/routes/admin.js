@@ -330,7 +330,7 @@ router.post('/customer-care/:customerId', requireAdmin, async (req, res) => {
 
 function normalizePromoPayload(body = {}) {
   const arrayOfStrings = (value) => Array.isArray(value) ? value.map((x) => String(x || '').trim()).filter(Boolean) : [];
-  const arrayOfIds = (value) => Array.isArray(value) ? value.map((x) => String(x || '').trim()).filter(Boolean) : [];
+  const arrayOfIds = (value) => Array.isArray(value) ? value.map((x) => String(x?._id || x?.id || x || '').trim()).filter(Boolean) : [];
   return {
     code: String(body.code || '').trim().toUpperCase(),
     description: String(body.description || '').trim(),
@@ -346,8 +346,8 @@ function normalizePromoPayload(body = {}) {
     brands: arrayOfStrings(body.brands),
     sellers: arrayOfIds(body.sellers),
     products: arrayOfIds(body.products),
-    startsAt: body.startsAt ? new Date(body.startsAt) : undefined,
-    expiresAt: body.expiresAt ? new Date(body.expiresAt) : undefined,
+    startsAt: body.startsAt ? new Date(body.startsAt) : null,
+    expiresAt: body.expiresAt ? new Date(body.expiresAt) : null,
     active: body.active !== false,
   };
 }
@@ -368,6 +368,8 @@ router.post('/promos', requireAdmin, async (req, res) => {
   if (!payload.code) return res.status(400).json({ message: 'Promo code is required' });
   if (!payload.discountValue || payload.discountValue <= 0) return res.status(400).json({ message: 'Discount value must be greater than 0' });
 
+  const existing = await PromoCode.findOne({ code: payload.code });
+  if (existing) return res.status(409).json({ message: 'This promo code already exists. Use Edit to update it.' });
   const promo = await PromoCode.create(payload);
   const populatedPromo = await PromoCode.findById(promo._id).populate(promoPopulate);
   if (isPromoActive(promo)) {
@@ -386,7 +388,10 @@ router.post('/promos', requireAdmin, async (req, res) => {
 
 router.put('/promos/:id', requireAdmin, async (req, res) => {
   const payload = normalizePromoPayload(req.body);
-  const promo = await PromoCode.findByIdAndUpdate(req.params.id, payload, { new: true }).populate(promoPopulate);
+  const existing = await PromoCode.findOne({ code: payload.code, _id: { $ne: req.params.id } });
+  if (existing) return res.status(409).json({ message: 'Another promo already uses this code' });
+  const promo = await PromoCode.findByIdAndUpdate(req.params.id, payload, { new: true, runValidators: true }).populate(promoPopulate);
+  if (!promo) return res.status(404).json({ message: 'Promo not found' });
   res.json({ promo });
 });
 

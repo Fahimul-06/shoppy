@@ -4,14 +4,6 @@ import { Zap, Clock, ChevronRight, ShoppingCart, Star } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { useProducts } from '../hooks/useProducts';
 
-
-function isSaleActive(product: any) {
-  const now = Date.now();
-  const starts = product.saleStartAt ? new Date(product.saleStartAt).getTime() : 0;
-  const ends = product.saleEndAt ? new Date(product.saleEndAt).getTime() : Number.POSITIVE_INFINITY;
-  return starts <= now && now <= ends;
-}
-
 function useCountdown() {
   const getTimeLeft = () => {
     const now = new Date();
@@ -48,7 +40,7 @@ export default function FlashSaleSection() {
   const { addItem } = useCart();
   const { products, loading } = useProducts();
   const saleProducts = products
-    .filter((p) => isSaleActive(p) && (p.isFlashSale || p.badge === 'sale'))
+    .filter((p) => Array.isArray(p.saleTags) && p.saleTags.includes('flash'))
     .sort((a, b) => (b.discount ?? 0) - (a.discount ?? 0))
     .slice(0, 8);
   const { h, m, s } = useCountdown();
@@ -101,7 +93,7 @@ export default function FlashSaleSection() {
         {loading ? (
           <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center text-gray-400 w-full">Loading sale products...</div>
         ) : saleProducts.length === 0 ? (
-          <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center text-gray-400 w-full">No sale products yet.</div>
+          <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center text-gray-400 w-full">No flash sale products selected yet.</div>
         ) : saleProducts.map((product) => (
           <div
             key={product.id}

@@ -21,11 +21,8 @@ export interface Product {
   rating: number;
   reviewCount: number;
   badge?: 'sale' | 'new' | 'hot';
+  saleTags?: Array<'daily' | 'flash'>;
   discount?: number;
-  isDailySale?: boolean;
-  isFlashSale?: boolean;
-  saleStartAt?: string;
-  saleEndAt?: string;
   brand?: string;
   description?: string;
   specifications?: Record<string, string>;

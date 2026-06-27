@@ -5,14 +5,6 @@ import { categories } from '../data/categories';
 import ProductCard from '../components/ProductCard';
 import { useProducts } from '../hooks/useProducts';
 
-
-function isSaleActive(product: any) {
-  const now = Date.now();
-  const starts = product.saleStartAt ? new Date(product.saleStartAt).getTime() : 0;
-  const ends = product.saleEndAt ? new Date(product.saleEndAt).getTime() : Number.POSITIVE_INFINITY;
-  return starts <= now && now <= ends;
-}
-
 function useCountdown(targetHours: number) {
   const getTimeLeft = () => {
     const now = new Date();
@@ -50,7 +42,7 @@ export default function FlashSalePage() {
   const { hours, minutes, seconds } = useCountdown(23);
   const { products, loading } = useProducts();
   const saleProducts = products
-    .filter((p) => isSaleActive(p) && (p.isFlashSale || p.badge === 'sale'))
+    .filter((p) => Array.isArray(p.saleTags) && p.saleTags.includes('flash'))
     .sort((a, b) => (b.discount ?? 0) - (a.discount ?? 0));
 
   const [activeCat, setActiveCat] = useState('all');
@@ -210,7 +202,7 @@ export default function FlashSalePage() {
         {loading ? (
           <div className="bg-white rounded-2xl border border-gray-100 p-16 text-center text-gray-400">Loading products...</div>
         ) : filtered.length === 0 ? (
-          <div className="bg-white rounded-2xl border border-gray-100 p-16 text-center text-gray-400">No sale products found.</div>
+          <div className="bg-white rounded-2xl border border-gray-100 p-16 text-center text-gray-400">No flash sale products selected yet.</div>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4">
             {filtered.map((p) => (

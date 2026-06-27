@@ -15,6 +15,7 @@ import CheckoutPage from './pages/CheckoutPage';
 import SearchPage from './pages/SearchPage';
 import NewArrivalsPage from './pages/NewArrivalsPage';
 import FlashSalePage from './pages/FlashSalePage';
+import DailySalePage from './pages/DailySalePage';
 import OrdersPage from './pages/OrdersPage';
 import WishlistPage from './pages/WishlistPage';
 import CouponsPage from './pages/CouponsPage';
@@ -57,6 +58,7 @@ export default function App() {
           <Route path="/search" element={<StorePage><SearchPage /></StorePage>} />
           <Route path="/new-arrivals" element={<StorePage><NewArrivalsPage /></StorePage>} />
           <Route path="/flash-sale" element={<StorePage><FlashSalePage /></StorePage>} />
+          <Route path="/daily-sale" element={<StorePage><DailySalePage /></StorePage>} />
           <Route path="/account" element={<AccountPage />} />
           <Route path="/orders" element={<StorePage><OrdersPage /></StorePage>} />
           <Route path="/wishlist" element={<StorePage><WishlistPage /></StorePage>} />

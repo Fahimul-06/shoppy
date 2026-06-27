@@ -3,14 +3,6 @@ import { Link } from 'react-router-dom';
 import { Flame, Tag } from 'lucide-react';
 import { useProducts } from '../hooks/useProducts';
 
-
-function isSaleActive(product: any) {
-  const now = Date.now();
-  const starts = product.saleStartAt ? new Date(product.saleStartAt).getTime() : 0;
-  const ends = product.saleEndAt ? new Date(product.saleEndAt).getTime() : Number.POSITIVE_INFINITY;
-  return starts <= now && now <= ends;
-}
-
 function getDiscountPercent(price: number, originalPrice?: number, discount?: number) {
   if (discount && discount > 0) return Math.round(discount);
   if (originalPrice && originalPrice > price) {
@@ -22,10 +14,7 @@ function getDiscountPercent(price: number, originalPrice?: number, discount?: nu
 export default function DailySalesBox() {
   const { products, loading } = useProducts();
   const saleProducts = products
-    .filter((product) => {
-      const discount = getDiscountPercent(product.price, product.originalPrice, product.discount);
-      return isSaleActive(product) && (product.isDailySale || product.badge === 'sale' || discount > 0 || Boolean(product.originalPrice && product.originalPrice > product.price));
-    })
+    .filter((product) => Array.isArray(product.saleTags) && product.saleTags.includes('daily'))
     .slice(0, 10);
 
   const displayProducts = saleProducts.length > 0 ? saleProducts : products.slice(0, 10);
@@ -41,10 +30,10 @@ export default function DailySalesBox() {
               </span>
               <div className="min-w-0">
                 <h2 className="text-lg sm:text-xl font-bold text-gray-900 leading-tight">Daily Sales</h2>
-                <p className="text-xs sm:text-sm text-gray-500 truncate">Fresh deals and discounted products for today</p>
+                <p className="text-xs sm:text-sm text-gray-500 truncate">Products selected by admin for today</p>
               </div>
             </div>
-            <Link to="/category/all" className="text-sm font-semibold text-orange-600 hover:text-orange-700 whitespace-nowrap">
+            <Link to="/daily-sale" className="text-sm font-semibold text-orange-600 hover:text-orange-700 whitespace-nowrap">
               View All
             </Link>
           </div>
@@ -52,7 +41,7 @@ export default function DailySalesBox() {
           {loading ? (
             <div className="p-6 text-center text-gray-400">Loading daily sales...</div>
           ) : displayProducts.length === 0 ? (
-            <div className="p-6 text-center text-gray-400">No daily sale products available yet.</div>
+            <div className="p-6 text-center text-gray-400">No daily sale products selected yet.</div>
           ) : (
             <div className="flex gap-3 overflow-x-auto px-4 sm:px-5 py-4 scrollbar-thin">
               {displayProducts.map((product) => {

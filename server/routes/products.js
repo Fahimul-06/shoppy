@@ -72,10 +72,76 @@ async function detectImageLabels(file) {
   return compact(labels).slice(0, 24);
 }
 
+function normalizeCategoryValue(value) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/&/g, ' and ')
+    .replace(/['’]/g, '')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function slugToName(slug) {
+  return normalizeCategoryValue(slug).split(' ').map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(' ');
+}
+
+const CATEGORY_ALIASES = {
+  'mens-fashion': ["Men's Fashion", 'mens fashion', 'men fashion'],
+  'womens-fashion': ["Women's Fashion", 'womens fashion', 'women fashion'],
+  'computer-gaming': ['Computer & Gaming', 'computer and gaming'],
+  'home-living': ['Home & Living', 'home and living'],
+  'groceries-pet': ['Groceries & Pet Supplies', 'groceries and pet supplies', 'groceries pet'],
+  'health-beauty': ['Health & Beauty', 'health and beauty'],
+  'tv-appliances': ['TV & Home Appliances', 'tv and home appliances'],
+  'lifestyle-hobbies': ['Lifestyle & Hobbies', 'lifestyle and hobbies'],
+  'electronic-accessories': ['Electronic Accessories'],
+  'watches-bags': ['Watches & Bags', 'watches and bags'],
+  'sports-outdoors': ['Sports & Outdoors', 'sports and outdoors'],
+  'mother-baby': ['Mother & Baby', 'mother and baby'],
+  'automotive': ['Automotives & Motorbikes', 'automotive', 'automotives and motorbikes'],
+  'phones': ['Phones & Accessories', 'phones and accessories', 'phones'],
+};
+
+function categoryRegexes(category) {
+  const raw = String(category || '').trim();
+  const normalized = normalizeCategoryValue(raw);
+  const hyphenSlug = normalized.replace(/\s+/g, '-');
+  const aliases = compact([
+    raw,
+    normalized,
+    hyphenSlug,
+    slugToName(raw),
+    ...(CATEGORY_ALIASES[hyphenSlug] || []),
+  ]);
+  return aliases.map((alias) => new RegExp(`^${esc(alias).replace(/\\ /g, '[\\s-]+')}$`, 'i'));
+}
+
 function buildPublicProductFilter(query) {
-  const { category, badge, search, includeInactive } = query;
+  const { category, subcategory, childCategory, badge, search, includeInactive } = query;
   const filter = includeInactive === 'true' ? {} : { active: { $ne: false } };
-  if (category) filter.category = category;
+  if (category && category !== 'all') {
+    const regexes = categoryRegexes(category);
+    filter.$or = [
+      ...(filter.$or || []),
+      ...regexes.map((rx) => ({ category: rx })),
+    ];
+  }
+  if (subcategory) {
+    const regexes = categoryRegexes(subcategory);
+    filter.$and = [
+      ...(filter.$and || []),
+      { $or: regexes.flatMap((rx) => [{ subcategory: rx }, { subCategory: rx }]) },
+    ];
+  }
+  if (childCategory) {
+    const regexes = categoryRegexes(childCategory);
+    filter.$and = [
+      ...(filter.$and || []),
+      { $or: regexes.flatMap((rx) => [{ childCategory: rx }, { subSubCategory: rx }]) },
+    ];
+  }
   if (badge) filter.badge = badge;
   if (search) {
     const terms = compact(String(search).split(/\s+/)).slice(0, 8);

@@ -115,3 +115,13 @@ export async function cancelOrderedProduct(payload: { orderId: string; orderItem
   const { cancellation } = await api.post<{ cancellation: any }>('/orders/cancellations', payload, getToken('user'));
   return cancellation;
 }
+
+export async function fetchUserReviews() {
+  const { reviews } = await api.get<{ reviews: any[] }>('/orders/reviews/my', getToken('user'));
+  return reviews;
+}
+
+export async function submitProductReview(payload: { orderId: string; orderItemId: string; rating: number; comment?: string }) {
+  const { review } = await api.post<{ review: any }>('/orders/reviews', payload, getToken('user'));
+  return review;
+}

@@ -5,26 +5,51 @@ import { categories } from '../data/categories';
 import ProductCard from '../components/ProductCard';
 import { useProducts } from '../hooks/useProducts';
 
-
 const cleanLabel = (value?: string | null) => (value || '').trim();
-const norm = (value?: string | null) => cleanLabel(value).toLowerCase().replace(/[-_]+/g, ' ');
+const normalizeText = (value?: string | null) => cleanLabel(value)
+  .toLowerCase()
+  .replace(/&/g, ' and ')
+  .replace(/['’]/g, '')
+  .replace(/[^a-z0-9]+/g, ' ')
+  .replace(/\s+/g, ' ')
+  .trim();
 
-function productMatchesLabel(product: any, label: string) {
-  const q = norm(label);
-  if (!q) return true;
-  const fields = [
+const slugify = (value?: string | null) => normalizeText(value).replace(/\s+/g, '-');
+
+function valuesMatch(a?: string | null, b?: string | null) {
+  const left = normalizeText(a);
+  const right = normalizeText(b);
+  if (!left || !right) return false;
+  return left === right || slugify(left) === slugify(right);
+}
+
+function categoryMatches(product: any, categorySlug?: string | null, categoryName?: string | null) {
+  if (!categorySlug || categorySlug === 'all') return true;
+  const productCategory = product.category ?? product.categorySlug ?? product.mainCategory;
+  return valuesMatch(productCategory, categorySlug) || valuesMatch(productCategory, categoryName);
+}
+
+function subcategoryMatches(product: any, label: string) {
+  if (!label) return true;
+  const directFields = [
+    product.subcategory,
+    product.subCategory,
+    product.childCategory,
+    product.subSubCategory,
+  ];
+  if (directFields.some((field) => valuesMatch(field, label))) return true;
+
+  // Fallback for older products that only have a name/description but missing subcategory fields.
+  const searchableFields = [
     product.name,
     product.brand,
     product.description,
     product.category,
-    product.subCategory,
-    product.subcategory,
-    product.subSubCategory,
-    product.childCategory,
     ...(Array.isArray(product.features) ? product.features : []),
     ...Object.values(product.specifications || {}),
   ];
-  return fields.some((field) => norm(String(field || '')).includes(q));
+  const q = normalizeText(label);
+  return searchableFields.some((field) => normalizeText(String(field || '')).includes(q));
 }
 
 const sortOptions = [
@@ -50,25 +75,25 @@ export default function CategoryPage() {
   const isAll = slug === 'all';
 
   const filtered = useMemo(() => {
-    let list = isAll ? products : products.filter((p) => p.category === slug);
+    let list = products.filter((p) => categoryMatches(p, slug, category?.name));
 
     if (selectedSub) {
-      list = list.filter((p) => productMatchesLabel(p, selectedSub));
+      list = list.filter((p) => subcategoryMatches(p, selectedSub));
     }
 
     if (selectedChild) {
-      list = list.filter((p) => productMatchesLabel(p, selectedChild));
+      list = list.filter((p) => subcategoryMatches(p, selectedChild));
     }
 
-    list = list.filter((p) => p.price <= maxPrice && p.rating >= minRating);
+    list = list.filter((p) => Number(p.price ?? 0) <= maxPrice && Number(p.rating ?? 0) >= minRating);
     switch (sort) {
-      case 'price-asc': return [...list].sort((a, b) => a.price - b.price);
-      case 'price-desc': return [...list].sort((a, b) => b.price - a.price);
-      case 'rating': return [...list].sort((a, b) => b.rating - a.rating);
+      case 'price-asc': return [...list].sort((a, b) => Number(a.price ?? 0) - Number(b.price ?? 0));
+      case 'price-desc': return [...list].sort((a, b) => Number(b.price ?? 0) - Number(a.price ?? 0));
+      case 'rating': return [...list].sort((a, b) => Number(b.rating ?? 0) - Number(a.rating ?? 0));
       case 'newest': return [...list].reverse();
       default: return list;
     }
-  }, [slug, isAll, sort, maxPrice, minRating, products, selectedSub, selectedChild]);
+  }, [slug, category?.name, sort, maxPrice, minRating, products, selectedSub, selectedChild]);
 
   const categoryName = isAll ? 'All Products' : category?.name ?? slug?.replace(/-/g, ' ');
   const pageTitle = selectedChild || selectedSub || categoryName;
@@ -123,7 +148,7 @@ export default function CategoryPage() {
           >
             All Products
           </Link>
-          {categories.slice(0, 8).map((cat) => (
+          {categories.slice(0, 14).map((cat) => (
             <Link
               key={cat.id}
               to={`/category/${cat.slug}`}
@@ -212,7 +237,7 @@ export default function CategoryPage() {
             ) : filtered.length === 0 ? (
               <div className="bg-white rounded-2xl p-16 text-center border border-gray-100">
                 <p className="text-gray-400 text-lg mb-2">No products found</p>
-                <p className="text-gray-400 text-sm mb-5">Try adjusting your filters</p>
+                <p className="text-gray-400 text-sm mb-5">No products are saved under {pageTitle} yet, or the selected filters are too strict.</p>
                 <button onClick={() => { setMaxPrice(200000); setMinRating(0); }} className="bg-orange-500 text-white px-6 py-2.5 rounded-xl font-semibold hover:bg-orange-600 transition-colors text-sm">
                   Clear Filters
                 </button>
@@ -238,9 +263,6 @@ export default function CategoryPage() {
               </button>
             </div>
             <FilterPanel />
-            <button onClick={() => setFiltersOpen(false)} className="w-full bg-orange-500 text-white font-bold py-3 rounded-xl mt-5 hover:bg-orange-600 transition-colors">
-              Apply Filters
-            </button>
           </div>
         </>
       )}

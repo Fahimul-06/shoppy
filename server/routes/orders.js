@@ -5,6 +5,7 @@ import Product from '../models/Product.js';
 import ReturnRequest from '../models/ReturnRequest.js';
 import CancellationRequest from '../models/CancellationRequest.js';
 import ChatMessage from '../models/ChatMessage.js';
+import ProductReview from '../models/ProductReview.js';
 import { requireUser } from '../middleware/auth.js';
 const router = express.Router();
 
@@ -110,6 +111,50 @@ router.post('/chats/:orderId/:orderItemId', requireUser, async (req, res) => {
     readBySeller: false,
   });
   res.status(201).json({ message: chatMessage });
+});
+
+
+router.get('/reviews/my', requireUser, async (req, res) => {
+  const reviews = await ProductReview.find({ user: req.user.id })
+    .populate('product')
+    .populate('order')
+    .sort({ createdAt: -1 });
+  res.json({ reviews });
+});
+
+router.post('/reviews', requireUser, async (req, res) => {
+  const { orderId, orderItemId, rating, comment } = req.body || {};
+  if (!mongoose.isValidObjectId(orderId)) return res.status(400).json({ message: 'Valid orderId is required' });
+  if (!mongoose.isValidObjectId(orderItemId)) return res.status(400).json({ message: 'Valid orderItemId is required' });
+  const score = Number(rating);
+  if (!Number.isFinite(score) || score < 1 || score > 5) return res.status(400).json({ message: 'Rating must be between 1 and 5' });
+
+  const order = await Order.findOne({ _id: orderId, user: req.user.id });
+  if (!order) return res.status(404).json({ message: 'Order not found' });
+  if (order.status !== 'delivered') return res.status(400).json({ message: 'Only delivered products can be reviewed' });
+
+  const item = order.items.id(orderItemId);
+  if (!item) return res.status(404).json({ message: 'Ordered product not found' });
+  if (item.cancellationStatus === 'cancelled') return res.status(400).json({ message: 'Cancelled products cannot be reviewed' });
+
+  const product = await Product.findById(item.product);
+  if (!product) return res.status(404).json({ message: 'Product not found' });
+
+  const review = await ProductReview.findOneAndUpdate(
+    { user: req.user._id, order: order._id, orderItem: item._id },
+    { user: req.user._id, order: order._id, orderItem: item._id, product: product._id, rating: score, comment: String(comment || '').trim() },
+    { new: true, upsert: true, runValidators: true, setDefaultsOnInsert: true }
+  );
+
+  const stats = await ProductReview.aggregate([
+    { $match: { product: product._id } },
+    { $group: { _id: '$product', avg: { $avg: '$rating' }, count: { $sum: 1 } } }
+  ]);
+  product.rating = stats[0] ? Number(stats[0].avg.toFixed(1)) : product.rating;
+  product.reviewCount = stats[0] ? stats[0].count : product.reviewCount;
+  await product.save();
+
+  res.status(201).json({ message: 'Review saved successfully', review });
 });
 
 router.get('/returns/my', requireUser, async (req, res) => {

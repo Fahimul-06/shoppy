@@ -209,9 +209,14 @@ export default function Header() {
         setNotificationCount(0);
       }
     };
+    const handleNotificationsRead = () => setNotificationCount(0);
     loadNotificationCount();
+    window.addEventListener('customer-notifications-read', handleNotificationsRead);
     const timer = window.setInterval(loadNotificationCount, 15000);
-    return () => window.clearInterval(timer);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener('customer-notifications-read', handleNotificationsRead);
+    };
   }, []);
 
   useEffect(() => {

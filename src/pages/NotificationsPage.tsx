@@ -30,7 +30,7 @@ export default function NotificationsPage() {
 
   const token = getToken('user');
 
-  const load = async () => {
+  const load = async (markReadAfterLoad = false) => {
     if (!token) {
       navigate('/account');
       return;
@@ -38,7 +38,13 @@ export default function NotificationsPage() {
     try {
       setError('');
       const res = await api.get<{ notifications: NotificationItem[] }>('/notifications', token);
-      setItems(res.notifications || []);
+      const notifications = res.notifications || [];
+      setItems(markReadAfterLoad ? notifications.map((n) => ({ ...n, read: true })) : notifications);
+
+      if (markReadAfterLoad && notifications.some((n) => !n.read)) {
+        await api.post('/notifications/mark-all-read', {}, token);
+        window.dispatchEvent(new CustomEvent('customer-notifications-read'));
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not load notifications');
     } finally {
@@ -47,15 +53,16 @@ export default function NotificationsPage() {
   };
 
   useEffect(() => {
-    load();
-    const timer = window.setInterval(load, 15000);
+    load(true);
+    const timer = window.setInterval(() => load(false), 15000);
     return () => window.clearInterval(timer);
   }, []);
 
   const markAllRead = async () => {
     if (!token) return;
     await api.post('/notifications/mark-all-read', {}, token);
-    await load();
+    setItems((prev) => prev.map((item) => ({ ...item, read: true })));
+    window.dispatchEvent(new CustomEvent('customer-notifications-read'));
   };
 
   const openNotification = async (item: NotificationItem) => {

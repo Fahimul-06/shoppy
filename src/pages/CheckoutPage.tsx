@@ -17,7 +17,7 @@ const paymentMethods = [
 ];
 
 export default function CheckoutPage() {
-  const { state, totalPrice } = useCart();
+  const { state, totalPrice, clearCart } = useCart();
   const navigate = useNavigate();
   const [step, setStep] = useState(0);
   const [payment, setPayment] = useState('bkash');
@@ -76,6 +76,7 @@ export default function CheckoutPage() {
         })),
       });
       setOrderNumber(order.orderNumber || order.id);
+      clearCart();
       setOrdered(true);
       setStep(2);
     } catch (e) {

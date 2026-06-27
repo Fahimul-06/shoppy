@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Check, ChevronRight, MapPin, CreditCard, Package, Loader2, AlertCircle } from 'lucide-react';
+import { Check, ChevronRight, MapPin, CreditCard, Package, Loader2, AlertCircle, Tag, Trash2 } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { placeOrder as saveOrder } from '../lib/db';
 import { api, getToken } from '../lib/api';
@@ -27,6 +27,9 @@ export default function CheckoutPage() {
   const [orderNumber, setOrderNumber] = useState('');
   const [placing, setPlacing] = useState(false);
   const [error, setError] = useState('');
+  const [promoCode, setPromoCode] = useState('');
+  const [promoInfo, setPromoInfo] = useState<{ code: string; discount: number; eligibleItemCount?: number } | null>(null);
+  const [promoLoading, setPromoLoading] = useState(false);
   const [checkoutItemIds] = useState<string[] | null>(() => {
     try {
       const stored = localStorage.getItem('checkoutItemIds');
@@ -45,7 +48,8 @@ export default function CheckoutPage() {
   const checkoutTotalItems = checkoutItems.reduce((sum, item) => sum + item.quantity, 0);
   const checkoutTotalPrice = checkoutItems.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
   const shipping = checkoutTotalPrice > 2000 ? 0 : 120;
-  const total = checkoutTotalPrice + shipping;
+  const discount = promoInfo?.discount || 0;
+  const total = Math.max(0, checkoutTotalPrice - discount) + shipping;
 
   const readableAddress = (addr: DeliveryAddress) => [addr.address, addr.landmark, addr.area, addr.district, addr.division].filter(Boolean).join(', ');
 
@@ -63,6 +67,31 @@ export default function CheckoutPage() {
       .catch(() => {});
   }, []);
 
+  const applyPromo = async () => {
+    const code = promoCode.trim().toUpperCase();
+    if (!code) return;
+    setPromoLoading(true);
+    setError('');
+    try {
+      const response = await api.post<{ promo: any; discount: number; eligibleItemCount: number }>('/promos/validate', {
+        code,
+        items: checkoutItems.map(({ product, quantity }) => ({
+          product_id: product.id,
+          product_snapshot: product as unknown as Record<string, unknown>,
+          quantity,
+          unit_price: product.price,
+        })),
+      });
+      setPromoInfo({ code: response.promo.code, discount: response.discount, eligibleItemCount: response.eligibleItemCount });
+      setPromoCode(response.promo.code);
+    } catch (e) {
+      setPromoInfo(null);
+      setError(e instanceof Error ? e.message : 'Promo could not be applied');
+    } finally {
+      setPromoLoading(false);
+    }
+  };
+
   const placeOrder = async () => {
     if (!getToken('user')) {
       navigate('/account');
@@ -78,7 +107,7 @@ export default function CheckoutPage() {
     try {
       const order = await saveOrder({
         subtotal: checkoutTotalPrice,
-        discount_amount: 0,
+        discount_amount: discount,
         delivery_fee: shipping,
         total_amount: total,
         payment_method: payment,
@@ -289,11 +318,34 @@ export default function CheckoutPage() {
                   </div>
                 ))}
               </div>
+              <div className="border-t border-gray-100 pt-3 mb-3">
+                <div className="flex items-center gap-2 mb-2">
+                  <Tag size={15} className="text-orange-500" />
+                  <h4 className="text-sm font-bold text-gray-900">Promo Code</h4>
+                </div>
+                {promoInfo ? (
+                  <div className="flex items-center justify-between bg-green-50 border border-green-200 rounded-xl px-3 py-2">
+                    <span className="text-green-700 text-sm font-semibold">{promoInfo.code} applied</span>
+                    <button onClick={() => { setPromoInfo(null); setPromoCode(''); }} className="text-gray-400 hover:text-red-500"><Trash2 size={14}/></button>
+                  </div>
+                ) : (
+                  <div className="flex gap-2">
+                    <input value={promoCode} onChange={(e) => setPromoCode(e.target.value.toUpperCase())} onKeyDown={(e) => e.key === 'Enter' && applyPromo()} placeholder="Enter promo" className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-orange-400" />
+                    <button onClick={applyPromo} disabled={promoLoading} className="bg-orange-500 disabled:bg-orange-300 text-white text-sm font-bold px-3 rounded-xl">{promoLoading ? '...' : 'Apply'}</button>
+                  </div>
+                )}
+              </div>
               <div className="border-t border-gray-100 pt-3 space-y-2 text-sm">
                 <div className="flex justify-between text-gray-600">
                   <span>Subtotal</span>
                   <span>৳{checkoutTotalPrice.toLocaleString()}</span>
                 </div>
+                {discount > 0 && (
+                  <div className="flex justify-between text-green-600">
+                    <span>Promo discount ({promoInfo?.code})</span>
+                    <span>-৳{discount.toLocaleString()}</span>
+                  </div>
+                )}
                 <div className="flex justify-between text-gray-600">
                   <span>Shipping</span>
                   <span className={shipping === 0 ? 'text-green-600' : ''}>{shipping === 0 ? 'FREE' : `৳${shipping}`}</span>

@@ -10,6 +10,7 @@ import CancellationRequest from '../models/CancellationRequest.js';
 import ChatMessage from '../models/ChatMessage.js';
 import CustomerCareMessage from '../models/CustomerCareMessage.js';
 import CustomerNotification from '../models/CustomerNotification.js';
+import { isPromoActive } from '../utils/promo.js';
 import { requireAdmin, signToken } from '../middleware/auth.js';
 const router = express.Router();
 const adminUser = (u) => ({ id: u.id, fullName: u.fullName, email: u.email, phone: u.phone, role: u.role });
@@ -327,10 +328,49 @@ router.post('/customer-care/:customerId', requireAdmin, async (req, res) => {
   res.status(201).json({ message: chatMessage });
 });
 
-router.get('/promos', requireAdmin, async (_req, res) => res.json({ promos: await PromoCode.find().sort({ createdAt: -1 }) }));
+function normalizePromoPayload(body = {}) {
+  const arrayOfStrings = (value) => Array.isArray(value) ? value.map((x) => String(x || '').trim()).filter(Boolean) : [];
+  const arrayOfIds = (value) => Array.isArray(value) ? value.map((x) => String(x || '').trim()).filter(Boolean) : [];
+  return {
+    code: String(body.code || '').trim().toUpperCase(),
+    description: String(body.description || '').trim(),
+    discountType: body.discountType === 'fixed' ? 'fixed' : 'percentage',
+    discountValue: Number(body.discountValue || 0),
+    minOrderAmount: Number(body.minOrderAmount || 0),
+    maxDiscountAmount: Number(body.maxDiscountAmount || 0),
+    maxUses: body.maxUses === '' || body.maxUses == null ? undefined : Number(body.maxUses),
+    appliesTo: body.appliesTo || 'all',
+    categories: arrayOfStrings(body.categories),
+    subcategories: arrayOfStrings(body.subcategories),
+    childCategories: arrayOfStrings(body.childCategories),
+    brands: arrayOfStrings(body.brands),
+    sellers: arrayOfIds(body.sellers),
+    products: arrayOfIds(body.products),
+    startsAt: body.startsAt ? new Date(body.startsAt) : undefined,
+    expiresAt: body.expiresAt ? new Date(body.expiresAt) : undefined,
+    active: body.active !== false,
+  };
+}
+
+const promoPopulate = [
+  { path: 'sellers', select: 'name shopName shopLogo email phone status' },
+  { path: 'products', select: 'name image price category subcategory childCategory brand seller' },
+  { path: 'product', select: 'name image price category subcategory childCategory brand seller' },
+];
+
+router.get('/promos', requireAdmin, async (_req, res) => {
+  const promos = await PromoCode.find().populate(promoPopulate).sort({ createdAt: -1 });
+  res.json({ promos });
+});
+
 router.post('/promos', requireAdmin, async (req, res) => {
-  const promo = await PromoCode.create(req.body);
-  if (promo.active !== false) {
+  const payload = normalizePromoPayload(req.body);
+  if (!payload.code) return res.status(400).json({ message: 'Promo code is required' });
+  if (!payload.discountValue || payload.discountValue <= 0) return res.status(400).json({ message: 'Discount value must be greater than 0' });
+
+  const promo = await PromoCode.create(payload);
+  const populatedPromo = await PromoCode.findById(promo._id).populate(promoPopulate);
+  if (isPromoActive(promo)) {
     await CustomerNotification.create({
       user: null,
       audience: 'customers',
@@ -341,10 +381,17 @@ router.post('/promos', requireAdmin, async (req, res) => {
       promo: promo._id,
     });
   }
-  res.status(201).json({ promo });
+  res.status(201).json({ promo: populatedPromo });
 });
-router.put('/promos/:id', requireAdmin, async (req, res) => res.json({ promo: await PromoCode.findByIdAndUpdate(req.params.id, req.body, { new: true }) }));
+
+router.put('/promos/:id', requireAdmin, async (req, res) => {
+  const payload = normalizePromoPayload(req.body);
+  const promo = await PromoCode.findByIdAndUpdate(req.params.id, payload, { new: true }).populate(promoPopulate);
+  res.json({ promo });
+});
+
 router.delete('/promos/:id', requireAdmin, async (req, res) => { await PromoCode.findByIdAndDelete(req.params.id); res.json({ ok: true }); });
+
 
 router.get('/customer-notifications', requireAdmin, async (_req, res) => {
   const notifications = await CustomerNotification.find({ user: null, audience: 'customers' })

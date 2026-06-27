@@ -24,6 +24,18 @@ const promoCodeSchema = new mongoose.Schema({
   sellers: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Seller' }],
   products: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Product' }],
 
+  // Voucher usage conditions. Empty arrays/false mean no restriction.
+  voucherType: {
+    type: String,
+    enum: ['general', 'payment_type', 'payment_method', 'bank_card', 'weekend_deal', 'store_usage'],
+    default: 'general',
+  },
+  paymentTypes: [{ type: String, trim: true }], // prepaid, cod, card, mobile_banking
+  paymentMethods: [{ type: String, trim: true }], // bkash, nagad, card, cod
+  banks: [{ type: String, trim: true }],
+  cardTypes: [{ type: String, trim: true }], // visa, mastercard, amex, debit, credit
+  weekendOnly: { type: Boolean, default: false },
+
   // Backward compatibility with older promo records.
   product: { type: mongoose.Schema.Types.ObjectId, ref: 'Product', default: null },
   categorySlug: String,

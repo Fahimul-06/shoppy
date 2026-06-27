@@ -37,6 +37,56 @@ export function isPromoActive(promo, now = new Date(), options = {}) {
   return true;
 }
 
+
+const methodToType = (method) => {
+  const m = normalize(method);
+  if (['cod','cash on delivery','cash'].includes(m)) return 'cod';
+  if (['card','credit card','debit card','credit debit card'].includes(m)) return 'card';
+  if (['bkash','nagad','rocket','upay'].includes(m)) return 'mobile_banking';
+  return m ? 'prepaid' : '';
+};
+
+export function promoMatchesUsageConditions(promo, context = {}) {
+  if (!promo) return { ok: false, message: 'Promo not found' };
+  const now = context.now ? new Date(context.now) : new Date();
+  const weekendOnly = promo.weekendOnly === true || promo.voucherType === 'weekend_deal';
+  if (weekendOnly) {
+    const day = now.getDay();
+    if (![5, 6].includes(day)) return { ok: false, message: 'This voucher is valid only on Friday and Saturday weekend deals.' };
+  }
+
+  const paymentMethod = normalize(context.paymentMethod || context.payment_method || context.payment?.method);
+  const paymentType = normalize(context.paymentType || context.payment_type || methodToType(paymentMethod));
+  const bankName = normalize(context.bankName || context.bank || context.bank_name || context.payment?.bankName);
+  const cardType = normalize(context.cardType || context.card_type || context.payment?.cardType);
+
+  const allowedTypes = list(promo.paymentTypes).map(normalize).filter(Boolean);
+  if (allowedTypes.length) {
+    if (!paymentType) return { ok: false, message: 'Select a payment type before using this voucher.' };
+    if (!allowedTypes.includes(paymentType)) return { ok: false, message: 'This voucher is not valid for the selected payment type.' };
+  }
+
+  const allowedMethods = list(promo.paymentMethods).map(normalize).filter(Boolean);
+  if (allowedMethods.length) {
+    if (!paymentMethod) return { ok: false, message: 'Select a payment method before using this voucher.' };
+    if (!allowedMethods.includes(paymentMethod)) return { ok: false, message: 'This voucher is not valid for the selected payment method.' };
+  }
+
+  const allowedBanks = list(promo.banks).map(normalize).filter(Boolean);
+  if (allowedBanks.length) {
+    if (!bankName) return { ok: false, message: 'Enter/select your bank before using this bank-card voucher.' };
+    if (!allowedBanks.includes(bankName)) return { ok: false, message: 'This voucher is not valid for the selected bank.' };
+  }
+
+  const allowedCards = list(promo.cardTypes).map(normalize).filter(Boolean);
+  if (allowedCards.length) {
+    if (!cardType) return { ok: false, message: 'Select your card type before using this card voucher.' };
+    if (!allowedCards.includes(cardType)) return { ok: false, message: 'This voucher is not valid for the selected card type.' };
+  }
+
+  return { ok: true, message: '' };
+}
+
 export function promoMatchesProduct(promo, product) {
   if (!promo || !product) return false;
   if (promo.appliesTo === 'all') return true;

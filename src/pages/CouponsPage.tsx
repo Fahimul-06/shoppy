@@ -22,6 +22,12 @@ type Promo = {
   products?: Array<{ id?: string; name?: string }>;
   expiresAt?: string;
   active?: boolean;
+  voucherType?: string;
+  paymentTypes?: string[];
+  paymentMethods?: string[];
+  banks?: string[];
+  cardTypes?: string[];
+  weekendOnly?: boolean;
 };
 
 const discountText = (promo: Promo) => promo.discountType === 'percentage'
@@ -46,6 +52,12 @@ const targetText = (promo: Promo) => {
   if (promo.brands?.length) parts.push(`Brand: ${promo.brands.join(', ')}`);
   if (promo.sellers?.length) parts.push(`Seller: ${promo.sellers.map((s) => s.shopName || s.name || 'Seller').join(', ')}`);
   if (promo.products?.length) parts.push(`Products: ${promo.products.map((p) => p.name || 'Product').join(', ')}`);
+  if (promo.voucherType && promo.voucherType !== 'general') parts.push(`Voucher: ${promo.voucherType.replace(/_/g, ' ')}`);
+  if (promo.paymentTypes?.length) parts.push(`Payment type: ${promo.paymentTypes.join(', ')}`);
+  if (promo.paymentMethods?.length) parts.push(`Payment method: ${promo.paymentMethods.join(', ')}`);
+  if (promo.banks?.length) parts.push(`Bank: ${promo.banks.join(', ')}`);
+  if (promo.cardTypes?.length) parts.push(`Card: ${promo.cardTypes.join(', ')}`);
+  if (promo.weekendOnly) parts.push('Weekend only');
   return parts.join(' • ') || 'Usable on selected products';
 };
 

@@ -21,6 +21,12 @@ const emptyForm = {
   brands: [] as string[],
   sellers: [] as string[],
   products: [] as string[],
+  voucherType: 'general',
+  paymentTypes: [] as string[],
+  paymentMethods: [] as string[],
+  banks: [] as string[],
+  cardTypes: [] as string[],
+  weekendOnly: false,
   startsAt: '',
   expiresAt: '',
   active: true,
@@ -65,6 +71,20 @@ export default function AdminPromoCodesTab() {
   const categoryValues = useMemo(() => categoryOptions.map((c) => ({ value: c.name, label: c.name })), []);
   const subcategoryValues = useMemo(() => Array.from(new Set(products.map((p) => p.subcategory).filter(Boolean))).sort().map((v) => ({ value: String(v), label: String(v) })), [products]);
   const childValues = useMemo(() => Array.from(new Set(products.map((p) => p.childCategory).filter(Boolean))).sort().map((v) => ({ value: String(v), label: String(v) })), [products]);
+  const paymentTypeOptions = [
+    { value: 'prepaid', label: 'Prepaid / Online payment' },
+    { value: 'cod', label: 'Cash on Delivery' },
+    { value: 'mobile_banking', label: 'Mobile Banking' },
+    { value: 'card', label: 'Card Payment' },
+  ];
+  const paymentMethodOptions = [
+    { value: 'bkash', label: 'bKash' },
+    { value: 'nagad', label: 'Nagad' },
+    { value: 'card', label: 'Credit / Debit Card' },
+    { value: 'cod', label: 'Cash on Delivery' },
+  ];
+  const bankOptions = ['BRAC Bank', 'City Bank', 'DBBL', 'Eastern Bank', 'IFIC Bank', 'Prime Bank', 'Standard Chartered', 'UCB'].map((b) => ({ value: b, label: b }));
+  const cardTypeOptions = ['Visa', 'Mastercard', 'American Express', 'Debit', 'Credit'].map((c) => ({ value: c, label: c }));
 
   const add = async () => {
     setLoading(true);
@@ -91,6 +111,12 @@ export default function AdminPromoCodesTab() {
     if (p.brands?.length) parts.push(`Brands: ${p.brands.join(', ')}`);
     if (p.sellers?.length) parts.push(`Sellers: ${p.sellers.map((s: any) => s.shopName || s.name || s.email).join(', ')}`);
     if (p.products?.length) parts.push(`Products: ${p.products.map((x: any) => x.name).join(', ')}`);
+    if (p.voucherType && p.voucherType !== 'general') parts.push(`Voucher: ${String(p.voucherType).replace(/_/g, ' ')}`);
+    if (p.paymentTypes?.length) parts.push(`Payment type: ${p.paymentTypes.join(', ')}`);
+    if (p.paymentMethods?.length) parts.push(`Payment method: ${p.paymentMethods.join(', ')}`);
+    if (p.banks?.length) parts.push(`Bank: ${p.banks.join(', ')}`);
+    if (p.cardTypes?.length) parts.push(`Card: ${p.cardTypes.join(', ')}`);
+    if (p.weekendOnly) parts.push('Weekend only');
     return parts.join(' • ') || p.appliesTo;
   };
 
@@ -110,7 +136,8 @@ export default function AdminPromoCodesTab() {
           <input className="border rounded-xl p-2 text-sm" placeholder="Max uses" value={form.maxUses} onChange={(e) => setForm({ ...form, maxUses: e.target.value })} />
           <label className="block"><span className="text-xs font-bold text-gray-600">Starts at</span><input type="datetime-local" className="mt-1 w-full border rounded-xl p-2 text-sm" value={form.startsAt} onChange={(e) => setForm({ ...form, startsAt: e.target.value })} /></label>
           <label className="block"><span className="text-xs font-bold text-gray-600">Expires at</span><input type="datetime-local" className="mt-1 w-full border rounded-xl p-2 text-sm" value={form.expiresAt} onChange={(e) => setForm({ ...form, expiresAt: e.target.value })} /></label>
-          <label className="block"><span className="text-xs font-bold text-gray-600">Target type</span><select className="mt-1 w-full border rounded-xl p-2 text-sm" value={form.appliesTo} onChange={(e) => setForm({ ...form, appliesTo: e.target.value })}><option value="all">All products</option><option value="category">Selected category/subcategory</option><option value="brand">Selected brand</option><option value="seller">Selected seller</option><option value="product">Selected products</option><option value="custom">Custom mix</option></select></label>
+          <label className="block"><span className="text-xs font-bold text-gray-600">Target type</span><select className="mt-1 w-full border rounded-xl p-2 text-sm" value={form.appliesTo} onChange={(e) => setForm({ ...form, appliesTo: e.target.value })}><option value="all">All products</option><option value="category">Selected category/subcategory</option><option value="brand">Selected brand</option><option value="seller">Selected seller/store</option><option value="product">Selected products</option><option value="custom">Custom mix</option></select></label>
+          <label className="block"><span className="text-xs font-bold text-gray-600">Voucher type</span><select className="mt-1 w-full border rounded-xl p-2 text-sm" value={form.voucherType} onChange={(e) => setForm({ ...form, voucherType: e.target.value, weekendOnly: e.target.value === 'weekend_deal' ? true : form.weekendOnly })}><option value="general">General voucher</option><option value="payment_type">Payment type voucher</option><option value="payment_method">Payment method voucher</option><option value="bank_card">Bank card voucher</option><option value="weekend_deal">Weekend deal voucher</option><option value="store_usage">Store usage voucher</option></select></label>
           <label className="flex items-center gap-2 pt-6 text-sm font-semibold"><input type="checkbox" checked={form.active} onChange={(e) => setForm({ ...form, active: e.target.checked })} /> Active</label>
         </div>
 
@@ -122,6 +149,22 @@ export default function AdminPromoCodesTab() {
             {(form.appliesTo === 'product' || form.appliesTo === 'custom') && <MultiSelect label="Products" value={form.products} options={products.map((p) => ({ value: p.id, label: `${p.name}${p.brand ? ` — ${p.brand}` : ''}` }))} onChange={(v) => setForm({ ...form, products: v })} />}
           </div>
         )}
+        {form.voucherType !== 'general' && (
+          <div className="mt-4 bg-blue-50 border border-blue-100 rounded-2xl p-4">
+            <h3 className="font-black text-gray-900 mb-2">Voucher usage rules</h3>
+            <div className="grid md:grid-cols-3 gap-3">
+              {(form.voucherType === 'payment_type' || form.voucherType === 'custom') && <MultiSelect label="Payment types" value={form.paymentTypes} options={paymentTypeOptions} onChange={(v) => setForm({ ...form, paymentTypes: v })} />}
+              {(form.voucherType === 'payment_method' || form.voucherType === 'custom') && <MultiSelect label="Payment methods" value={form.paymentMethods} options={paymentMethodOptions} onChange={(v) => setForm({ ...form, paymentMethods: v })} />}
+              {form.voucherType === 'bank_card' && <>
+                <MultiSelect label="Allowed banks" value={form.banks} options={bankOptions} onChange={(v) => setForm({ ...form, banks: v, paymentMethods: form.paymentMethods.includes('card') ? form.paymentMethods : [...form.paymentMethods, 'card'] })} />
+                <MultiSelect label="Allowed card types" value={form.cardTypes} options={cardTypeOptions} onChange={(v) => setForm({ ...form, cardTypes: v, paymentMethods: form.paymentMethods.includes('card') ? form.paymentMethods : [...form.paymentMethods, 'card'] })} />
+              </>}
+              {(form.voucherType === 'weekend_deal' || form.voucherType === 'custom') && <label className="flex items-center gap-2 pt-6 text-sm font-semibold"><input type="checkbox" checked={form.weekendOnly} onChange={(e) => setForm({ ...form, weekendOnly: e.target.checked })} /> Weekend only</label>}
+              {form.voucherType === 'store_usage' && <p className="md:col-span-3 text-xs text-blue-700">Store usage vouchers should use Target type = Selected seller/store or Custom mix, then choose the seller store below.</p>}
+            </div>
+          </div>
+        )}
+
         <button onClick={add} disabled={loading} className="mt-4 bg-blue-600 disabled:bg-blue-300 text-white rounded-xl font-bold px-5 py-2.5 flex items-center gap-2"><Plus size={16}/>{loading ? 'Saving...' : 'Create Promo'}</button>
       </div>
 

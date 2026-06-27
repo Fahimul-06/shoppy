@@ -8,11 +8,11 @@ import CancellationRequest from '../models/CancellationRequest.js';
 import ChatMessage from '../models/ChatMessage.js';
 import ProductReview from '../models/ProductReview.js';
 import { requireUser } from '../middleware/auth.js';
-import { calculatePromoDiscount, isPromoActive } from '../utils/promo.js';
+import { calculatePromoDiscount, isPromoActive, promoMatchesUsageConditions } from '../utils/promo.js';
 const router = express.Router();
 
 router.post('/', requireUser, async (req, res) => {
-  const { delivery_fee, payment_method, shipping_address, items } = req.body;
+  const { delivery_fee, payment_method, payment_type, bank_name, card_type, shipping_address, items } = req.body;
   const promoCode = String(req.body?.promo_code || req.body?.promoCode || '').trim().toUpperCase();
   if (!Array.isArray(items) || items.length === 0) return res.status(400).json({ message: 'Order items are required' });
 
@@ -46,6 +46,9 @@ router.post('/', requireUser, async (req, res) => {
       { path: 'products', select: 'name image price category subcategory childCategory brand seller' },
     ]);
     if (!promo || !isPromoActive(promo)) return res.status(400).json({ message: 'Promo code is invalid or expired' });
+    const usageCheck = promoMatchesUsageConditions(promo, { paymentMethod: payment_method,
+    paymentDetails: { paymentType: payment_type || '', bankName: bank_name || '', cardType: card_type || '' }, paymentType: payment_type, bankName: bank_name, cardType: card_type });
+    if (!usageCheck.ok) return res.status(400).json({ message: usageCheck.message });
     if (subtotal < Number(promo.minOrderAmount || 0)) {
       return res.status(400).json({ message: `Minimum order amount is ৳${Number(promo.minOrderAmount || 0).toLocaleString()}` });
     }
@@ -79,6 +82,7 @@ router.post('/', requireUser, async (req, res) => {
     deliveryFee,
     totalAmount,
     paymentMethod: payment_method,
+    paymentDetails: { paymentType: payment_type || '', bankName: bank_name || '', cardType: card_type || '' },
     shippingAddress,
   });
 

@@ -21,6 +21,8 @@ export default function CheckoutPage() {
   const navigate = useNavigate();
   const [step, setStep] = useState(0);
   const [payment, setPayment] = useState('bkash');
+  const [bankName, setBankName] = useState('');
+  const [cardType, setCardType] = useState('');
   const [address, setAddress] = useState<DeliveryAddress>({ name: '', phone: '', division: '', district: '', area: '', address: '', landmark: '' });
   const [savedAddresses, setSavedAddresses] = useState<DeliveryAddress[]>([]);
   const [ordered, setOrdered] = useState(false);
@@ -52,6 +54,7 @@ export default function CheckoutPage() {
   const total = Math.max(0, checkoutTotalPrice - discount) + shipping;
 
   const readableAddress = (addr: DeliveryAddress) => [addr.address, addr.landmark, addr.area, addr.district, addr.division].filter(Boolean).join(', ');
+  const paymentType = payment === 'cod' ? 'cod' : payment === 'card' ? 'card' : ['bkash', 'nagad'].includes(payment) ? 'mobile_banking' : 'prepaid';
 
   useEffect(() => {
     const token = getToken('user');
@@ -81,6 +84,10 @@ export default function CheckoutPage() {
           quantity,
           unit_price: product.price,
         })),
+        payment_method: payment,
+        payment_type: paymentType,
+        bank_name: bankName,
+        card_type: cardType,
       });
       setPromoInfo({ code: response.promo.code, discount: response.discount, eligibleItemCount: response.eligibleItemCount });
       setPromoCode(response.promo.code);
@@ -123,6 +130,9 @@ export default function CheckoutPage() {
         delivery_fee: shipping,
         total_amount: total,
         payment_method: payment,
+        payment_type: paymentType,
+        bank_name: bankName,
+        card_type: cardType,
         shipping_address: address,
         items: checkoutItems.map(({ product, quantity }) => ({
           product_id: product.id,
@@ -252,6 +262,12 @@ export default function CheckoutPage() {
                     <p className="sm:col-span-2 text-xs bg-blue-50 text-blue-600 rounded-xl px-3 py-2">Map/current-location address selected. Admin will see this delivery address in the order details.</p>
                   )}
                 </div>
+                {payment === 'card' && (
+                  <div className="mt-4 grid sm:grid-cols-2 gap-3">
+                    <label className="block"><span className="text-xs font-bold text-gray-600">Bank name</span><input value={bankName} onChange={(e) => { setBankName(e.target.value); setPromoInfo(null); }} placeholder="e.g. BRAC Bank" className="mt-1 w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-orange-400" /></label>
+                    <label className="block"><span className="text-xs font-bold text-gray-600">Card type</span><select value={cardType} onChange={(e) => { setCardType(e.target.value); setPromoInfo(null); }} className="mt-1 w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-orange-400"><option value="">Select card type</option><option value="Visa">Visa</option><option value="Mastercard">Mastercard</option><option value="American Express">American Express</option><option value="Debit">Debit</option><option value="Credit">Credit</option></select></label>
+                  </div>
+                )}
                 {error && <div className="mt-4 flex items-center gap-2 bg-red-50 text-red-600 border border-red-100 rounded-xl p-3 text-sm"><AlertCircle size={15} />{error}</div>}
                 <button
                   onClick={() => setStep(1)}
@@ -272,7 +288,7 @@ export default function CheckoutPage() {
                 <div className="space-y-3">
                   {paymentMethods.map((m) => (
                     <label key={m.id} className={`flex items-center gap-4 p-4 border-2 rounded-xl cursor-pointer transition-colors ${payment === m.id ? 'border-orange-400 bg-orange-50' : 'border-gray-100 hover:border-gray-200'}`}>
-                      <input type="radio" name="payment" value={m.id} checked={payment === m.id} onChange={() => setPayment(m.id)} className="accent-orange-500" />
+                      <input type="radio" name="payment" value={m.id} checked={payment === m.id} onChange={() => { setPayment(m.id); setPromoInfo(null); setError(''); }} className="accent-orange-500" />
                       <div className={`w-10 h-10 ${m.color} rounded-lg flex items-center justify-center text-white text-xs font-bold flex-shrink-0`}>
                         {m.id === 'card' ? <CreditCard size={18} /> : m.label.slice(0, 2)}
                       </div>
@@ -280,6 +296,12 @@ export default function CheckoutPage() {
                     </label>
                   ))}
                 </div>
+                {payment === 'card' && (
+                  <div className="mt-4 grid sm:grid-cols-2 gap-3">
+                    <label className="block"><span className="text-xs font-bold text-gray-600">Bank name</span><input value={bankName} onChange={(e) => { setBankName(e.target.value); setPromoInfo(null); }} placeholder="e.g. BRAC Bank" className="mt-1 w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-orange-400" /></label>
+                    <label className="block"><span className="text-xs font-bold text-gray-600">Card type</span><select value={cardType} onChange={(e) => { setCardType(e.target.value); setPromoInfo(null); }} className="mt-1 w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-orange-400"><option value="">Select card type</option><option value="Visa">Visa</option><option value="Mastercard">Mastercard</option><option value="American Express">American Express</option><option value="Debit">Debit</option><option value="Credit">Credit</option></select></label>
+                  </div>
+                )}
                 {error && <div className="mt-4 flex items-center gap-2 bg-red-50 text-red-600 border border-red-100 rounded-xl p-3 text-sm"><AlertCircle size={15} />{error}</div>}
                 <div className="flex gap-3 mt-5">
                   <button onClick={() => setStep(0)} className="flex-1 border border-gray-200 text-gray-700 font-semibold py-3 rounded-xl hover:border-gray-300 transition-colors">

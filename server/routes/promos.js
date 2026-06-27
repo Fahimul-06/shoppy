@@ -1,7 +1,7 @@
 import express from 'express';
 import PromoCode from '../models/PromoCode.js';
 import Product from '../models/Product.js';
-import { calculatePromoDiscount, isPromoActive, promoMatchesProduct } from '../utils/promo.js';
+import { calculatePromoDiscount, isPromoActive, promoMatchesProduct, promoMatchesUsageConditions } from '../utils/promo.js';
 
 const router = express.Router();
 const promoPopulate = [
@@ -29,6 +29,12 @@ function normalizePublicPromo(promo) {
     childCategories: Array.isArray(obj.childCategories) ? obj.childCategories : [],
     brands: Array.isArray(obj.brands) ? obj.brands : [],
     sellers: Array.isArray(obj.sellers) ? obj.sellers : [],
+    voucherType: obj.voucherType || 'general',
+    paymentTypes: Array.isArray(obj.paymentTypes) ? obj.paymentTypes : [],
+    paymentMethods: Array.isArray(obj.paymentMethods) ? obj.paymentMethods : [],
+    banks: Array.isArray(obj.banks) ? obj.banks : [],
+    cardTypes: Array.isArray(obj.cardTypes) ? obj.cardTypes : [],
+    weekendOnly: obj.weekendOnly === true,
     products: Array.isArray(obj.products) ? obj.products : (obj.product ? [obj.product] : []),
   };
 }
@@ -85,6 +91,14 @@ router.post('/validate', async (req, res, next) => {
     if (!isPromoActive(promo)) {
       return res.status(400).json({ message: 'Promo code is expired or usage limit is finished.' });
     }
+
+    const usageCheck = promoMatchesUsageConditions(promo, {
+      paymentMethod: req.body?.payment_method || req.body?.paymentMethod,
+      paymentType: req.body?.payment_type || req.body?.paymentType,
+      bankName: req.body?.bank_name || req.body?.bankName,
+      cardType: req.body?.card_type || req.body?.cardType,
+    });
+    if (!usageCheck.ok) return res.status(400).json({ message: usageCheck.message });
 
     const productIds = items.map((item) => String(item.product_id || item.productId || item.product?.id || item.product?._id || '')).filter(Boolean);
     const products = await Product.find({ _id: { $in: productIds } }).populate('seller', 'name shopName shopLogo status');

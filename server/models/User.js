@@ -20,7 +20,7 @@ const userSchema = new mongoose.Schema({
   phone: { type: String, trim: true },
   profilePhoto: { type: String, trim: true },
   passwordHash: { type: String, required: true },
-  role: { type: String, enum: ['user', 'admin'], default: 'user' },
+  role: { type: String, enum: ['user', 'customer', 'admin'], default: 'user' },
   addresses: [addressSchema],
 }, { timestamps: true });
 toJSON(userSchema);

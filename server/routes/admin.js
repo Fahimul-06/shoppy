@@ -109,7 +109,7 @@ router.get('/sellers/:id/detail', requireAdmin, async (req, res) => {
 });
 
 router.get('/customers', requireAdmin, async (_req, res) => {
-  const users = await User.find({ role: 'user' }).sort({ createdAt: -1 });
+  const users = await User.find({ role: { $in: ['user', 'customer'] } }).sort({ createdAt: -1 });
   const customers = await Promise.all(users.map(async (user) => {
     const orders = await Order.find({ user: user._id }).sort({ createdAt: -1 });
     return formatCustomerSummary(user, orders);
@@ -118,7 +118,7 @@ router.get('/customers', requireAdmin, async (_req, res) => {
 });
 
 router.get('/customers/:id/detail', requireAdmin, async (req, res) => {
-  const customer = await User.findOne({ _id: req.params.id, role: 'user' });
+  const customer = await User.findOne({ _id: req.params.id, role: { $in: ['user', 'customer'] } });
   if (!customer) return res.status(404).json({ message: 'Customer not found' });
   const [orders, returns, cancellations] = await Promise.all([
     Order.find({ user: customer._id }).populate('items.product').sort({ createdAt: -1 }),

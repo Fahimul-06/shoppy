@@ -26,7 +26,7 @@ async function requireLoggedInUploader(req, res, next) {
     if (!token) return res.status(401).json({ message: 'Login required to upload images' });
     const decoded = jwt.verify(token, process.env.JWT_SECRET || 'dev-secret');
 
-    if (decoded.role === 'admin' || decoded.role === 'user') {
+    if (decoded.role === 'admin' || decoded.role === 'user' || decoded.role === 'customer') {
       const user = await User.findById(decoded.id);
       if (!user) return res.status(403).json({ message: 'User not found' });
       if (decoded.role === 'admin' && user.role !== 'admin') return res.status(403).json({ message: 'Admin access required' });

@@ -107,6 +107,17 @@ export default function ProductPage() {
   const sellerShopName = seller?.shopName || seller?.name || '';
   const sellerName = seller?.name || '';
   const normalize = (value?: string) => String(value || '').trim().toLowerCase();
+  const colorToCss = (value: string) => {
+    const key = normalize(value).replace(/\s+/g, ' ');
+    const map: Record<string, string> = {
+      black: '#111827', white: '#ffffff', red: '#ef4444', blue: '#2563eb', 'navy blue': '#1e3a8a', 'sky blue': '#38bdf8',
+      green: '#22c55e', yellow: '#facc15', orange: '#f97316', pink: '#ec4899', purple: '#9333ea', brown: '#92400e',
+      grey: '#9ca3af', gray: '#9ca3af', beige: '#e7d8bd', maroon: '#7f1d1d', gold: '#d4af37', silver: '#c0c0c0'
+    };
+    if (map[key]) return map[key];
+    if (/^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(value.trim())) return value.trim();
+    return 'linear-gradient(135deg,#f97316,#ec4899,#2563eb)';
+  };
   const clientRelated = products
     .filter((p) => p.id !== product.id)
     .map((p) => {
@@ -244,19 +255,29 @@ export default function ProductPage() {
             )}
 
             {(colorOptions.length > 0 || sizeOptions.length > 0) && (
-              <div className="space-y-4 bg-white rounded-2xl border border-gray-100 p-4">
+              <div className="space-y-5 bg-white rounded-2xl border border-gray-100 p-4">
                 {colorOptions.length > 0 && (
                   <div>
-                    <p className="text-sm font-bold text-gray-800 mb-2">Choose Colour</p>
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-sm font-bold text-gray-800">Choose Colour</p>
+                      {selectedColor && <span className="text-xs font-bold text-orange-600">{selectedColor}</span>}
+                    </div>
+                    <div className="flex flex-wrap gap-3">
                       {colorOptions.map((color) => (
                         <button
                           key={color}
                           type="button"
                           onClick={() => setSelectedColor(color)}
-                          className={`px-4 py-2 rounded-xl border text-sm font-bold transition ${selectedColor === color ? 'border-orange-500 bg-orange-50 text-orange-600' : 'border-gray-200 text-gray-700 hover:border-orange-300'}`}
+                          title={color}
+                          aria-label={`Choose ${color}`}
+                          className={`relative h-10 w-10 rounded-full border-2 shadow-sm transition hover:scale-105 ${selectedColor === color ? 'border-orange-500 ring-2 ring-orange-200' : 'border-gray-200'}`}
+                          style={{ background: colorToCss(color) }}
                         >
-                          {color}
+                          {selectedColor === color && (
+                            <span className="absolute inset-0 flex items-center justify-center">
+                              <Check size={17} className={normalize(color) === 'white' ? 'text-gray-900' : 'text-white drop-shadow'} />
+                            </span>
+                          )}
                         </button>
                       ))}
                     </div>
@@ -264,14 +285,17 @@ export default function ProductPage() {
                 )}
                 {sizeOptions.length > 0 && (
                   <div>
-                    <p className="text-sm font-bold text-gray-800 mb-2">Choose Size</p>
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-sm font-bold text-gray-800">Choose Size</p>
+                      {selectedSize && <span className="text-xs font-bold text-orange-600">{selectedSize}</span>}
+                    </div>
                     <div className="flex flex-wrap gap-2">
                       {sizeOptions.map((size) => (
                         <button
                           key={size}
                           type="button"
                           onClick={() => setSelectedSize(size)}
-                          className={`px-4 py-2 rounded-xl border text-sm font-bold transition ${selectedSize === size ? 'border-orange-500 bg-orange-50 text-orange-600' : 'border-gray-200 text-gray-700 hover:border-orange-300'}`}
+                          className={`min-w-11 h-11 px-3 rounded-2xl border text-sm font-black transition ${selectedSize === size ? 'border-orange-500 bg-orange-500 text-white shadow-sm' : 'border-gray-200 bg-white text-gray-700 hover:border-orange-300 hover:bg-orange-50'}`}
                         >
                           {size}
                         </button>

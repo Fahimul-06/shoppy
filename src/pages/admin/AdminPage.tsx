@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BarChart3, LogOut, Package, RotateCcw, Settings, ShieldX, ShoppingBag, Tag, Users } from 'lucide-react';
+import { BarChart3, LogOut, Package, RotateCcw, Settings, ShieldX, ShoppingBag, Tag, UserRound, Users } from 'lucide-react';
 import { api, clearSession, getSessionUser, getToken, setSession } from '../../lib/api';
 import AdminSellersTab from './AdminSellersTab';
 import AdminProductsTab from './AdminProductsTab';
@@ -8,8 +8,9 @@ import AdminOrdersTab from './AdminOrdersTab';
 import AdminPromoCodesTab from './AdminPromoCodesTab';
 import AdminReturnsTab from './AdminReturnsTab';
 import AdminCancellationsTab from './AdminCancellationsTab';
+import AdminCustomersTab from './AdminCustomersTab';
 
-type AdminTab = 'dashboard' | 'sellers' | 'products' | 'orders' | 'returns' | 'cancellations' | 'promos' | 'settings';
+type AdminTab = 'dashboard' | 'sellers' | 'customers' | 'products' | 'orders' | 'returns' | 'cancellations' | 'promos' | 'settings';
 
 export default function AdminPage() {
   const navigate = useNavigate();
@@ -27,7 +28,7 @@ export default function AdminPage() {
   useEffect(() => { if (tab === 'dashboard') api.get<{ stats: any }>('/admin/stats', getToken('admin')).then(r => setStats(r.stats)).catch(()=>{}); }, [tab]);
   const logout = () => { clearSession('admin'); navigate('/admin/login'); };
   const saveSettings = async () => { const res = await api.put<{ user: any }>('/admin/settings', settings, getToken('admin')); setSession('admin', getToken('admin') || '', res.user); setAdmin(res.user); setMsg('Settings saved'); };
-  const nav = [ ['dashboard', BarChart3], ['sellers', Users], ['products', Package], ['orders', ShoppingBag], ['returns', RotateCcw], ['cancellations', ShieldX], ['promos', Tag], ['settings', Settings] ] as const;
+  const nav = [ ['dashboard', BarChart3], ['sellers', Users], ['customers', UserRound], ['products', Package], ['orders', ShoppingBag], ['returns', RotateCcw], ['cancellations', ShieldX], ['promos', Tag], ['settings', Settings] ] as const;
 
   return <div className="min-h-screen bg-gray-100">
     <header className="bg-slate-950 text-white"><div className="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center"><div><h1 className="text-xl font-black">Admin Dashboard</h1><p className="text-xs text-slate-300">{admin?.email}</p></div><button onClick={logout} className="flex items-center gap-2 bg-white/10 px-4 py-2 rounded-xl text-sm"><LogOut size={15}/> Logout</button></div></header>
@@ -35,7 +36,7 @@ export default function AdminPage() {
       {tab==='dashboard' && <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">{[
         ['Total Sellers', stats.totalSellers], ['Pending Sellers', stats.pendingSellers], ['Total Products', stats.totalProducts], ['Total Orders', stats.totalOrders], ['Paid Revenue', `৳${stats.revenue.toLocaleString()}`], ['Active Promos', stats.activePromos]
       ].map(([k,v])=><div key={k} className="bg-white rounded-2xl p-6 border"><p className="text-sm text-gray-500">{k}</p><p className="text-3xl font-black text-gray-900 mt-1">{v}</p></div>)}</div>}
-      {tab==='sellers' && <AdminSellersTab/>}{tab==='products' && <AdminProductsTab/>}{tab==='orders' && <AdminOrdersTab/>}{tab==='returns' && <AdminReturnsTab/>}{tab==='cancellations' && <AdminCancellationsTab/>}{tab==='promos' && <AdminPromoCodesTab/>}
+      {tab==='sellers' && <AdminSellersTab/>}{tab==='customers' && <AdminCustomersTab/>}{tab==='products' && <AdminProductsTab/>}{tab==='orders' && <AdminOrdersTab/>}{tab==='returns' && <AdminReturnsTab/>}{tab==='cancellations' && <AdminCancellationsTab/>}{tab==='promos' && <AdminPromoCodesTab/>}
       {tab==='settings' && <div className="bg-white rounded-2xl p-6 max-w-lg border space-y-3"><h2 className="font-black text-lg">Admin Settings</h2><input className="w-full border rounded-xl p-3 text-sm" placeholder="Name" value={settings.fullName} onChange={e=>setSettings({...settings,fullName:e.target.value})}/><input className="w-full border rounded-xl p-3 text-sm" placeholder="Email" value={settings.email} onChange={e=>setSettings({...settings,email:e.target.value})}/><input className="w-full border rounded-xl p-3 text-sm" type="password" placeholder="New password optional" value={settings.password} onChange={e=>setSettings({...settings,password:e.target.value})}/>{msg&&<p className="text-sm text-green-600">{msg}</p>}<button onClick={saveSettings} className="w-full bg-blue-600 text-white font-bold py-3 rounded-xl">Save Settings</button></div>}
     </div>
   </div>;

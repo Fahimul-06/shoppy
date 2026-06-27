@@ -22,6 +22,11 @@ export async function fetchProductById(id: string): Promise<Product | null> {
   return product;
 }
 
+export async function fetchRelatedProducts(productId: string): Promise<Product[]> {
+  const { products } = await api.get<{ products: Product[] }>(`/products/${encodeURIComponent(productId)}/related`);
+  return products;
+}
+
 export async function searchProducts(query: string): Promise<Product[]> {
   const { products } = await api.get<{ products: Product[] }>(`/products?search=${encodeURIComponent(query)}`);
   return products;

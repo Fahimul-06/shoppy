@@ -4,7 +4,7 @@ import { Star, ShoppingCart, Heart, Share2, Shield, Truck, RotateCcw, ChevronRig
 import { useCart } from '../context/CartContext';
 import ProductCard from '../components/ProductCard';
 import type { Product } from '../types';
-import { fetchProductById } from '../lib/db';
+import { fetchProductById, fetchRelatedProducts } from '../lib/db';
 import { useProducts } from '../hooks/useProducts';
 
 const mockReviews = [
@@ -24,10 +24,13 @@ export default function ProductPage() {
   const [quantity, setQuantity] = useState(1);
   const [activeTab, setActiveTab] = useState<'description' | 'specs' | 'reviews'>('description');
   const [added, setAdded] = useState(false);
+  const [relatedProducts, setRelatedProducts] = useState<Product[]>([]);
+  const [relatedLoading, setRelatedLoading] = useState(false);
 
   useEffect(() => {
     let alive = true;
     setLoading(true);
+    setRelatedProducts([]);
     setActiveImage(0);
     if (!id) {
       setProduct(null);
@@ -40,6 +43,17 @@ export default function ProductPage() {
       .finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; };
   }, [id]);
+
+  useEffect(() => {
+    let alive = true;
+    if (!product?.id) return;
+    setRelatedLoading(true);
+    fetchRelatedProducts(product.id)
+      .then((rows) => { if (alive) setRelatedProducts(rows || []); })
+      .catch(() => { if (alive) setRelatedProducts([]); })
+      .finally(() => { if (alive) setRelatedLoading(false); });
+    return () => { alive = false; };
+  }, [product?.id]);
 
   if (loading) {
     return <div className="min-h-[60vh] flex items-center justify-center text-gray-400">Loading product...</div>;
@@ -62,7 +76,20 @@ export default function ProductPage() {
   const sellerShopLogo = seller?.shopLogo || '';
   const sellerShopName = seller?.shopName || seller?.name || '';
   const sellerName = seller?.name || '';
-  const related = products.filter((p) => p.category === product.category && p.id !== product.id).slice(0, 5);
+  const normalize = (value?: string) => String(value || '').trim().toLowerCase();
+  const clientRelated = products
+    .filter((p) => p.id !== product.id)
+    .map((p) => {
+      let score = 0;
+      if (normalize(p.childCategory) && normalize(p.childCategory) === normalize(product.childCategory)) score += 50;
+      if (normalize(p.subcategory) && normalize(p.subcategory) === normalize(product.subcategory)) score += 40;
+      if (normalize(p.category) && normalize(p.category) === normalize(product.category)) score += 30;
+      if (normalize(p.brand) && normalize(p.brand) === normalize(product.brand)) score += 10;
+      return { product: p, score };
+    })
+    .sort((a, b) => b.score - a.score)
+    .map((item) => item.product);
+  const related = (relatedProducts.length ? relatedProducts : clientRelated).filter((p) => p.id !== product.id).slice(0, 10);
 
   const handleAddToCart = () => {
     for (let i = 0; i < quantity; i++) addItem(product);
@@ -347,14 +374,40 @@ export default function ProductPage() {
         </div>
 
         {/* Related Products */}
-        {related.length > 0 && (
-          <section>
-            <h2 className="text-xl font-bold text-gray-900 mb-4">Related Products</h2>
+        <section>
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h2 className="text-xl font-bold text-gray-900">Related Products</h2>
+              <p className="text-sm text-gray-500">More items from the same category, subcategory, brand, or seller.</p>
+            </div>
+            <Link to={`/category/${product.category || 'all'}`} className="hidden sm:inline-flex text-sm font-bold text-orange-500 hover:text-orange-600">
+              View more
+            </Link>
+          </div>
+
+          {relatedLoading && related.length === 0 ? (
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4">
+              {[...Array(5)].map((_, index) => (
+                <div key={index} className="bg-white rounded-2xl border border-gray-100 overflow-hidden animate-pulse">
+                  <div className="aspect-[4/3] bg-gray-100" />
+                  <div className="p-3 space-y-3">
+                    <div className="h-3 bg-gray-100 rounded" />
+                    <div className="h-3 bg-gray-100 rounded w-2/3" />
+                    <div className="h-8 bg-gray-100 rounded-xl" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : related.length > 0 ? (
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4">
               {related.map((p) => <ProductCard key={p.id} product={p} />)}
             </div>
-          </section>
-        )}
+          ) : (
+            <div className="bg-white rounded-2xl border border-gray-100 p-6 text-center text-gray-500">
+              Related products will appear here when more products are added.
+            </div>
+          )}
+        </section>
       </div>
     </div>
   );

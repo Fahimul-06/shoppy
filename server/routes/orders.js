@@ -40,7 +40,7 @@ router.post('/', requireUser, async (req, res) => {
 
 router.get('/my', requireUser, async (req, res) => {
   const orders = await Order.find({ user: req.user.id })
-    .populate('items.product')
+    .populate({ path: 'items.product', populate: { path: 'seller', select: 'name shopName shopLogo shopAddress status' } })
     .sort({ createdAt: -1 });
   res.json({ orders });
 });
@@ -55,7 +55,7 @@ async function resolveCustomerChatContext(req, res) {
     res.status(400).json({ message: 'Valid orderItemId is required' });
     return null;
   }
-  const order = await Order.findOne({ _id: orderId, user: req.user.id }).populate('items.product');
+  const order = await Order.findOne({ _id: orderId, user: req.user.id }).populate({ path: 'items.product', populate: { path: 'seller', select: 'name shopName shopLogo shopAddress status' } });
   if (!order) {
     res.status(404).json({ message: 'Order not found' });
     return null;
@@ -87,6 +87,7 @@ router.get('/chats/:orderId/:orderItemId', requireUser, async (req, res) => {
     order: ctx.order,
     orderItem: ctx.item,
     product: ctx.product,
+    seller: ctx.product.seller || null,
     messages,
   });
 });

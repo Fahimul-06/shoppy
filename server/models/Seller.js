@@ -20,6 +20,7 @@ const sellerSchema = new mongoose.Schema({
   phone: String,
   passwordHash: { type: String, required: true },
   shopName: String,
+  shopLogo: String,
   shopAddress: String,
   businessType: String,
   nidNumber: String,

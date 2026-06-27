@@ -15,6 +15,11 @@ export default function OrdersPage(){
   const loadOrders = () => fetchUserOrders().then(setOrders).catch(()=>setOrders([])).finally(()=>setLoading(false));
   useEffect(()=>{loadOrders()},[]);
 
+  const getSeller = (item:any) => item.product?.seller || item.productSnapshot?.seller || null;
+  const sellerName = (seller:any) => seller?.name || 'Seller';
+  const shopName = (seller:any) => seller?.shopName || 'Seller shop';
+  const shopLogo = (seller:any) => seller?.shopLogo || 'https://placehold.co/96x96?text=Shop';
+
   const openChat = async (order:any, item:any) => {
     setChat({ order, item });
     setChatText('');
@@ -41,12 +46,12 @@ export default function OrdersPage(){
   return <div className="max-w-5xl mx-auto px-4 py-8">
     <Link to="/account" className="text-sm text-gray-500 hover:text-orange-500 flex items-center gap-1 mb-4"><ArrowLeft size={14}/> Back to profile</Link>
     <h1 className="text-2xl font-black mb-5 flex items-center gap-2"><Package/> My Orders</h1>
-    {loading?<p>Loading orders...</p>:orders.length===0?<div className="bg-white border rounded-2xl p-8 text-center text-gray-500">No orders yet.</div>:<div className="space-y-4">{orders.map(o=><div key={o.id || o._id} className="bg-white border rounded-2xl p-5"><div className="flex flex-wrap gap-3 justify-between"><div><p className="font-black">{o.orderNumber}</p><p className="text-xs text-gray-400">{new Date(o.createdAt).toLocaleString()}</p></div><div className="text-right"><p className="font-black">৳{Number(o.totalAmount||0).toLocaleString()}</p><p className="text-xs capitalize text-gray-500">{o.status}</p></div></div><div className="mt-4 grid gap-2">{(o.items||[]).map((it:any)=><div key={it._id||it.id} className="flex flex-wrap items-center gap-3 bg-gray-50 rounded-xl p-3"><img src={it.product?.image || it.productSnapshot?.image||'/placeholder.png'} className="w-12 h-12 rounded-lg object-cover bg-white"/><div className="flex-1 min-w-[180px]"><p className="text-sm font-bold">{it.product?.name || it.productSnapshot?.name}</p><p className="text-xs text-gray-500">Qty: {it.quantity}</p></div><p className="font-bold text-sm">৳{Number(it.totalPrice||0).toLocaleString()}</p>{it.product?.seller && <button onClick={()=>openChat(o,it)} className="inline-flex items-center gap-2 rounded-xl bg-orange-500 text-white px-3 py-2 text-sm font-bold"><MessageCircle size={16}/> Chat seller</button>}</div>)}</div></div>)}</div>}
+    {loading?<p>Loading orders...</p>:orders.length===0?<div className="bg-white border rounded-2xl p-8 text-center text-gray-500">No orders yet.</div>:<div className="space-y-4">{orders.map(o=><div key={o.id || o._id} className="bg-white border rounded-2xl p-5"><div className="flex flex-wrap gap-3 justify-between"><div><p className="font-black">{o.orderNumber}</p><p className="text-xs text-gray-400">{new Date(o.createdAt).toLocaleString()}</p></div><div className="text-right"><p className="font-black">৳{Number(o.totalAmount||0).toLocaleString()}</p><p className="text-xs capitalize text-gray-500">{o.status}</p></div></div><div className="mt-4 grid gap-2">{(o.items||[]).map((it:any)=>{ const seller = getSeller(it); return <div key={it._id||it.id} className="bg-gray-50 rounded-xl p-3"><div className="flex flex-wrap items-center gap-3"><img src={it.product?.image || it.productSnapshot?.image||'/placeholder.png'} className="w-12 h-12 rounded-lg object-cover bg-white"/><div className="flex-1 min-w-[180px]"><p className="text-sm font-bold">{it.product?.name || it.productSnapshot?.name}</p><p className="text-xs text-gray-500">Qty: {it.quantity}</p></div><p className="font-bold text-sm">৳{Number(it.totalPrice||0).toLocaleString()}</p></div>{seller && <div className="mt-3 flex flex-wrap items-center gap-3 rounded-xl bg-white border p-3"><img src={shopLogo(seller)} className="w-11 h-11 rounded-full object-cover bg-gray-100"/><div className="flex-1 min-w-[180px]"><p className="text-sm font-black">{shopName(seller)}</p><p className="text-xs text-gray-500">Seller: {sellerName(seller)}</p></div><button onClick={()=>openChat(o,it)} className="inline-flex items-center gap-2 rounded-xl bg-orange-500 text-white px-3 py-2 text-sm font-bold"><MessageCircle size={16}/> Send message</button></div>}</div>})}</div></div>)}</div>}
 
     {chat && <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl w-full max-w-lg overflow-hidden">
         <div className="p-4 border-b flex items-center justify-between">
-          <div><h3 className="font-black flex items-center gap-2"><MessageCircle size={18}/> Seller Chat</h3><p className="text-xs text-gray-500">{chat.order?.orderNumber} • {chat.item?.product?.name || chat.item?.productSnapshot?.name}</p></div>
+          <div className="flex items-center gap-3"><img src={shopLogo(getSeller(chat.item))} className="w-10 h-10 rounded-full object-cover bg-gray-100"/><div><h3 className="font-black flex items-center gap-2"><MessageCircle size={18}/> {shopName(getSeller(chat.item))}</h3><p className="text-xs text-gray-500">Seller: {sellerName(getSeller(chat.item))} • {chat.item?.product?.name || chat.item?.productSnapshot?.name}</p></div></div>
           <button onClick={()=>setChat(null)}><X /></button>
         </div>
         <div className="h-80 overflow-y-auto p-4 space-y-2 bg-gray-50">

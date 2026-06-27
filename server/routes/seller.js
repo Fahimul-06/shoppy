@@ -35,6 +35,7 @@ const publicSeller = (s) => ({
   email: s.email,
   phone: s.phone,
   shopName: s.shopName,
+  shopLogo: s.shopLogo,
   shopAddress: s.shopAddress,
   businessType: s.businessType,
   nidNumber: s.nidNumber,
@@ -100,10 +101,11 @@ router.post('/login', async (req, res) => {
 router.get('/me', requireSeller, (req, res) => res.json({ seller: publicSeller(req.seller) }));
 
 router.put('/profile', requireSeller, asyncHandler(async (req, res) => {
-  const { name, shopName, shopAddress, businessType, nidNumber, tinNumber, bankName, bankAccount } = req.body;
+  const { name, shopName, shopLogo, shopAddress, businessType, nidNumber, tinNumber, bankName, bankAccount } = req.body;
   Object.assign(req.seller, {
     name: name ?? req.seller.name,
     shopName: shopName ?? req.seller.shopName,
+    shopLogo: shopLogo ?? req.seller.shopLogo,
     shopAddress: shopAddress ?? req.seller.shopAddress,
     businessType: businessType ?? req.seller.businessType,
     nidNumber: nidNumber ?? req.seller.nidNumber,
@@ -292,7 +294,7 @@ async function resolveSellerChatContext(req, res) {
     res.status(400).json({ message: 'Valid orderItemId is required' });
     return null;
   }
-  const order = await Order.findById(orderId).populate('user').populate('items.product');
+  const order = await Order.findById(orderId).populate({ path: 'user', select: 'name' }).populate('items.product');
   if (!order) {
     res.status(404).json({ message: 'Order not found' });
     return null;
@@ -318,7 +320,7 @@ router.get('/orders', requireSeller, async (req, res) => {
   const sellerProductIds = await Product.find({ seller: req.seller._id }).distinct('_id');
   if (!sellerProductIds.length) return res.json({ orders: [] });
   const orders = await Order.find({ 'items.product': { $in: sellerProductIds } })
-    .populate('user')
+    .populate({ path: 'user', select: 'name' })
     .populate('items.product')
     .sort({ createdAt: -1 });
 
@@ -332,7 +334,7 @@ router.get('/orders', requireSeller, async (req, res) => {
       id: order.id,
       _id: order._id,
       orderNumber: order.orderNumber,
-      user: order.user,
+      user: { id: order.user?.id || order.user?._id, name: order.user?.name || 'Customer' },
       items,
       sellerSubtotal,
       paymentMethod: order.paymentMethod,
@@ -353,7 +355,7 @@ router.get('/chats/:orderId/:orderItemId', requireSeller, async (req, res) => {
   await ChatMessage.updateMany({ order: ctx.order._id, orderItem: ctx.item._id, seller: req.seller._id }, { readBySeller: true });
   const messages = await ChatMessage.find({ order: ctx.order._id, orderItem: ctx.item._id, seller: req.seller._id })
     .sort({ createdAt: 1 });
-  res.json({ order: ctx.order, orderItem: ctx.item, product: ctx.product, messages });
+  res.json({ order: { id: ctx.order.id, _id: ctx.order._id, orderNumber: ctx.order.orderNumber, user: { name: ctx.order.user?.name || 'Customer' } }, orderItem: ctx.item, product: ctx.product, customer: { name: ctx.order.user?.name || 'Customer' }, messages });
 });
 
 router.post('/chats/:orderId/:orderItemId', requireSeller, async (req, res) => {
@@ -378,7 +380,7 @@ router.post('/chats/:orderId/:orderItemId', requireSeller, async (req, res) => {
 
 router.get('/cancellations', requireSeller, async (req, res) => {
   const cancellations = await CancellationRequest.find({ seller: req.seller.id })
-    .populate('user')
+    .populate({ path: 'user', select: 'name' })
     .populate('product')
     .populate('order')
     .sort({ createdAt: -1 });
@@ -387,7 +389,7 @@ router.get('/cancellations', requireSeller, async (req, res) => {
 
 router.get('/returns', requireSeller, async (req, res) => {
   const returns = await ReturnRequest.find({ seller: req.seller.id })
-    .populate('user')
+    .populate({ path: 'user', select: 'name' })
     .populate('product')
     .populate('order')
     .sort({ createdAt: -1 });

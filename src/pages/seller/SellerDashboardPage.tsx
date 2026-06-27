@@ -28,6 +28,7 @@ const emptyProfile = {
   name: '',
   phone: '',
   shopName: '',
+  shopLogo: '',
   shopAddress: '',
   businessType: '',
   nidNumber: '',
@@ -263,6 +264,10 @@ export default function SellerDashboardPage() {
               <div className="grid sm:grid-cols-2 gap-3">
                 <input className="border rounded-xl p-3 text-sm" placeholder="Seller name" value={profileForm.name || ''} onChange={(e) => updateProfile('name', e.target.value)} />
                 <p className="border rounded-xl p-3 text-sm text-gray-500 bg-gray-50">Phone: <b>{seller?.phone || 'Not added yet'}</b><br/><span className="text-xs">Set or change it with OTP verification.</span></p>
+                <div className="sm:col-span-2">
+                  <label className="text-xs font-bold text-gray-500 mb-2 block">Shop logo</label>
+                  <ImageUploader value={profileForm.shopLogo || ''} token={getToken('seller')} onChange={(url) => updateProfile('shopLogo', url)} />
+                </div>
                 <input className="border rounded-xl p-3 text-sm" placeholder="Shop name" value={profileForm.shopName || ''} onChange={(e) => updateProfile('shopName', e.target.value)} />
                 <input className="border rounded-xl p-3 text-sm" placeholder="Business type" value={profileForm.businessType || ''} onChange={(e) => updateProfile('businessType', e.target.value)} />
                 <input className="border rounded-xl p-3 text-sm sm:col-span-2" placeholder="Shop address" value={profileForm.shopAddress || ''} onChange={(e) => updateProfile('shopAddress', e.target.value)} />
@@ -336,8 +341,7 @@ export default function SellerDashboardPage() {
                       <div>
                         <p className="font-black">{order.orderNumber}</p>
                         <p className="text-xs text-gray-400">{order.createdAt ? new Date(order.createdAt).toLocaleString() : ''}</p>
-                        <p className="text-xs text-gray-500 mt-1">Customer: {order.user?.name || order.user?.email || 'Customer'} {order.user?.phone ? `• ${order.user.phone}` : ''}</p>
-                        {order.shippingAddress && <p className="text-xs text-gray-500">Address: {order.shippingAddress.address || order.shippingAddress.area || order.shippingAddress.district || 'Saved delivery address'}</p>}
+                        <p className="text-xs text-gray-500 mt-1">Customer: {order.user?.name || 'Customer'}</p>
                       </div>
                       <div className="text-right">
                         <p className="font-black">৳{Number(order.sellerSubtotal || 0).toLocaleString()}</p>
@@ -372,7 +376,7 @@ export default function SellerDashboardPage() {
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead className="bg-gray-50"><tr><th className="p-3 text-left">Request</th><th>Product</th><th>Customer</th><th>Status</th><th>Admin note</th></tr></thead>
-                  <tbody>{returns.map((r) => <tr key={r.id || r._id} className="border-t align-top"><td className="p-3"><b>{r.order?.orderNumber || 'Order'}</b><p className="text-xs text-gray-400">{r.createdAt ? new Date(r.createdAt).toLocaleString() : ''}</p><p className="text-xs text-gray-500 mt-1">Reason: {r.reason}</p>{r.details && <p className="text-xs text-gray-500">{r.details}</p>}</td><td className="p-3"><div className="flex items-center gap-2"><img src={r.product?.image || r.product?.images?.[0] || 'https://placehold.co/80x80?text=Product'} className="w-10 h-10 rounded-lg object-cover bg-gray-100"/><div><b>{r.product?.name || 'Product'}</b><p className="text-xs text-gray-500">Qty: {r.quantity}</p></div></div></td><td className="p-3 text-center">{r.user?.email || 'Customer'}<p className="text-xs text-gray-400">{r.user?.phone}</p></td><td className="p-3 text-center"><span className={`inline-flex px-3 py-1 rounded-full border text-xs font-bold capitalize ${r.status === 'approved' ? 'bg-green-50 text-green-700 border-green-100' : r.status === 'denied' ? 'bg-red-50 text-red-700 border-red-100' : 'bg-amber-50 text-amber-700 border-amber-100'}`}>{r.status}</span></td><td className="p-3 text-gray-600">{r.adminNote || 'No note yet'}</td></tr>)}</tbody>
+                  <tbody>{returns.map((r) => <tr key={r.id || r._id} className="border-t align-top"><td className="p-3"><b>{r.order?.orderNumber || 'Order'}</b><p className="text-xs text-gray-400">{r.createdAt ? new Date(r.createdAt).toLocaleString() : ''}</p><p className="text-xs text-gray-500 mt-1">Reason: {r.reason}</p>{r.details && <p className="text-xs text-gray-500">{r.details}</p>}</td><td className="p-3"><div className="flex items-center gap-2"><img src={r.product?.image || r.product?.images?.[0] || 'https://placehold.co/80x80?text=Product'} className="w-10 h-10 rounded-lg object-cover bg-gray-100"/><div><b>{r.product?.name || 'Product'}</b><p className="text-xs text-gray-500">Qty: {r.quantity}</p></div></div></td><td className="p-3 text-center">{r.user?.name || 'Customer'}</td><td className="p-3 text-center"><span className={`inline-flex px-3 py-1 rounded-full border text-xs font-bold capitalize ${r.status === 'approved' ? 'bg-green-50 text-green-700 border-green-100' : r.status === 'denied' ? 'bg-red-50 text-red-700 border-red-100' : 'bg-amber-50 text-amber-700 border-amber-100'}`}>{r.status}</span></td><td className="p-3 text-gray-600">{r.adminNote || 'No note yet'}</td></tr>)}</tbody>
                 </table>
               </div>
             )}
@@ -391,7 +395,7 @@ export default function SellerDashboardPage() {
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead className="bg-gray-50"><tr><th className="p-3 text-left">Cancelled product</th><th>Order</th><th>Customer</th><th>Reason</th><th>Status</th><th>Cancelled at</th></tr></thead>
-                  <tbody>{cancellations.map((c) => <tr key={c.id || c._id} className="border-t align-top"><td className="p-3"><div className="flex items-center gap-2"><img src={c.product?.image || c.product?.images?.[0] || 'https://placehold.co/80x80?text=Product'} className="w-10 h-10 rounded-lg object-cover bg-gray-100"/><div><b>{c.product?.name || 'Product'}</b><p className="text-xs text-gray-500">Qty: {c.quantity || 1}</p></div></div></td><td className="p-3 text-center"><b>{c.order?.orderNumber || 'Order'}</b><p className="text-xs text-gray-400">{c.order?.createdAt ? new Date(c.order.createdAt).toLocaleString() : ''}</p></td><td className="p-3 text-center">{c.user?.email || 'Customer'}<p className="text-xs text-gray-400">{c.user?.phone}</p></td><td className="p-3 text-gray-600">{c.reason || '-'}</td><td className="p-3 text-center"><span className="inline-flex px-3 py-1 rounded-full border text-xs font-bold capitalize bg-red-50 text-red-700 border-red-100">{c.status}</span></td><td className="p-3 text-center text-gray-500">{c.cancelledAt ? new Date(c.cancelledAt).toLocaleString() : '-'}</td></tr>)}</tbody>
+                  <tbody>{cancellations.map((c) => <tr key={c.id || c._id} className="border-t align-top"><td className="p-3"><div className="flex items-center gap-2"><img src={c.product?.image || c.product?.images?.[0] || 'https://placehold.co/80x80?text=Product'} className="w-10 h-10 rounded-lg object-cover bg-gray-100"/><div><b>{c.product?.name || 'Product'}</b><p className="text-xs text-gray-500">Qty: {c.quantity || 1}</p></div></div></td><td className="p-3 text-center"><b>{c.order?.orderNumber || 'Order'}</b><p className="text-xs text-gray-400">{c.order?.createdAt ? new Date(c.order.createdAt).toLocaleString() : ''}</p></td><td className="p-3 text-center">{c.user?.name || 'Customer'}</td><td className="p-3 text-gray-600">{c.reason || '-'}</td><td className="p-3 text-center"><span className="inline-flex px-3 py-1 rounded-full border text-xs font-bold capitalize bg-red-50 text-red-700 border-red-100">{c.status}</span></td><td className="p-3 text-center text-gray-500">{c.cancelledAt ? new Date(c.cancelledAt).toLocaleString() : '-'}</td></tr>)}</tbody>
                 </table>
               </div>
             )}
@@ -404,7 +408,7 @@ export default function SellerDashboardPage() {
       {chat && <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
         <div className="bg-white rounded-2xl w-full max-w-lg overflow-hidden">
           <div className="p-4 border-b flex items-center justify-between">
-            <div><h3 className="font-black flex items-center gap-2"><MessageCircle size={18}/> Customer Chat</h3><p className="text-xs text-gray-500">{chat.order?.orderNumber} • {chat.item?.product?.name || chat.item?.productSnapshot?.name}</p></div>
+            <div><h3 className="font-black flex items-center gap-2"><MessageCircle size={18}/> Chat with {chat.order?.user?.name || 'Customer'}</h3><p className="text-xs text-gray-500">{chat.order?.orderNumber} • {chat.item?.product?.name || chat.item?.productSnapshot?.name}</p></div>
             <button onClick={() => setChat(null)}><X /></button>
           </div>
           <div className="h-80 overflow-y-auto p-4 space-y-2 bg-gray-50">

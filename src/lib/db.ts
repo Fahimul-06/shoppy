@@ -56,10 +56,10 @@ export async function fetchHeroSlides(): Promise<HeroSlide[]> {
 export interface OrderPayload {
   subtotal: number;
   discount_amount: number;
+  promo_code?: string;
   delivery_fee: number;
   total_amount: number;
   payment_method: string;
-  promo_code?: string;
   shipping_address: Record<string, string | number | boolean | undefined>;
   items: Array<{
     product_id: string;

@@ -2,18 +2,17 @@ import express from 'express';
 import mongoose from 'mongoose';
 import Order from '../models/Order.js';
 import Product from '../models/Product.js';
+import PromoCode from '../models/PromoCode.js';
 import ReturnRequest from '../models/ReturnRequest.js';
 import CancellationRequest from '../models/CancellationRequest.js';
 import ChatMessage from '../models/ChatMessage.js';
 import ProductReview from '../models/ProductReview.js';
-import PromoCode from '../models/PromoCode.js';
 import { requireUser } from '../middleware/auth.js';
 import { calculatePromoDiscount, isPromoActive } from '../utils/promo.js';
 const router = express.Router();
 
 router.post('/', requireUser, async (req, res) => {
-  const { subtotal, delivery_fee, payment_method, shipping_address, items } = req.body;
-  const promoCodeInput = String(req.body?.promo_code || req.body?.promoCode || '').trim().toUpperCase();
+  const { subtotal, discount_amount, promo_code, delivery_fee, total_amount, payment_method, shipping_address, items } = req.body;
   if (!Array.isArray(items) || items.length === 0) return res.status(400).json({ message: 'Order items are required' });
   const orderItems = [];
   for (const item of items) {
@@ -21,16 +20,37 @@ router.post('/', requireUser, async (req, res) => {
     if (!mongoose.isValidObjectId(productId)) return res.status(400).json({ message: `Invalid MongoDB productId: ${productId}` });
     const product = await Product.findById(productId);
     if (!product) return res.status(404).json({ message: `Product not found: ${productId}` });
-    const quantity = Math.max(1, Number(item.quantity || 1));
-    const unitPrice = Number(product.price || item.unit_price || item.unitPrice || 0);
     orderItems.push({
       product: product.id,
-      productSnapshot: product.toJSON(),
-      quantity,
-      unitPrice,
-      totalPrice: unitPrice * quantity,
+      productSnapshot: item.product_snapshot || item.productSnapshot || product.toJSON(),
+      quantity: Number(item.quantity),
+      unitPrice: Number(item.unit_price ?? item.unitPrice),
+      totalPrice: Number(item.total_price ?? item.totalPrice),
     });
   }
+  let validatedDiscount = Number(discount_amount || 0);
+  let appliedPromo = null;
+  const submittedPromoCode = String(promo_code || '').trim().toUpperCase();
+  if (submittedPromoCode) {
+    const promo = await PromoCode.findOne({ code: submittedPromoCode }).populate([
+      { path: 'sellers', select: 'name shopName shopLogo status' },
+      { path: 'products', select: 'name image price category subcategory childCategory brand seller' },
+      { path: 'product', select: 'name image price category subcategory childCategory brand seller' },
+    ]);
+    if (!promo || !isPromoActive(promo)) return res.status(400).json({ message: 'Promo code is invalid or expired' });
+    const hydratedItems = orderItems.map((orderItem) => ({
+      product: orderItem.productSnapshot,
+      quantity: orderItem.quantity,
+      unit_price: orderItem.unitPrice,
+    }));
+    const { discount, eligibleItems } = calculatePromoDiscount(promo, hydratedItems);
+    if (discount <= 0 || eligibleItems.length === 0) return res.status(400).json({ message: 'This promo does not apply to the selected products' });
+    const orderSubtotal = orderItems.reduce((sum, item) => sum + Number(item.totalPrice || 0), 0);
+    if (orderSubtotal < Number(promo.minOrderAmount || 0)) return res.status(400).json({ message: `Minimum order amount is ৳${Number(promo.minOrderAmount || 0).toLocaleString()}` });
+    validatedDiscount = discount;
+    appliedPromo = promo;
+  }
+
   const defaultAddress = (req.user.addresses || []).find((a) => a.isDefault) || (req.user.addresses || [])[0];
   const shippingAddress = shipping_address && Object.keys(shipping_address || {}).length
     ? shipping_address
@@ -42,48 +62,22 @@ router.post('/', requireUser, async (req, res) => {
   if (!shippingAddress?.phone) shippingAddress.phone = req.user.phone || '';
   if (!shippingAddress?.address) return res.status(400).json({ message: 'Delivery address is required before placing order' });
 
-  const safeSubtotal = orderItems.reduce((sum, item) => sum + Number(item.totalPrice || 0), 0);
-  const safeDeliveryFee = Number(delivery_fee || 0);
-  let safeDiscount = 0;
-  let promo = null;
-
-  if (promoCodeInput) {
-    promo = await PromoCode.findOne({ code: promoCodeInput });
-    if (!promo || !isPromoActive(promo)) {
-      return res.status(400).json({ message: 'Promo code is invalid or expired' });
-    }
-    if (safeSubtotal < Number(promo.minOrderAmount || 0)) {
-      return res.status(400).json({ message: `Minimum order amount is ৳${Number(promo.minOrderAmount || 0).toLocaleString()}` });
-    }
-    const hydratedPromoItems = orderItems.map((item) => ({
-      product: item.productSnapshot,
-      quantity: item.quantity,
-      unit_price: item.unitPrice,
-    }));
-    const result = calculatePromoDiscount(promo, hydratedPromoItems);
-    if (!result.discount || result.eligibleItems.length === 0) {
-      return res.status(400).json({ message: 'This promo does not apply to the selected products' });
-    }
-    safeDiscount = result.discount;
-  }
-
   const order = await Order.create({
     user: req.user.id,
     items: orderItems,
-    subtotal: Number(subtotal || safeSubtotal) || safeSubtotal,
-    discountAmount: safeDiscount,
-    deliveryFee: safeDeliveryFee,
-    totalAmount: Math.max(0, safeSubtotal - safeDiscount) + safeDeliveryFee,
+    subtotal,
+    discountAmount: validatedDiscount,
+    promoCode: appliedPromo?.code || submittedPromoCode || '',
+    promo: appliedPromo?._id || null,
+    deliveryFee: delivery_fee ?? 0,
+    totalAmount: Number(subtotal || 0) - validatedDiscount + Number(delivery_fee || 0),
     paymentMethod: payment_method,
     shippingAddress,
-    promo: promo?._id || null,
-    promoCode: promo?.code || '',
   });
-
-  if (promo) {
-    await PromoCode.updateOne({ _id: promo._id }, { $inc: { usedCount: 1 } });
+  if (appliedPromo) {
+    appliedPromo.usedCount = Number(appliedPromo.usedCount || 0) + 1;
+    await appliedPromo.save();
   }
-
   res.status(201).json({ order });
 });
 

@@ -27,7 +27,7 @@ export default function CheckoutPage() {
   const [orderNumber, setOrderNumber] = useState('');
   const [placing, setPlacing] = useState(false);
   const [error, setError] = useState('');
-  const [promoCode, setPromoCode] = useState('');
+  const [promoCode, setPromoCode] = useState(() => localStorage.getItem('pendingPromoCode') || '');
   const [promoInfo, setPromoInfo] = useState<{ code: string; discount: number; eligibleItemCount?: number } | null>(null);
   const [promoLoading, setPromoLoading] = useState(false);
   const [checkoutItemIds] = useState<string[] | null>(() => {
@@ -67,8 +67,8 @@ export default function CheckoutPage() {
       .catch(() => {});
   }, []);
 
-  const applyPromo = async () => {
-    const code = promoCode.trim().toUpperCase();
+  const applyPromo = async (manualCode?: string) => {
+    const code = String(manualCode ?? promoCode).trim().toUpperCase();
     if (!code) return;
     setPromoLoading(true);
     setError('');
@@ -84,6 +84,7 @@ export default function CheckoutPage() {
       });
       setPromoInfo({ code: response.promo.code, discount: response.discount, eligibleItemCount: response.eligibleItemCount });
       setPromoCode(response.promo.code);
+      localStorage.setItem('pendingPromoCode', response.promo.code);
     } catch (e) {
       setPromoInfo(null);
       setError(e instanceof Error ? e.message : 'Promo could not be applied');
@@ -91,6 +92,15 @@ export default function CheckoutPage() {
       setPromoLoading(false);
     }
   };
+
+  useEffect(() => {
+    const pending = localStorage.getItem('pendingPromoCode');
+    if (pending && checkoutItems.length > 0 && !promoInfo && !promoLoading) {
+      setPromoCode(pending);
+      applyPromo(pending).catch(() => {});
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [checkoutItems.length]);
 
   const placeOrder = async () => {
     if (!getToken('user')) {
@@ -108,10 +118,10 @@ export default function CheckoutPage() {
       const order = await saveOrder({
         subtotal: checkoutTotalPrice,
         discount_amount: discount,
+        promo_code: promoInfo?.code || promoCode || '',
         delivery_fee: shipping,
         total_amount: total,
         payment_method: payment,
-        promo_code: promoInfo?.code || '',
         shipping_address: address,
         items: checkoutItems.map(({ product, quantity }) => ({
           product_id: product.id,
@@ -124,6 +134,7 @@ export default function CheckoutPage() {
       setOrderNumber(order.orderNumber || order.id);
       removeItems(checkoutItems.map(({ product }) => product.id));
       localStorage.removeItem('checkoutItemIds');
+      localStorage.removeItem('pendingPromoCode');
       setOrdered(true);
       setStep(2);
     } catch (e) {
@@ -332,7 +343,7 @@ export default function CheckoutPage() {
                 ) : (
                   <div className="flex gap-2">
                     <input value={promoCode} onChange={(e) => setPromoCode(e.target.value.toUpperCase())} onKeyDown={(e) => e.key === 'Enter' && applyPromo()} placeholder="Enter promo" className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-orange-400" />
-                    <button onClick={applyPromo} disabled={promoLoading} className="bg-orange-500 disabled:bg-orange-300 text-white text-sm font-bold px-3 rounded-xl">{promoLoading ? '...' : 'Apply'}</button>
+                    <button onClick={() => applyPromo()} disabled={promoLoading} className="bg-orange-500 disabled:bg-orange-300 text-white text-sm font-bold px-3 rounded-xl">{promoLoading ? '...' : 'Apply'}</button>
                   </div>
                 )}
               </div>

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { ArrowLeft, Copy, TicketPercent, Loader2, CalendarClock, Store, Tags } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import { ArrowLeft, Copy, TicketPercent, Loader2, CalendarClock, Store, Tags, ShoppingCart } from 'lucide-react';
 import { api } from '../lib/api';
 
 type Promo = {
@@ -41,6 +41,7 @@ const targetText = (promo: Promo) => {
 };
 
 export default function CouponsPage() {
+  const navigate = useNavigate();
   const [promos, setPromos] = useState<Promo[]>([]);
   const [copied, setCopied] = useState('');
   const [loading, setLoading] = useState(true);
@@ -69,6 +70,14 @@ export default function CouponsPage() {
     setTimeout(() => setCopied(''), 1500);
   };
 
+  const useCoupon = async (code: string) => {
+    const normalized = String(code || '').trim().toUpperCase();
+    if (!normalized) return;
+    localStorage.setItem('pendingPromoCode', normalized);
+    await copy(normalized);
+    navigate('/cart');
+  };
+
   return (
     <div className="max-w-6xl mx-auto px-4 py-8">
       <Link to="/account" className="text-sm text-gray-500 hover:text-orange-500 flex items-center gap-1 mb-4">
@@ -77,7 +86,7 @@ export default function CouponsPage() {
       <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mb-5">
         <div>
           <h1 className="text-2xl font-black flex items-center gap-2"><TicketPercent/> Vouchers & Coupons</h1>
-          <p className="text-sm text-gray-500 mt-1">Copy a voucher code and apply it during checkout.</p>
+          <p className="text-sm text-gray-500 mt-1">Copy a voucher code or tap Use Coupon, then apply it during checkout.</p>
         </div>
         <button onClick={loadPromos} className="text-sm font-bold text-orange-600 hover:text-orange-700">Refresh</button>
       </div>
@@ -116,12 +125,20 @@ export default function CouponsPage() {
                     {promo.sellers?.length ? <p className="flex items-center gap-1.5"><Store size={13}/> Seller voucher</p> : null}
                   </div>
                 </div>
-                <button
-                  onClick={() => copy(promo.code)}
-                  className="h-fit px-4 py-2 rounded-xl bg-gray-900 text-white font-bold text-sm flex items-center gap-2 hover:bg-orange-600 transition-colors"
-                >
-                  <Copy size={15}/>{copied === promo.code ? 'Copied' : 'Copy'}
-                </button>
+                <div className="flex flex-col gap-2 shrink-0">
+                  <button
+                    onClick={() => copy(promo.code)}
+                    className="px-4 py-2 rounded-xl bg-gray-900 text-white font-bold text-sm flex items-center justify-center gap-2 hover:bg-orange-600 transition-colors"
+                  >
+                    <Copy size={15}/>{copied === promo.code ? 'Copied' : 'Copy'}
+                  </button>
+                  <button
+                    onClick={() => useCoupon(promo.code)}
+                    className="px-4 py-2 rounded-xl bg-orange-500 text-white font-bold text-sm flex items-center justify-center gap-2 hover:bg-orange-600 transition-colors"
+                  >
+                    <ShoppingCart size={15}/> Use Coupon
+                  </button>
+                </div>
               </div>
             </div>
           ))}

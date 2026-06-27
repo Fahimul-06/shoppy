@@ -14,15 +14,15 @@ router.get('/', async (req, res) => {
     { brand: new RegExp(esc(search), 'i') },
     { description: new RegExp(esc(search), 'i') },
   ];
-  const products = await Product.find(filter).sort({ createdAt: -1 });
+  const products = await Product.find(filter).populate('seller', 'name shopName shopLogo shopAddress status').sort({ createdAt: -1 });
   res.json({ products });
 });
 
 router.get('/:id', async (req, res) => {
   const id = req.params.id;
   const product = id.match(/^[a-f\d]{24}$/i)
-    ? await Product.findById(id)
-    : await Product.findOne({ legacyId: id });
+    ? await Product.findById(id).populate('seller', 'name shopName shopLogo shopAddress status')
+    : await Product.findOne({ legacyId: id }).populate('seller', 'name shopName shopLogo shopAddress status');
   res.json({ product });
 });
 export default router;

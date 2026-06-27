@@ -1,3 +1,13 @@
+export interface SellerSummary {
+  id?: string;
+  _id?: string;
+  name?: string;
+  shopName?: string;
+  shopLogo?: string;
+  shopAddress?: string;
+  status?: string;
+}
+
 export interface Product {
   id: string;
   name: string;
@@ -18,6 +28,7 @@ export interface Product {
   features?: string[];
   stock?: number;
   active?: boolean;
+  seller?: SellerSummary | string | null;
 }
 
 export interface Category {

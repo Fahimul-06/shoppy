@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Star, ShoppingCart, Heart, Loader2 } from 'lucide-react';
+import { Star, ShoppingCart, Heart, Loader2, Store } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { Product } from '../types';
 import { fetchWishlistStatus, toggleWishlist } from '../lib/db';
@@ -16,11 +16,17 @@ interface Props {
   product: Product;
 }
 
+const getSeller = (product: Product) => (product.seller && typeof product.seller === 'object' ? product.seller : null);
+const shopLogo = (product: Product) => getSeller(product)?.shopLogo || '';
+const shopName = (product: Product) => getSeller(product)?.shopName || getSeller(product)?.name || '';
+
 export default function ProductCard({ product }: Props) {
   const { addItem } = useCart();
   const navigate = useNavigate();
   const [wishlisted, setWishlisted] = useState(false);
   const [wishlistLoading, setWishlistLoading] = useState(false);
+  const sellerLogo = shopLogo(product);
+  const sellerShopName = shopName(product);
 
   useEffect(() => {
     const token = getToken('user');
@@ -74,6 +80,17 @@ export default function ProductCard({ product }: Props) {
       </Link>
 
       <div className="p-3 flex flex-col flex-1">
+        {sellerShopName && (
+          <div className="mb-2 flex items-center gap-2 rounded-xl bg-gray-50 border border-gray-100 px-2 py-1.5">
+            {sellerLogo ? (
+              <img src={sellerLogo} alt={sellerShopName} className="w-6 h-6 rounded-full object-cover bg-white border" />
+            ) : (
+              <span className="w-6 h-6 rounded-full bg-orange-50 text-orange-500 flex items-center justify-center border border-orange-100"><Store size={13}/></span>
+            )}
+            <span className="text-[11px] font-bold text-gray-600 truncate">{sellerShopName}</span>
+          </div>
+        )}
+
         <Link to={`/product/${product.id}`} className="flex-1">
           <h3 className="text-sm text-gray-800 font-medium line-clamp-2 mb-2 leading-snug hover:text-orange-500 transition-colors">
             {product.name}

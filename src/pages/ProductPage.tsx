@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { Star, ShoppingCart, Heart, Share2, Shield, Truck, RotateCcw, ChevronRight, Minus, Plus, Check } from 'lucide-react';
+import { Star, ShoppingCart, Heart, Share2, Shield, Truck, RotateCcw, ChevronRight, Minus, Plus, Check, Store } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import ProductCard from '../components/ProductCard';
 import type { Product } from '../types';
@@ -57,6 +57,11 @@ export default function ProductPage() {
   }
 
   const images = product.images?.length ? product.images : [product.image];
+
+  const seller = product.seller && typeof product.seller === 'object' ? product.seller : null;
+  const sellerShopLogo = seller?.shopLogo || '';
+  const sellerShopName = seller?.shopName || seller?.name || '';
+  const sellerName = seller?.name || '';
   const related = products.filter((p) => p.category === product.category && p.id !== product.id).slice(0, 5);
 
   const handleAddToCart = () => {
@@ -114,6 +119,21 @@ export default function ProductPage() {
               </Link>
             )}
             <h1 className="text-xl sm:text-2xl font-bold text-gray-900 leading-tight">{product.name}</h1>
+
+            {sellerShopName && (
+              <div className="flex items-center gap-3 rounded-2xl bg-white border border-gray-100 p-3 shadow-sm">
+                {sellerShopLogo ? (
+                  <img src={sellerShopLogo} alt={sellerShopName} className="w-12 h-12 rounded-full object-cover bg-gray-100 border" />
+                ) : (
+                  <div className="w-12 h-12 rounded-full bg-orange-50 text-orange-500 flex items-center justify-center border border-orange-100"><Store size={20} /></div>
+                )}
+                <div>
+                  <p className="text-xs text-gray-400 font-semibold uppercase tracking-wide">Sold by</p>
+                  <p className="text-sm font-black text-gray-900">{sellerShopName}</p>
+                  {sellerName && <p className="text-xs text-gray-500">Seller: {sellerName}</p>}
+                </div>
+              </div>
+            )}
 
             <div className="flex items-center gap-3">
               <div className="flex items-center gap-1">

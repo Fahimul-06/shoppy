@@ -195,11 +195,17 @@ export default function SellerDashboardPage() {
     <div className="min-h-screen bg-gray-50">
       <header className="bg-white border-b sticky top-0 z-30">
         <div className="max-w-6xl mx-auto px-4 py-4 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex gap-3 items-center">
-            <Store className="text-orange-500" />
-            <div>
-              <h1 className="font-black">{seller?.shopName || 'Seller Dashboard'}</h1>
-              <p className="text-xs text-gray-500 capitalize">Status: {seller?.status || 'pending'}</p>
+          <div className="flex gap-3 items-center min-w-0">
+            {seller?.shopLogo ? (
+              <img src={seller.shopLogo} alt={seller?.shopName || 'Shop logo'} className="w-12 h-12 rounded-2xl object-cover border border-orange-100 bg-orange-50 shadow-sm" />
+            ) : (
+              <div className="w-12 h-12 rounded-2xl bg-orange-50 border border-orange-100 flex items-center justify-center">
+                <Store className="text-orange-500" />
+              </div>
+            )}
+            <div className="min-w-0">
+              <h1 className="font-black truncate">{seller?.shopName || 'Seller Dashboard'}</h1>
+              <p className="text-xs text-gray-500 capitalize truncate">{seller?.name ? `${seller.name} • ` : ''}Status: {seller?.status || 'pending'}</p>
             </div>
           </div>
           <div className="flex items-center gap-2 overflow-x-auto pb-1 lg:pb-0">

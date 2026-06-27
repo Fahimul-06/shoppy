@@ -163,6 +163,30 @@ router.patch('/sellers/:id/status', requireAdmin, async (req, res) => {
   res.json({ seller });
 });
 router.get('/products', requireAdmin, async (_req, res) => res.json({ products: await Product.find().sort({ createdAt: -1 }).populate('seller') }));
+
+router.patch('/products/sale-bulk', requireAdmin, async (req, res) => {
+  const { saleType, productIds, discount } = req.body || {};
+  if (!['daily', 'flash'].includes(saleType)) return res.status(400).json({ message: 'Sale type must be daily or flash' });
+  if (!Array.isArray(productIds) || productIds.length === 0) return res.status(400).json({ message: 'Select at least one product' });
+
+  const n = Number(discount || 0);
+  if (!Number.isFinite(n) || n < 0 || n > 100) return res.status(400).json({ message: 'Discount must be between 0 and 100' });
+
+  const products = await Product.find({ _id: { $in: productIds } });
+  for (const product of products) {
+    const tags = Array.isArray(product.saleTags) ? product.saleTags : [];
+    if (!tags.includes(saleType)) tags.push(saleType);
+    product.saleTags = tags;
+    if (saleType === 'daily') product.dailySaleDiscount = n;
+    if (saleType === 'flash') product.flashSaleDiscount = n;
+    product.discount = Math.max(Number(product.dailySaleDiscount || 0), Number(product.flashSaleDiscount || 0), Number(product.discount || 0));
+    if (!product.badge) product.badge = 'sale';
+    await product.save();
+  }
+
+  res.json({ message: `${saleType === 'daily' ? 'Daily Sale' : 'Flash Sale'} applied to ${products.length} product(s).`, updatedCount: products.length });
+});
+
 router.post('/products', requireAdmin, async (req, res) => res.status(201).json({ product: await Product.create(sanitizeSaleProductPayload(req.body)) }));
 router.put('/products/:id', requireAdmin, async (req, res) => res.json({ product: await Product.findByIdAndUpdate(req.params.id, sanitizeSaleProductPayload(req.body), { new: true }) }));
 router.delete('/products/:id', requireAdmin, async (req, res) => { await Product.findByIdAndDelete(req.params.id); res.json({ ok: true }); });

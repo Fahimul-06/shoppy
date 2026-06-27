@@ -32,6 +32,8 @@ router.post('/', requireUser, async (req, res) => {
       quantity,
       unitPrice,
       totalPrice,
+      selectedColor: String(item.selected_color || item.selectedColor || '').trim(),
+      selectedSize: String(item.selected_size || item.selectedSize || '').trim(),
     });
     promoItems.push({ product, quantity, unit_price: unitPrice, total_price: totalPrice });
   }

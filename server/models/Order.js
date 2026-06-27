@@ -6,6 +6,8 @@ const orderItemSchema = new mongoose.Schema({
   quantity: { type: Number, required: true, min: 1 },
   unitPrice: { type: Number, required: true },
   totalPrice: { type: Number, required: true },
+  selectedColor: { type: String, default: '' },
+  selectedSize: { type: String, default: '' },
   cancellationStatus: { type: String, enum: ['none', 'cancelled'], default: 'none' },
   cancelReason: String,
   cancelledAt: Date,

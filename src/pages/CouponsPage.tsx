@@ -59,8 +59,11 @@ export default function CouponsPage() {
     setLoading(true);
     setError('');
     try {
-      const res = await api.get<{ promos: Promo[] }>('/promos');
-      setPromos(Array.isArray(res.promos) ? res.promos : []);
+      const res = await api.get<{ promos?: Promo[]; coupons?: Promo[]; vouchers?: Promo[] } | Promo[]>('/promos');
+      const list = Array.isArray(res)
+        ? res
+        : (Array.isArray(res.promos) ? res.promos : (Array.isArray(res.coupons) ? res.coupons : (Array.isArray(res.vouchers) ? res.vouchers : [])));
+      setPromos(list);
     } catch (e) {
       setPromos([]);
       setError(e instanceof Error ? e.message : 'Could not load vouchers and coupons.');
@@ -71,7 +74,7 @@ export default function CouponsPage() {
 
   useEffect(() => { loadPromos(); }, []);
 
-  const visiblePromos = useMemo(() => promos.filter((p) => p && p.active !== false), [promos]);
+  const visiblePromos = useMemo(() => promos.filter((p) => p && p.active !== false && p.code), [promos]);
   const copy = async (code: string) => {
     try { await navigator.clipboard?.writeText(code); } catch { /* ignore clipboard failure */ }
     setCopied(code);

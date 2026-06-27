@@ -8,6 +8,7 @@ import PromoCode from '../models/PromoCode.js';
 import ReturnRequest from '../models/ReturnRequest.js';
 import CancellationRequest from '../models/CancellationRequest.js';
 import ChatMessage from '../models/ChatMessage.js';
+import CustomerCareMessage from '../models/CustomerCareMessage.js';
 import { requireAdmin, signToken } from '../middleware/auth.js';
 const router = express.Router();
 const adminUser = (u) => ({ id: u.id, fullName: u.fullName, email: u.email, phone: u.phone, role: u.role });
@@ -228,6 +229,62 @@ router.get('/messages/:orderId/:orderItemId', requireAdmin, async (req, res) => 
     .populate({ path: 'order', select: 'orderNumber status paymentStatus createdAt' })
     .sort({ createdAt: 1 });
   res.json({ messages });
+});
+
+
+router.get('/customer-care', requireAdmin, async (_req, res) => {
+  const messages = await CustomerCareMessage.find()
+    .populate({ path: 'customer', select: 'fullName name email phone profilePhoto' })
+    .sort({ createdAt: -1 });
+
+  const groups = new Map();
+  for (const message of messages) {
+    const customerId = message.customer?._id?.toString?.() || message.customer?.toString?.();
+    if (!customerId) continue;
+    if (!groups.has(customerId)) {
+      groups.set(customerId, {
+        id: customerId,
+        customer: message.customer,
+        lastMessage: message,
+        messageCount: 0,
+        unreadForAdmin: 0,
+      });
+    }
+    const group = groups.get(customerId);
+    group.messageCount += 1;
+    if (!message.readByAdmin && message.senderType === 'customer') group.unreadForAdmin += 1;
+  }
+
+  res.json({ conversations: Array.from(groups.values()) });
+});
+
+router.get('/customer-care/:customerId', requireAdmin, async (req, res) => {
+  const customerId = req.params.customerId;
+  const customer = await User.findById(customerId).select('fullName name email phone profilePhoto role');
+  if (!customer) return res.status(404).json({ message: 'Customer not found' });
+  await CustomerCareMessage.updateMany(
+    { customer: customerId, senderType: 'customer', readByAdmin: false },
+    { readByAdmin: true }
+  );
+  const messages = await CustomerCareMessage.find({ customer: customerId }).sort({ createdAt: 1 });
+  res.json({ customer, messages });
+});
+
+router.post('/customer-care/:customerId', requireAdmin, async (req, res) => {
+  const customerId = req.params.customerId;
+  const text = String(req.body?.message || '').trim();
+  if (!text) return res.status(400).json({ message: 'Message is required' });
+  const customer = await User.findById(customerId).select('_id');
+  if (!customer) return res.status(404).json({ message: 'Customer not found' });
+  const chatMessage = await CustomerCareMessage.create({
+    customer: customer._id,
+    senderType: 'admin',
+    sender: req.user._id,
+    message: text,
+    readByCustomer: false,
+    readByAdmin: true,
+  });
+  res.status(201).json({ message: chatMessage });
 });
 
 router.get('/promos', requireAdmin, async (_req, res) => res.json({ promos: await PromoCode.find().sort({ createdAt: -1 }) }));

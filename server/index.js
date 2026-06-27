@@ -15,6 +15,7 @@ import sellerRoutes from './routes/seller.js';
 import wishlistRoutes from './routes/wishlist.js';
 import uploadRoutes from './routes/uploads.js';
 import promoRoutes from './routes/promos.js';
+import supportRoutes from './routes/support.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -44,6 +45,7 @@ app.use('/api/seller', sellerRoutes);
 app.use('/api/wishlist', wishlistRoutes);
 app.use('/api/uploads', uploadRoutes);
 app.use('/api/promos', promoRoutes);
+app.use('/api/support', supportRoutes);
 
 
 app.use((err, _req, res, _next) => {

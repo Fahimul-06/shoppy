@@ -4,6 +4,8 @@ const heroSlideSchema = new mongoose.Schema({
   image: String,
   title: String,
   subtitle: String,
+  link: String,
+  placement: { type: String, enum: ['hero', 'header'], default: 'hero' },
   sortOrder: { type: Number, default: 0 },
   active: { type: Boolean, default: true },
 }, { timestamps: true });

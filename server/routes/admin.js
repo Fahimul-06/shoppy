@@ -10,6 +10,7 @@ import CancellationRequest from '../models/CancellationRequest.js';
 import ChatMessage from '../models/ChatMessage.js';
 import CustomerCareMessage from '../models/CustomerCareMessage.js';
 import CustomerNotification from '../models/CustomerNotification.js';
+import HeroSlide from '../models/HeroSlide.js';
 import { isPromoActive } from '../utils/promo.js';
 import { requireAdmin, signToken } from '../middleware/auth.js';
 const router = express.Router();
@@ -437,6 +438,7 @@ function normalizePromoPayload(body = {}) {
   return {
     code: String(body.code || '').trim().toUpperCase(),
     description: String(body.description || '').trim(),
+    image: String(body.image || '').trim(),
     discountType: body.discountType === 'fixed' ? 'fixed' : 'percentage',
     discountValue: Number(body.discountValue || 0),
     minOrderAmount: Number(body.minOrderAmount || 0),
@@ -512,6 +514,41 @@ router.put('/promos/:id', requireAdmin, async (req, res) => {
 });
 
 router.delete('/promos/:id', requireAdmin, async (req, res) => { await PromoCode.findByIdAndDelete(req.params.id); res.json({ ok: true }); });
+
+
+const bannerPayload = (body = {}) => ({
+  image: String(body.image || '').trim(),
+  title: String(body.title || '').trim(),
+  subtitle: String(body.subtitle || '').trim(),
+  link: String(body.link || '').trim(),
+  placement: ['hero', 'header'].includes(String(body.placement || '')) ? String(body.placement) : 'hero',
+  sortOrder: Number(body.sortOrder || 0),
+  active: body.active !== false,
+});
+
+router.get('/banners', requireAdmin, async (_req, res) => {
+  const banners = await HeroSlide.find().sort({ placement: 1, sortOrder: 1, createdAt: -1 });
+  res.json({ banners, heroSlides: banners });
+});
+
+router.post('/banners', requireAdmin, async (req, res) => {
+  const payload = bannerPayload(req.body);
+  if (!payload.image) return res.status(400).json({ message: 'Banner/photo image is required' });
+  const banner = await HeroSlide.create(payload);
+  res.status(201).json({ banner });
+});
+
+router.put('/banners/:id', requireAdmin, async (req, res) => {
+  const payload = bannerPayload(req.body);
+  if (!payload.image) return res.status(400).json({ message: 'Banner/photo image is required' });
+  const banner = await HeroSlide.findByIdAndUpdate(req.params.id, payload, { new: true });
+  res.json({ banner });
+});
+
+router.delete('/banners/:id', requireAdmin, async (req, res) => {
+  await HeroSlide.findByIdAndDelete(req.params.id);
+  res.json({ ok: true });
+});
 
 
 router.get('/customer-notifications', requireAdmin, async (_req, res) => {

@@ -4,6 +4,7 @@ import { toJSON } from './index.js';
 const promoCodeSchema = new mongoose.Schema({
   code: { type: String, required: true, unique: true, uppercase: true, trim: true },
   description: String,
+  image: String,
   discountType: { type: String, enum: ['percentage', 'fixed'], required: true },
   discountValue: { type: Number, required: true },
   minOrderAmount: { type: Number, default: 0 },

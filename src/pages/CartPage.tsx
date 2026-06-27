@@ -1,18 +1,51 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Trash2, Plus, Minus, ShoppingBag, Tag, ChevronRight, ArrowLeft } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 
 export default function CartPage() {
-  const { state, removeItem, updateQuantity, totalPrice, totalItems } = useCart();
+  const { state, removeItem, updateQuantity, totalItems } = useCart();
   const [coupon, setCoupon] = useState('');
   const [couponApplied, setCouponApplied] = useState(false);
-  const discount = couponApplied ? Math.round(totalPrice * 0.1) : 0;
-  const shipping = totalPrice > 2000 ? 0 : 120;
-  const finalTotal = totalPrice - discount + shipping;
+  const [selectedIds, setSelectedIds] = useState<string[]>(() => state.items.map((item) => item.product.id));
+
+  useEffect(() => {
+    setSelectedIds((current) => {
+      const availableIds = state.items.map((item) => item.product.id);
+      const availableSet = new Set(availableIds);
+      const kept = current.filter((id) => availableSet.has(id));
+      const newIds = availableIds.filter((id) => !current.includes(id));
+      return [...kept, ...newIds];
+    });
+  }, [state.items]);
+
+  const selectedItems = useMemo(
+    () => state.items.filter((item) => selectedIds.includes(item.product.id)),
+    [state.items, selectedIds]
+  );
+  const selectedTotalItems = selectedItems.reduce((sum, item) => sum + item.quantity, 0);
+  const selectedTotalPrice = selectedItems.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
+  const discount = couponApplied ? Math.round(selectedTotalPrice * 0.1) : 0;
+  const shipping = selectedTotalPrice > 2000 ? 0 : 120;
+  const finalTotal = selectedTotalPrice - discount + shipping;
+  const allSelected = state.items.length > 0 && selectedIds.length === state.items.length;
 
   const applyCoupon = () => {
     if (coupon.trim().toUpperCase() === 'CARTUP10') setCouponApplied(true);
+  };
+
+  const toggleSelection = (productId: string) => {
+    setSelectedIds((current) =>
+      current.includes(productId) ? current.filter((id) => id !== productId) : [...current, productId]
+    );
+  };
+
+  const toggleAll = () => {
+    setSelectedIds(allSelected ? [] : state.items.map((item) => item.product.id));
+  };
+
+  const saveCheckoutSelection = () => {
+    localStorage.setItem('checkoutItemIds', JSON.stringify(selectedIds));
   };
 
   return (
@@ -46,8 +79,28 @@ export default function CartPage() {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Items list */}
             <div className="lg:col-span-2 space-y-3">
+              <div className="bg-white rounded-2xl border border-gray-100 p-4 flex items-center justify-between">
+                <label className="flex items-center gap-3 text-sm font-semibold text-gray-800 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={allSelected}
+                    onChange={toggleAll}
+                    className="w-4 h-4 accent-orange-500"
+                  />
+                  Select all products for checkout
+                </label>
+                <span className="text-xs text-gray-500">{selectedTotalItems} selected</span>
+              </div>
               {state.items.map(({ product, quantity }) => (
-                <div key={product.id} className="bg-white rounded-2xl border border-gray-100 p-4 flex gap-4">
+                <div key={product.id} className={`bg-white rounded-2xl border p-4 flex gap-4 transition-colors ${selectedIds.includes(product.id) ? 'border-orange-200 ring-1 ring-orange-100' : 'border-gray-100'}`}>
+                  <label className="pt-9 flex-shrink-0" aria-label={`Select ${product.name}`}>
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.includes(product.id)}
+                      onChange={() => toggleSelection(product.id)}
+                      className="w-4 h-4 accent-orange-500"
+                    />
+                  </label>
                   <Link to={`/product/${product.id}`} className="w-24 h-24 flex-shrink-0 rounded-xl overflow-hidden bg-gray-50 border border-gray-100">
                     <img src={product.image} alt={product.name} className="w-full h-full object-cover hover:scale-105 transition-transform" />
                   </Link>
@@ -124,8 +177,8 @@ export default function CartPage() {
                 <h3 className="font-bold text-gray-900 mb-4">Order Summary</h3>
                 <div className="space-y-3 text-sm">
                   <div className="flex justify-between text-gray-600">
-                    <span>Subtotal ({totalItems} items)</span>
-                    <span className="font-medium text-gray-800">৳{totalPrice.toLocaleString()}</span>
+                    <span>Selected subtotal ({selectedTotalItems} items)</span>
+                    <span className="font-medium text-gray-800">৳{selectedTotalPrice.toLocaleString()}</span>
                   </div>
                   {couponApplied && (
                     <div className="flex justify-between text-green-600">
@@ -151,12 +204,22 @@ export default function CartPage() {
                 </div>
 
                 <Link
-                  to="/checkout"
-                  className="mt-5 w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-3.5 rounded-xl flex items-center justify-center gap-2 transition-colors active:scale-95"
+                  to={selectedIds.length > 0 ? '/checkout' : '#'}
+                  onClick={(e) => {
+                    if (selectedIds.length === 0) {
+                      e.preventDefault();
+                      return;
+                    }
+                    saveCheckoutSelection();
+                  }}
+                  className={`mt-5 w-full font-bold py-3.5 rounded-xl flex items-center justify-center gap-2 transition-colors active:scale-95 ${selectedIds.length > 0 ? 'bg-orange-500 hover:bg-orange-600 text-white' : 'bg-gray-200 text-gray-400 cursor-not-allowed'}`}
                 >
-                  Proceed to Checkout
+                  Checkout selected products
                   <ChevronRight size={16} />
                 </Link>
+                {selectedIds.length === 0 && (
+                  <p className="text-xs text-red-500 mt-2 text-center">Select at least one product to place an order.</p>
+                )}
               </div>
             </div>
           </div>

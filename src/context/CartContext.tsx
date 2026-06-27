@@ -11,6 +11,7 @@ type CartAction =
   | { type: 'REMOVE_ITEM'; productId: string }
   | { type: 'UPDATE_QUANTITY'; productId: string; quantity: number }
   | { type: 'CLEAR_CART' }
+  | { type: 'REMOVE_ITEMS'; productIds: string[] }
   | { type: 'TOGGLE_CART' }
   | { type: 'CLOSE_CART' };
 
@@ -43,6 +44,10 @@ const cartReducer = (state: CartState, action: CartAction): CartState => {
     }
     case 'CLEAR_CART':
       return { ...state, items: [], isOpen: false };
+    case 'REMOVE_ITEMS': {
+      const removeSet = new Set(action.productIds);
+      return { ...state, items: state.items.filter((i) => !removeSet.has(i.product.id)), isOpen: false };
+    }
     case 'TOGGLE_CART':
       return { ...state, isOpen: !state.isOpen };
     case 'CLOSE_CART':
@@ -58,6 +63,7 @@ interface CartContextType {
   removeItem: (productId: string) => void;
   updateQuantity: (productId: string, quantity: number) => void;
   clearCart: () => void;
+  removeItems: (productIds: string[]) => void;
   toggleCart: () => void;
   closeCart: () => void;
   totalItems: number;
@@ -74,6 +80,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const updateQuantity = (productId: string, quantity: number) =>
     dispatch({ type: 'UPDATE_QUANTITY', productId, quantity });
   const clearCart = () => dispatch({ type: 'CLEAR_CART' });
+  const removeItems = (productIds: string[]) => dispatch({ type: 'REMOVE_ITEMS', productIds });
   const toggleCart = () => dispatch({ type: 'TOGGLE_CART' });
   const closeCart = () => dispatch({ type: 'CLOSE_CART' });
 
@@ -81,7 +88,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const totalPrice = state.items.reduce((sum, i) => sum + i.product.price * i.quantity, 0);
 
   return (
-    <CartContext.Provider value={{ state, addItem, removeItem, updateQuantity, clearCart, toggleCart, closeCart, totalItems, totalPrice }}>
+    <CartContext.Provider value={{ state, addItem, removeItem, updateQuantity, clearCart, removeItems, toggleCart, closeCart, totalItems, totalPrice }}>
       {children}
     </CartContext.Provider>
   );

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Check, ChevronRight, MapPin, CreditCard, Package, Loader2, AlertCircle } from 'lucide-react';
 import { useCart } from '../context/CartContext';
@@ -17,7 +17,7 @@ const paymentMethods = [
 ];
 
 export default function CheckoutPage() {
-  const { state, totalPrice, clearCart } = useCart();
+  const { state, removeItems } = useCart();
   const navigate = useNavigate();
   const [step, setStep] = useState(0);
   const [payment, setPayment] = useState('bkash');
@@ -27,9 +27,25 @@ export default function CheckoutPage() {
   const [orderNumber, setOrderNumber] = useState('');
   const [placing, setPlacing] = useState(false);
   const [error, setError] = useState('');
+  const [checkoutItemIds] = useState<string[] | null>(() => {
+    try {
+      const stored = localStorage.getItem('checkoutItemIds');
+      const parsed = stored ? JSON.parse(stored) : null;
+      return Array.isArray(parsed) && parsed.length > 0 ? parsed.map(String) : null;
+    } catch {
+      return null;
+    }
+  });
 
-  const shipping = totalPrice > 2000 ? 0 : 120;
-  const total = totalPrice + shipping;
+  const checkoutItems = useMemo(() => {
+    if (!checkoutItemIds) return state.items;
+    const selected = state.items.filter((item) => checkoutItemIds.includes(item.product.id));
+    return selected.length > 0 ? selected : state.items;
+  }, [state.items, checkoutItemIds]);
+  const checkoutTotalItems = checkoutItems.reduce((sum, item) => sum + item.quantity, 0);
+  const checkoutTotalPrice = checkoutItems.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
+  const shipping = checkoutTotalPrice > 2000 ? 0 : 120;
+  const total = checkoutTotalPrice + shipping;
 
   const readableAddress = (addr: DeliveryAddress) => [addr.address, addr.landmark, addr.area, addr.district, addr.division].filter(Boolean).join(', ');
 
@@ -61,13 +77,13 @@ export default function CheckoutPage() {
     setError('');
     try {
       const order = await saveOrder({
-        subtotal: totalPrice,
+        subtotal: checkoutTotalPrice,
         discount_amount: 0,
         delivery_fee: shipping,
         total_amount: total,
         payment_method: payment,
         shipping_address: address,
-        items: state.items.map(({ product, quantity }) => ({
+        items: checkoutItems.map(({ product, quantity }) => ({
           product_id: product.id,
           product_snapshot: product as unknown as Record<string, unknown>,
           quantity,
@@ -76,7 +92,8 @@ export default function CheckoutPage() {
         })),
       });
       setOrderNumber(order.orderNumber || order.id);
-      clearCart();
+      removeItems(checkoutItems.map(({ product }) => product.id));
+      localStorage.removeItem('checkoutItemIds');
       setOrdered(true);
       setStep(2);
     } catch (e) {
@@ -86,7 +103,7 @@ export default function CheckoutPage() {
     }
   };
 
-  if (state.items.length === 0 && !ordered) {
+  if (checkoutItems.length === 0 && !ordered) {
     return (
       <div className="min-h-[60vh] flex flex-col items-center justify-center gap-4">
         <Package size={48} className="text-gray-300" />
@@ -256,9 +273,10 @@ export default function CheckoutPage() {
           {/* Order summary sidebar */}
           {step < 2 && (
             <div className="bg-white rounded-2xl border border-gray-100 p-5 h-fit">
-              <h3 className="font-bold text-gray-900 mb-4">Order Summary</h3>
+              <h3 className="font-bold text-gray-900 mb-1">Order Summary</h3>
+              <p className="text-xs text-gray-500 mb-4">Only selected cart products will be ordered. Unselected products will stay in your cart.</p>
               <div className="space-y-3 mb-4">
-                {state.items.map(({ product, quantity }) => (
+                {checkoutItems.map(({ product, quantity }) => (
                   <div key={product.id} className="flex gap-3">
                     <img src={product.image} alt={product.name} className="w-12 h-12 rounded-lg object-cover flex-shrink-0 bg-gray-50" />
                     <div className="flex-1 min-w-0">
@@ -274,7 +292,7 @@ export default function CheckoutPage() {
               <div className="border-t border-gray-100 pt-3 space-y-2 text-sm">
                 <div className="flex justify-between text-gray-600">
                   <span>Subtotal</span>
-                  <span>৳{totalPrice.toLocaleString()}</span>
+                  <span>৳{checkoutTotalPrice.toLocaleString()}</span>
                 </div>
                 <div className="flex justify-between text-gray-600">
                   <span>Shipping</span>

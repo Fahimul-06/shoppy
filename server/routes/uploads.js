@@ -27,7 +27,7 @@ const upload = multer({
   },
 });
 
-async function requireAdminOrSeller(req, res, next) {
+async function requireLoggedInUploader(req, res, next) {
   try {
     const token = req.headers.authorization?.replace('Bearer ', '');
     if (!token) return res.status(401).json({ message: 'Login required to upload images' });
@@ -36,6 +36,13 @@ async function requireAdminOrSeller(req, res, next) {
     if (decoded.role === 'admin') {
       const user = await User.findById(decoded.id);
       if (!user || user.role !== 'admin') return res.status(403).json({ message: 'Admin access required' });
+      req.user = user;
+      return next();
+    }
+
+    if (decoded.role === 'user') {
+      const user = await User.findById(decoded.id);
+      if (!user || user.role !== 'user') return res.status(403).json({ message: 'Customer access required' });
       req.user = user;
       return next();
     }
@@ -53,7 +60,7 @@ async function requireAdminOrSeller(req, res, next) {
   }
 }
 
-router.post('/', requireAdminOrSeller, upload.single('file'), (req, res) => {
+router.post('/', requireLoggedInUploader, upload.single('file'), (req, res) => {
   if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
   const publicPath = `/uploads/${req.file.filename}`;
   const origin = `${req.protocol}://${req.get('host')}`;

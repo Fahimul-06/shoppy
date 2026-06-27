@@ -73,10 +73,10 @@ export default function AddressManager({ token, user, onChanged, basePath = '/au
           name: prev.name || displayName || '',
           phone: prev.phone || user.phone || '',
         }));
-        setMessage(res.warning || 'Current location captured. Please check the address text before saving.');
+        setMessage(res.warning || 'Current location selected. Please check the address name before saving.');
       } catch (error) {
         setForm((prev) => ({ ...prev, latitude, longitude }));
-        setMessage('Location captured. Please type the address details manually.');
+        setMessage('Current location selected. Please type your address name before saving.');
       } finally {
         setLocating(false);
       }
@@ -146,7 +146,7 @@ export default function AddressManager({ token, user, onChanged, basePath = '/au
         <input className="sm:col-span-2 border rounded-xl px-4 py-3 text-sm" placeholder="Landmark / delivery note" value={form.landmark || ''} onChange={(e)=>update('landmark', e.target.value)} />
         {(form.latitude && form.longitude) ? (
           <p className="sm:col-span-2 text-xs text-blue-600 bg-blue-50 rounded-xl px-3 py-2">
-            Current location selected{readableAddress(form) ? `: ${readableAddress(form)}` : '. Please type the address name before saving.'}
+            Current location selected{readableAddress(form) ? `: ${readableAddress(form)}` : '. Please type your address name before saving.'}
           </p>
         ) : null}
         <label className="sm:col-span-2 flex items-center gap-2 text-sm font-semibold text-gray-700"><input type="checkbox" checked={Boolean(form.isDefault)} onChange={(e)=>update('isDefault', e.target.checked)} /> Set as default address</label>
@@ -164,7 +164,7 @@ export default function AddressManager({ token, user, onChanged, basePath = '/au
                 <p className="font-black text-gray-900 flex items-center gap-2">{addr.label || 'Address'} {addr.isDefault && <span className="text-[10px] bg-orange-100 text-orange-600 px-2 py-0.5 rounded-full">Default</span>}</p>
                 <p className="text-sm text-gray-700 mt-1">{addr.name} {addr.phone ? `• ${addr.phone}` : ''}</p>
                 <p className="text-sm text-gray-600 mt-1">{readableAddress(addr) || 'Address name not available'}</p>
-                {addr.latitude && addr.longitude && !readableAddress(addr) && <p className="text-xs text-orange-500 mt-1">Location saved. Please add the address name.</p>}
+                {addr.latitude && addr.longitude && !readableAddress(addr) && <p className="text-xs text-orange-500 mt-1">Current location saved. Please add the address name.</p>}
               </div>
             </div>
             <div className="flex gap-2 mt-3">

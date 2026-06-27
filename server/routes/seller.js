@@ -8,6 +8,7 @@ import PasswordOtp from '../models/PasswordOtp.js';
 import { requireSeller, signToken } from '../middleware/auth.js';
 import { sendPasswordOtpEmail } from '../utils/email.js';
 import { sendPasswordOtpSms } from '../utils/sms.js';
+import { reverseGeocode } from '../utils/geocode.js';
 
 const router = express.Router();
 const publicAddress = (a) => ({
@@ -212,29 +213,8 @@ router.get('/reverse-geocode', requireSeller, async (req, res) => {
   const lat = Number(req.query.lat);
   const lng = Number(req.query.lng);
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) return res.status(400).json({ message: 'Valid latitude and longitude are required' });
-  try {
-    const url = new URL('https://nominatim.openstreetmap.org/reverse');
-    url.searchParams.set('format', 'jsonv2');
-    url.searchParams.set('lat', String(lat));
-    url.searchParams.set('lon', String(lng));
-    url.searchParams.set('addressdetails', '1');
-    const response = await fetch(url, { headers: { 'User-Agent': `${process.env.APP_NAME || 'Shoppy'} seller-address/1.0` } });
-    if (!response.ok) throw new Error('Reverse geocoding failed');
-    const data = await response.json();
-    const a = data.address || {};
-    res.json({
-      address: {
-        latitude: lat,
-        longitude: lng,
-        address: data.display_name || '',
-        division: a.state || a.division || '',
-        district: a.city || a.town || a.county || a.state_district || '',
-        area: a.suburb || a.neighbourhood || a.road || a.village || '',
-      },
-    });
-  } catch (error) {
-    res.json({ address: { latitude: lat, longitude: lng }, warning: 'Location captured, but address lookup failed. Please type the address manually.' });
-  }
+  const result = await reverseGeocode(lat, lng);
+  res.json(result);
 });
 
 router.get('/addresses', requireSeller, (req, res) => {

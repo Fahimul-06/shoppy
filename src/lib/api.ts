@@ -1,4 +1,15 @@
-const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
+const configuredApiUrl = import.meta.env.VITE_API_URL;
+
+function defaultApiBaseUrl() {
+  if (configuredApiUrl) return configuredApiUrl;
+  if (typeof window !== 'undefined') {
+    const host = window.location.hostname;
+    if (host === 'shoppy1.onrender.com') return 'https://shoppy-o30r.onrender.com/api';
+  }
+  return '/api';
+}
+
+const API_BASE_URL = defaultApiBaseUrl().replace(/\/$/, '');
 
 type ApiOptions = RequestInit & { token?: string | null };
 
@@ -22,16 +33,37 @@ export function getSessionUser<T = any>(role: 'user' | 'seller' | 'admin' = 'use
   try { return JSON.parse(raw) as T; } catch { return null; }
 }
 
+function parsePayload(text: string, contentType: string | null) {
+  if (!text) return null;
+  if (contentType?.includes('application/json')) return JSON.parse(text);
+  try { return JSON.parse(text); } catch { return { message: text.slice(0, 250) }; }
+}
+
 export async function apiFetch<T>(path: string, options: ApiOptions = {}): Promise<T> {
   const headers = new Headers(options.headers);
   const isForm = options.body instanceof FormData;
   if (!isForm && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
   if (options.token) headers.set('Authorization', `Bearer ${options.token}`);
 
-  const res = await fetch(`${API_BASE_URL}${path}`, { ...options, headers });
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE_URL}${path}`, { ...options, headers });
+  } catch (error) {
+    throw new Error('Could not connect to API server. Check VITE_API_URL and backend service.');
+  }
+
   const text = await res.text();
-  const payload = text ? JSON.parse(text) : null;
-  if (!res.ok) throw new Error(payload?.message || payload?.error || 'Request failed');
+  let payload: any = null;
+  try {
+    payload = parsePayload(text, res.headers.get('content-type'));
+  } catch {
+    payload = { message: text.slice(0, 250) };
+  }
+
+  if (!res.ok) {
+    const message = payload?.message || payload?.error || `Request failed with status ${res.status}`;
+    throw new Error(message);
+  }
   return payload as T;
 }
 

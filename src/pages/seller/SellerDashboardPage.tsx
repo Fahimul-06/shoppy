@@ -178,6 +178,8 @@ export default function SellerDashboardPage() {
     setChatMessages((prev) => [...prev, res.message]);
   };
 
+  const activeSellerOrderCount = sellerOrders.filter((order: any) => ['pending', 'processing'].includes(String(order.status || '').toLowerCase())).length;
+
   const navItems = [
     { to: '/seller/dashboard', key: 'home', label: 'Home', icon: Home },
     { to: '/seller/dashboard/profile', key: 'profile', label: 'Profile', icon: User },
@@ -207,6 +209,7 @@ export default function SellerDashboardPage() {
               return (
                 <Link key={item.key} to={item.to} className={`shrink-0 flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-bold border ${active ? 'bg-orange-500 text-white border-orange-500' : 'bg-white text-gray-700 hover:bg-orange-50 border-gray-200'}`}>
                   <Icon size={16} /> {item.label}
+                  {item.key === 'orders' && activeSellerOrderCount > 0 && <span className={`ml-1 inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[10px] font-black ${active ? 'bg-white text-orange-600' : 'bg-red-500 text-white'}`}>{activeSellerOrderCount}</span>}
                 </Link>
               );
             })}
@@ -217,12 +220,13 @@ export default function SellerDashboardPage() {
 
       <main className="max-w-6xl mx-auto p-4">
         {seller?.status !== 'approved' && <div className="bg-amber-50 border border-amber-200 text-amber-700 rounded-2xl p-4 mb-4 text-sm">Your seller account is not approved yet. You can prepare products, but admin approval is required.</div>}
+        {activeSellerOrderCount > 0 && <Link to="/seller/dashboard/orders" className="block bg-orange-50 border border-orange-200 text-orange-800 rounded-2xl p-4 mb-4 text-sm font-bold">🔔 You have {activeSellerOrderCount} active product order{activeSellerOrderCount > 1 ? 's' : ''}. Click here to view and message customers.</Link>}
 
         {section === 'home' && (
           <>
             <div className="grid sm:grid-cols-3 gap-4 mb-5">
               <div className="bg-white rounded-2xl p-5 border"><p className="text-sm text-gray-500">Products</p><p className="text-3xl font-black">{products.length}</p></div>
-              <div className="bg-white rounded-2xl p-5 border"><p className="text-sm text-gray-500">Orders</p><p className="text-3xl font-black">{sellerOrders.length}</p></div>
+              <div className="bg-white rounded-2xl p-5 border relative"><p className="text-sm text-gray-500">Orders</p><p className="text-3xl font-black">{sellerOrders.length}</p>{activeSellerOrderCount > 0 && <span className="absolute top-4 right-4 rounded-full bg-red-500 text-white text-xs font-black px-2 py-1">{activeSellerOrderCount} active</span>}</div>
               <div className="bg-white rounded-2xl p-5 border"><p className="text-sm text-gray-500">Returns</p><p className="text-3xl font-black">{returns.length}</p></div>
               <div className="bg-white rounded-2xl p-5 border"><p className="text-sm text-gray-500">Cancellations</p><p className="text-3xl font-black">{cancellations.length}</p></div>
             </div>

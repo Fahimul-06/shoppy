@@ -7,6 +7,7 @@ import Order from '../models/Order.js';
 import PromoCode from '../models/PromoCode.js';
 import ReturnRequest from '../models/ReturnRequest.js';
 import CancellationRequest from '../models/CancellationRequest.js';
+import ChatMessage from '../models/ChatMessage.js';
 import { requireAdmin, signToken } from '../middleware/auth.js';
 const router = express.Router();
 const adminUser = (u) => ({ id: u.id, fullName: u.fullName, email: u.email, phone: u.phone, role: u.role });
@@ -182,6 +183,53 @@ router.patch('/returns/:id', requireAdmin, async (req, res) => {
   if (!returnRequest) return res.status(404).json({ message: 'Return request not found' });
   res.json({ message: 'Return request updated', returnRequest });
 });
+
+
+router.get('/messages', requireAdmin, async (_req, res) => {
+  const messages = await ChatMessage.find()
+    .populate({ path: 'seller', select: 'name shopName shopLogo email phone' })
+    .populate({ path: 'customer', select: 'fullName name email phone profilePhoto' })
+    .populate({ path: 'product', select: 'name image images' })
+    .populate({ path: 'order', select: 'orderNumber status paymentStatus createdAt' })
+    .sort({ createdAt: -1 });
+
+  const groups = new Map();
+  for (const message of messages) {
+    const key = `${message.order?._id || message.order}-${message.orderItem}-${message.seller?._id || message.seller}-${message.customer?._id || message.customer}`;
+    if (!groups.has(key)) {
+      groups.set(key, {
+        id: key,
+        order: message.order,
+        orderItem: message.orderItem,
+        seller: message.seller,
+        customer: message.customer,
+        product: message.product,
+        lastMessage: message,
+        messageCount: 0,
+        unreadForSeller: 0,
+        unreadForCustomer: 0,
+      });
+    }
+    const group = groups.get(key);
+    group.messageCount += 1;
+    if (!message.readBySeller) group.unreadForSeller += 1;
+    if (!message.readByCustomer) group.unreadForCustomer += 1;
+  }
+
+  res.json({ conversations: Array.from(groups.values()) });
+});
+
+router.get('/messages/:orderId/:orderItemId', requireAdmin, async (req, res) => {
+  const { orderId, orderItemId } = req.params;
+  const messages = await ChatMessage.find({ order: orderId, orderItem: orderItemId })
+    .populate({ path: 'seller', select: 'name shopName shopLogo email phone' })
+    .populate({ path: 'customer', select: 'fullName name email phone profilePhoto' })
+    .populate({ path: 'product', select: 'name image images' })
+    .populate({ path: 'order', select: 'orderNumber status paymentStatus createdAt' })
+    .sort({ createdAt: 1 });
+  res.json({ messages });
+});
+
 router.get('/promos', requireAdmin, async (_req, res) => res.json({ promos: await PromoCode.find().sort({ createdAt: -1 }) }));
 router.post('/promos', requireAdmin, async (req, res) => res.status(201).json({ promo: await PromoCode.create(req.body) }));
 router.put('/promos/:id', requireAdmin, async (req, res) => res.json({ promo: await PromoCode.findByIdAndUpdate(req.params.id, req.body, { new: true }) }));

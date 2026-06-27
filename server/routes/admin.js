@@ -455,6 +455,24 @@ function normalizePromoPayload(body = {}) {
   };
 }
 
+
+async function createPromoCustomerNotification(promo) {
+  if (!promo || !isPromoActive(promo)) return null;
+  const discountText = promo.discountType === 'percentage'
+    ? `${Number(promo.discountValue || 0)}% OFF`
+    : `৳${Number(promo.discountValue || 0).toLocaleString()} OFF`;
+  return CustomerNotification.create({
+    user: null,
+    audience: 'customers',
+    type: 'promo',
+    title: `New voucher: ${promo.code}`,
+    message: promo.description || `Use promo code ${promo.code} to get ${discountText}.`,
+    link: '/coupons',
+    promo: promo._id,
+    active: true,
+  });
+}
+
 const promoPopulate = [
   { path: 'sellers', select: 'name shopName shopLogo email phone status' },
   { path: 'products', select: 'name image price category subcategory childCategory brand seller' },
@@ -473,23 +491,17 @@ router.post('/promos', requireAdmin, async (req, res) => {
 
   const promo = await PromoCode.create(payload);
   const populatedPromo = await PromoCode.findById(promo._id).populate(promoPopulate);
-  if (isPromoActive(promo)) {
-    await CustomerNotification.create({
-      user: null,
-      audience: 'customers',
-      type: 'promo',
-      title: `New promo: ${promo.code}`,
-      message: promo.description || `Use code ${promo.code} to get ${promo.discountType === 'percentage' ? `${promo.discountValue}%` : `৳${promo.discountValue}`} off.`,
-      link: '/coupons',
-      promo: promo._id,
-    });
-  }
+  await createPromoCustomerNotification(promo);
   res.status(201).json({ promo: populatedPromo });
 });
 
 router.put('/promos/:id', requireAdmin, async (req, res) => {
   const payload = normalizePromoPayload(req.body);
+  const before = await PromoCode.findById(req.params.id);
   const promo = await PromoCode.findByIdAndUpdate(req.params.id, payload, { new: true }).populate(promoPopulate);
+  if (promo && promo.active !== false && before?.active === false) {
+    await createPromoCustomerNotification(promo);
+  }
   res.json({ promo });
 });
 

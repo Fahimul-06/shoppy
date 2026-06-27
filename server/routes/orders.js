@@ -2,30 +2,60 @@ import express from 'express';
 import mongoose from 'mongoose';
 import Order from '../models/Order.js';
 import Product from '../models/Product.js';
+import PromoCode from '../models/PromoCode.js';
 import ReturnRequest from '../models/ReturnRequest.js';
 import CancellationRequest from '../models/CancellationRequest.js';
 import ChatMessage from '../models/ChatMessage.js';
 import ProductReview from '../models/ProductReview.js';
 import { requireUser } from '../middleware/auth.js';
+import { calculatePromoDiscount, isPromoActive } from '../utils/promo.js';
 const router = express.Router();
 
 router.post('/', requireUser, async (req, res) => {
-  const { subtotal, discount_amount, delivery_fee, total_amount, payment_method, shipping_address, items } = req.body;
+  const { delivery_fee, payment_method, shipping_address, items } = req.body;
+  const promoCode = String(req.body?.promo_code || req.body?.promoCode || '').trim().toUpperCase();
   if (!Array.isArray(items) || items.length === 0) return res.status(400).json({ message: 'Order items are required' });
+
   const orderItems = [];
+  const promoItems = [];
   for (const item of items) {
     const productId = item.product_id || item.productId;
     if (!mongoose.isValidObjectId(productId)) return res.status(400).json({ message: `Invalid MongoDB productId: ${productId}` });
-    const product = await Product.findById(productId);
+    const product = await Product.findById(productId).populate('seller', 'name shopName shopLogo status');
     if (!product) return res.status(404).json({ message: `Product not found: ${productId}` });
+    const quantity = Math.max(1, Number(item.quantity || 1));
+    const unitPrice = Number(item.unit_price ?? item.unitPrice ?? product.price ?? 0);
+    const totalPrice = unitPrice * quantity;
     orderItems.push({
       product: product.id,
       productSnapshot: item.product_snapshot || item.productSnapshot || product.toJSON(),
-      quantity: Number(item.quantity),
-      unitPrice: Number(item.unit_price ?? item.unitPrice),
-      totalPrice: Number(item.total_price ?? item.totalPrice),
+      quantity,
+      unitPrice,
+      totalPrice,
     });
+    promoItems.push({ product, quantity, unit_price: unitPrice, total_price: totalPrice });
   }
+
+  const subtotal = orderItems.reduce((sum, item) => sum + Number(item.totalPrice || 0), 0);
+  let discountAmount = 0;
+  let promo = null;
+
+  if (promoCode) {
+    promo = await PromoCode.findOne({ code: promoCode }).populate([
+      { path: 'sellers', select: 'name shopName shopLogo status' },
+      { path: 'products', select: 'name image price category subcategory childCategory brand seller' },
+    ]);
+    if (!promo || !isPromoActive(promo)) return res.status(400).json({ message: 'Promo code is invalid or expired' });
+    if (subtotal < Number(promo.minOrderAmount || 0)) {
+      return res.status(400).json({ message: `Minimum order amount is ৳${Number(promo.minOrderAmount || 0).toLocaleString()}` });
+    }
+    const result = calculatePromoDiscount(promo, promoItems);
+    if (result.discount <= 0 || result.eligibleItems.length === 0) {
+      return res.status(400).json({ message: 'This promo does not apply to the selected products' });
+    }
+    discountAmount = result.discount;
+  }
+
   const defaultAddress = (req.user.addresses || []).find((a) => a.isDefault) || (req.user.addresses || [])[0];
   const shippingAddress = shipping_address && Object.keys(shipping_address || {}).length
     ? shipping_address
@@ -37,16 +67,25 @@ router.post('/', requireUser, async (req, res) => {
   if (!shippingAddress?.phone) shippingAddress.phone = req.user.phone || '';
   if (!shippingAddress?.address) return res.status(400).json({ message: 'Delivery address is required before placing order' });
 
+  const deliveryFee = Number(delivery_fee || 0);
+  const totalAmount = Math.max(0, subtotal - discountAmount) + deliveryFee;
   const order = await Order.create({
     user: req.user.id,
     items: orderItems,
     subtotal,
-    discountAmount: discount_amount ?? 0,
-    deliveryFee: delivery_fee ?? 0,
-    totalAmount: total_amount,
+    discountAmount,
+    promoCode: promoCode || '',
+    promo: promo?._id || null,
+    deliveryFee,
+    totalAmount,
     paymentMethod: payment_method,
     shippingAddress,
   });
+
+  if (promo) {
+    await PromoCode.updateOne({ _id: promo._id }, { $inc: { usedCount: 1 } });
+  }
+
   res.status(201).json({ order });
 });
 

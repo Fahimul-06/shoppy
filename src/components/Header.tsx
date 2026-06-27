@@ -252,7 +252,7 @@ export default function Header() {
     <header className={`sticky top-0 z-50 bg-white transition-shadow duration-200 ${scrolled ? 'shadow-md' : 'shadow-sm'}`}>
       {/* Promo bar */}
       <div className="bg-orange-500 text-white text-center text-xs py-1.5 px-4 hidden sm:block">
-        Free delivery on orders over ৳2000 &nbsp;|&nbsp; Use code <strong>CARTUP10</strong> for 10% off!
+        Free delivery on orders over ৳2000 &nbsp;|&nbsp; Use code <strong>SHOPPY10</strong> for 10% off!
       </div>
 
       {/* Main row */}
@@ -271,7 +271,7 @@ export default function Header() {
               <ShoppingCart size={18} className="text-white" />
             </div>
             <span className="text-xl font-bold text-gray-900 hidden sm:block">
-              Cart<span className="text-orange-500">up</span>
+              Shoppy
             </span>
           </Link>
 
@@ -311,7 +311,7 @@ export default function Header() {
               className="hidden md:flex items-center gap-1.5 px-3 py-2 text-sm text-orange-600 font-semibold hover:bg-orange-50 rounded-lg transition-colors border border-orange-200 hover:border-orange-400"
             >
               <Store size={16} />
-              <span className="hidden lg:block">Sell on Cartup</span>
+              <span className="hidden lg:block">Sell on Shoppy</span>
             </Link>
             <Link to="/notifications" className="relative hidden sm:flex items-center gap-1.5 px-3 py-2 text-sm text-gray-700 hover:text-orange-500 hover:bg-orange-50 rounded-lg transition-colors" title="Notifications">
               <Bell size={18} />
@@ -380,7 +380,7 @@ export default function Header() {
             })}
             <hr className="border-gray-100 my-2" />
             <Link to="/seller/login" className="flex items-center gap-2 px-3 py-2 text-sm text-orange-600 font-semibold hover:bg-orange-50 rounded-lg transition-colors" onClick={() => setMobileMenuOpen(false)}>
-              <Store size={15} />Sell on Cartup
+              <Store size={15} />Sell on Shoppy
             </Link>
             <Link to="/notifications" className="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:text-orange-500 hover:bg-orange-50 rounded-lg transition-colors" onClick={() => setMobileMenuOpen(false)}>
               <Bell size={15} />Notifications

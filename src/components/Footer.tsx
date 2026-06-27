@@ -10,9 +10,9 @@ const customerCare = [
   { label: 'Order Tracking', to: '/account' },
 ];
 const aboutLinks = [
-  { label: 'About Cartup', to: '/account' },
+  { label: 'About Shoppy', to: '/account' },
   { label: 'Careers', to: '/account' },
-  { label: 'Sell on Cartup', to: '/seller/register' },
+  { label: 'Sell on Shoppy', to: '/seller/register' },
   { label: 'Blog', to: '/account' },
   { label: 'Press Room', to: '/account' },
 ];
@@ -24,7 +24,7 @@ export default function Footer() {
       <div className="bg-orange-500">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-5 flex flex-col sm:flex-row items-center justify-between gap-4">
           <div>
-            <h3 className="text-white font-bold text-lg">Download the Cartup App</h3>
+            <h3 className="text-white font-bold text-lg">Download the Shoppy App</h3>
             <p className="text-orange-100 text-sm">Get exclusive app-only deals and faster checkout</p>
           </div>
           <div className="flex gap-3">
@@ -53,7 +53,7 @@ export default function Footer() {
               <div className="w-8 h-8 bg-orange-500 rounded-lg flex items-center justify-center">
                 <ShoppingCart size={16} className="text-white" />
               </div>
-              <span className="text-white font-bold text-xl">Cart<span className="text-orange-500">up</span></span>
+              <span className="text-white font-bold text-xl">Shoppy</span>
             </Link>
             <p className="text-sm leading-relaxed mb-4">
               Bangladesh's leading online shopping destination. Shop from thousands of products across all categories.
@@ -69,7 +69,7 @@ export default function Footer() {
               </div>
               <div className="flex items-center gap-2">
                 <Mail size={15} className="text-orange-400 flex-shrink-0" />
-                <span>support@cartup.com</span>
+                <span>support@shoppy.com</span>
               </div>
             </div>
           </div>
@@ -88,7 +88,7 @@ export default function Footer() {
 
           {/* About */}
           <div>
-            <h4 className="text-white font-bold mb-4">About Cartup</h4>
+            <h4 className="text-white font-bold mb-4">About Shoppy</h4>
             <ul className="space-y-2.5">
               {aboutLinks.map((item) => (
                 <li key={item.label}>
@@ -123,7 +123,7 @@ export default function Footer() {
       {/* Bottom bar */}
       <div className="border-t border-gray-800">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex flex-col sm:flex-row items-center justify-between gap-3">
-          <p className="text-xs text-gray-500">© 2024 Cartup. All rights reserved.</p>
+          <p className="text-xs text-gray-500">© 2024 Shoppy. All rights reserved.</p>
           <div className="flex items-center gap-4">
             {['Privacy Policy', 'Terms & Conditions', 'Cookie Policy', 'Sitemap'].map((link) => (
               <Link key={link} to="/account" className="text-xs text-gray-500 hover:text-gray-300 transition-colors">

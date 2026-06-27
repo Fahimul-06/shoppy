@@ -25,7 +25,9 @@ export default function HeroBanner() {
   }, [next]);
 
   return (
-    <div className="relative overflow-hidden bg-gray-900 h-[240px] sm:h-[360px] lg:h-[460px]">
+    <section className="bg-gray-50 pb-4">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6">
+        <div className="relative overflow-hidden bg-gray-900 h-[180px] sm:h-[240px] lg:h-[300px] rounded-2xl shadow-sm">
       {heroSlides.map((slide, index) => (
         <div
           key={slide.id}
@@ -70,7 +72,7 @@ export default function HeroBanner() {
       </button>
 
       {/* Dots */}
-      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-2 z-10">
+      <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-2 z-10">
         {heroSlides.map((_, index) => (
           <button
             key={index}
@@ -82,6 +84,8 @@ export default function HeroBanner() {
           />
         ))}
       </div>
-    </div>
+        </div>
+      </div>
+    </section>
   );
 }

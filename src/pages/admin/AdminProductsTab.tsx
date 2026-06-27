@@ -2,7 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { Check, Edit2, Loader2, Plus, Trash2, X } from 'lucide-react';
 import { api, getToken } from '../../lib/api';
 import { categories } from '../../data/categories';
-import ImageUploader from '../../components/forms/ImageUploader';
+import MultiImageUploader from '../../components/forms/MultiImageUploader';
+import ProductVariantFields from '../../components/forms/ProductVariantFields';
 import CategoryDropdowns from '../../components/forms/CategoryDropdowns';
 
 type Product = any;
@@ -12,6 +13,9 @@ const EMPTY = {
   price: '',
   originalPrice: '',
   image: '',
+  images: [],
+  colors: '',
+  sizes: '',
   category: categories[0]?.slug || 'all',
   subcategory: '',
   childCategory: '',
@@ -58,6 +62,9 @@ export default function AdminProductsTab() {
       price: p.price || '',
       originalPrice: p.originalPrice || '',
       image: p.image || p.images?.[0] || '',
+      images: Array.isArray(p.images) && p.images.length ? p.images : [p.image].filter(Boolean),
+      colors: (p.colorOptions || []).join('\n'),
+      sizes: (p.sizeOptions || []).join('\n'),
       category: p.category || EMPTY.category,
       subcategory: p.subcategory || p.subCategory || '',
       childCategory: p.childCategory || p.subSubCategory || '',
@@ -75,6 +82,7 @@ export default function AdminProductsTab() {
 
   const save = async () => {
     try {
+      const imageList = Array.isArray(form.images) && form.images.length ? form.images.filter(Boolean) : [form.image].filter(Boolean);
       const payload = {
         ...form,
         price: Number(form.price),
@@ -82,7 +90,10 @@ export default function AdminProductsTab() {
         stock: Number(form.stock),
         discount: form.discount ? Number(form.discount) : undefined,
         features: String(form.features || '').split('\n').map((x) => x.trim()).filter(Boolean),
-        images: [form.image].filter(Boolean),
+        image: imageList[0] || form.image,
+        images: imageList,
+        colorOptions: String(form.colors || '').split(/\n|,/).map((x) => x.trim()).filter(Boolean),
+        sizeOptions: String(form.sizes || '').split(/\n|,/).map((x) => x.trim()).filter(Boolean),
         badge: form.badge || null,
         subcategory: form.subcategory || '',
         childCategory: form.childCategory || '',
@@ -164,8 +175,9 @@ export default function AdminProductsTab() {
                 <option value="new">New badge</option>
                 <option value="hot">Hot badge</option>
               </select>
-              <div className="sm:col-span-2"><ImageUploader value={form.image} token={getToken('admin')} onChange={(url) => setForm({ ...form, image: url })} /></div>
-              <input className="border rounded-xl p-3 text-sm sm:col-span-2" placeholder="Or paste Image URL" value={form.image} onChange={(e) => setForm({ ...form, image: e.target.value })} />
+              <div className="sm:col-span-2"><MultiImageUploader value={form.images || []} token={getToken('admin')} onChange={(urls) => setForm({ ...form, images: urls, image: urls[0] || '' })} /></div>
+              <input className="border rounded-xl p-3 text-sm sm:col-span-2" placeholder="Or paste main Image URL" value={form.image} onChange={(e) => setForm({ ...form, image: e.target.value, images: e.target.value ? [e.target.value, ...(form.images || []).filter((url: string) => url !== e.target.value)] : form.images })} />
+              <ProductVariantFields colors={form.colors} sizes={form.sizes} onChange={(next) => setForm({ ...form, ...next })} />
               <textarea className="border rounded-xl p-3 text-sm sm:col-span-2" placeholder="Description" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
               <textarea className="border rounded-xl p-3 text-sm sm:col-span-2" placeholder="Features, one per line" value={form.features} onChange={(e) => setForm({ ...form, features: e.target.value })} />
             </div>

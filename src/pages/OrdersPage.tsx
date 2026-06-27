@@ -11,6 +11,7 @@ const orderId = (order: any) => order.id || order._id;
 const itemId = (item: any) => item.id || item._id;
 const itemName = (item: any) => item?.product?.name || item?.productSnapshot?.name || 'Product';
 const itemImage = (item: any) => item?.product?.image || item?.productSnapshot?.image || item?.productSnapshot?.images?.[0] || 'https://placehold.co/120x120?text=Product';
+const itemVariantText = (item: any) => [item?.selectedColor && `Colour: ${item.selectedColor}`, item?.selectedSize && `Size: ${item.selectedSize}`].filter(Boolean).join(' • ');
 const isCancelled = (item: any) => item?.cancellationStatus === 'cancelled';
 const isUnpaid = (order: any) => ['pending', 'failed', 'unpaid'].includes(String(order.paymentStatus || 'pending').toLowerCase());
 const isToShip = (order: any) => ['pending', 'processing'].includes(String(order.status || '').toLowerCase()) && order.status !== 'cancelled';
@@ -181,7 +182,7 @@ export default function OrdersPage(){
             <div className="flex flex-wrap gap-3 justify-between border-b pb-3 mb-4"><div><p className="font-black">{order.orderNumber}</p><p className="text-xs text-gray-400">{new Date(order.createdAt).toLocaleString()}</p></div><div className="flex flex-wrap gap-2 justify-end"><span className="px-3 py-1 rounded-full bg-gray-100 text-gray-700 text-xs font-bold capitalize">Order: {order.status}</span><span className="px-3 py-1 rounded-full bg-orange-50 text-orange-700 text-xs font-bold capitalize">Payment: {order.paymentStatus || 'pending'}</span></div></div>
             <div className="flex flex-wrap items-center gap-3">
               <img src={itemImage(item)} className="w-16 h-16 rounded-xl object-cover bg-gray-100"/>
-              <div className="flex-1 min-w-[200px]"><p className="font-black text-sm">{itemName(item)}</p><p className="text-xs text-gray-500">Qty: {item.quantity} • ৳{Number(item.totalPrice||0).toLocaleString()}</p>{seller && <p className="text-xs text-gray-400 mt-1">Shop: {shopName(seller)} • Seller: {sellerName(seller)}</p>}</div>
+              <div className="flex-1 min-w-[200px]"><p className="font-black text-sm">{itemName(item)}</p><p className="text-xs text-gray-500">Qty: {item.quantity} • ৳{Number(item.totalPrice||0).toLocaleString()}</p>{itemVariantText(item) && <p className="text-xs text-orange-600 font-semibold mt-0.5">{itemVariantText(item)}</p>}{seller && <p className="text-xs text-gray-400 mt-1">Shop: {shopName(seller)} • Seller: {sellerName(seller)}</p>}</div>
               <div className="flex flex-wrap gap-2 justify-end">
                 {activeTab === 'pay' && <button onClick={()=>alert('Payment gateway is not connected yet. This button is ready for bKash/Nagad/card integration.')} className="rounded-xl bg-orange-500 text-white px-4 py-2 text-sm font-bold">Pay Now</button>}
                 {activeTab === 'ship' && <span className="inline-flex items-center gap-2 rounded-xl bg-blue-50 text-blue-700 px-4 py-2 text-sm font-bold"><Clock3 size={16}/> Waiting for shipment</span>}

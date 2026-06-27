@@ -49,7 +49,7 @@ export default function CartPage() {
       const response = await api.post<{ promo: { code: string }; discount: number; eligibleItemCount: number }>('/promos/validate', {
         code,
         items: selectedItems.map(({ product, quantity }) => ({
-          product_id: product.id,
+          product_id: product.baseProductId || product.id,
           product_snapshot: product as unknown as Record<string, unknown>,
           quantity,
           unit_price: product.price,
@@ -139,12 +139,12 @@ export default function CartPage() {
                       className="w-4 h-4 accent-orange-500"
                     />
                   </label>
-                  <Link to={`/product/${product.id}`} className="w-24 h-24 flex-shrink-0 rounded-xl overflow-hidden bg-gray-50 border border-gray-100">
+                  <Link to={`/product/${product.baseProductId || product.id}`} className="w-24 h-24 flex-shrink-0 rounded-xl overflow-hidden bg-gray-50 border border-gray-100">
                     <img src={product.image} alt={product.name} className="w-full h-full object-cover hover:scale-105 transition-transform" />
                   </Link>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-start justify-between gap-2">
-                      <Link to={`/product/${product.id}`} className="text-sm font-medium text-gray-800 hover:text-orange-500 transition-colors line-clamp-2 leading-snug">
+                      <Link to={`/product/${product.baseProductId || product.id}`} className="text-sm font-medium text-gray-800 hover:text-orange-500 transition-colors line-clamp-2 leading-snug">
                         {product.name}
                       </Link>
                       <button onClick={() => removeItem(product.id)} className="flex-shrink-0 w-7 h-7 rounded-lg hover:bg-red-50 flex items-center justify-center text-gray-400 hover:text-red-500 transition-colors">
@@ -152,6 +152,11 @@ export default function CartPage() {
                       </button>
                     </div>
                     {product.brand && <p className="text-xs text-gray-400 mt-0.5">{product.brand}</p>}
+                    {(product.selectedColor || product.selectedSize) && (
+                      <p className="text-xs text-orange-600 font-semibold mt-1">
+                        {[product.selectedColor && `Colour: ${product.selectedColor}`, product.selectedSize && `Size: ${product.selectedSize}`].filter(Boolean).join(' • ')}
+                      </p>
+                    )}
                     <div className="flex items-center justify-between mt-3">
                       <div className="flex items-center border border-gray-200 rounded-xl overflow-hidden">
                         <button onClick={() => updateQuantity(product.id, quantity - 1)} className="w-8 h-8 flex items-center justify-center text-gray-600 hover:bg-gray-50 transition-colors">

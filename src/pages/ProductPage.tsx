@@ -16,6 +16,8 @@ export default function ProductPage() {
   const [loading, setLoading] = useState(true);
   const [activeImage, setActiveImage] = useState(0);
   const [quantity, setQuantity] = useState(1);
+  const [selectedColor, setSelectedColor] = useState('');
+  const [selectedSize, setSelectedSize] = useState('');
   const [activeTab, setActiveTab] = useState<'description' | 'specs' | 'reviews'>('description');
   const [added, setAdded] = useState(false);
   const [relatedProducts, setRelatedProducts] = useState<Product[]>([]);
@@ -69,6 +71,12 @@ export default function ProductPage() {
     return () => { alive = false; };
   }, [product?.id]);
 
+  useEffect(() => {
+    setSelectedColor('');
+    setSelectedSize('');
+    setActiveImage(0);
+  }, [product?.id]);
+
   if (loading) {
     return <div className="min-h-[60vh] flex items-center justify-center text-gray-400">Loading product...</div>;
   }
@@ -89,6 +97,10 @@ export default function ProductPage() {
   const displayOriginalPrice = getDisplayOriginalPrice(product);
   const displayDiscount = getSaleDiscount(product);
   const productForCart = withSalePricing(product);
+  const colorOptions = Array.isArray(product.colorOptions) ? product.colorOptions.filter(Boolean) : [];
+  const sizeOptions = Array.isArray(product.sizeOptions) ? product.sizeOptions.filter(Boolean) : [];
+  const variantKey = `${product.id}::${selectedColor || 'no-color'}::${selectedSize || 'no-size'}`;
+  const productForCartWithOptions = { ...productForCart, id: variantKey, baseProductId: product.id, selectedColor, selectedSize };
 
   const seller = product.seller && typeof product.seller === 'object' ? product.seller : null;
   const sellerShopLogo = seller?.shopLogo || '';
@@ -110,7 +122,9 @@ export default function ProductPage() {
   const related = (relatedProducts.length ? relatedProducts : clientRelated).filter((p) => p.id !== product.id).slice(0, 10);
 
   const handleAddToCart = () => {
-    for (let i = 0; i < quantity; i++) addItem(productForCart);
+    if (colorOptions.length && !selectedColor) { alert('Please choose a colour.'); return; }
+    if (sizeOptions.length && !selectedSize) { alert('Please choose a size.'); return; }
+    for (let i = 0; i < quantity; i++) addItem(productForCartWithOptions);
     setAdded(true);
     setTimeout(() => setAdded(false), 2000);
   };
@@ -229,6 +243,45 @@ export default function ProductPage() {
               </div>
             )}
 
+            {(colorOptions.length > 0 || sizeOptions.length > 0) && (
+              <div className="space-y-4 bg-white rounded-2xl border border-gray-100 p-4">
+                {colorOptions.length > 0 && (
+                  <div>
+                    <p className="text-sm font-bold text-gray-800 mb-2">Choose Colour</p>
+                    <div className="flex flex-wrap gap-2">
+                      {colorOptions.map((color) => (
+                        <button
+                          key={color}
+                          type="button"
+                          onClick={() => setSelectedColor(color)}
+                          className={`px-4 py-2 rounded-xl border text-sm font-bold transition ${selectedColor === color ? 'border-orange-500 bg-orange-50 text-orange-600' : 'border-gray-200 text-gray-700 hover:border-orange-300'}`}
+                        >
+                          {color}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {sizeOptions.length > 0 && (
+                  <div>
+                    <p className="text-sm font-bold text-gray-800 mb-2">Choose Size</p>
+                    <div className="flex flex-wrap gap-2">
+                      {sizeOptions.map((size) => (
+                        <button
+                          key={size}
+                          type="button"
+                          onClick={() => setSelectedSize(size)}
+                          className={`px-4 py-2 rounded-xl border text-sm font-bold transition ${selectedSize === size ? 'border-orange-500 bg-orange-50 text-orange-600' : 'border-gray-200 text-gray-700 hover:border-orange-300'}`}
+                        >
+                          {size}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Quantity + Actions */}
             <div className="flex items-center gap-3">
               <div className="flex items-center border border-gray-200 rounded-xl overflow-hidden">
@@ -265,7 +318,7 @@ export default function ProductPage() {
 
             <Link
               to="/checkout"
-              onClick={() => addItem(productForCart)}
+              onClick={(event) => { if (colorOptions.length && !selectedColor) { event.preventDefault(); alert('Please choose a colour.'); return; } if (sizeOptions.length && !selectedSize) { event.preventDefault(); alert('Please choose a size.'); return; } addItem(productForCartWithOptions); }}
               className="block w-full text-center border-2 border-orange-500 text-orange-500 hover:bg-orange-500 hover:text-white font-bold py-3 rounded-xl transition-all duration-200 active:scale-95"
             >
               Buy Now

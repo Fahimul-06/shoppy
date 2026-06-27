@@ -15,6 +15,11 @@ export interface Product {
   originalPrice?: number;
   image: string;
   images?: string[];
+  colorOptions?: string[];
+  sizeOptions?: string[];
+  selectedColor?: string;
+  selectedSize?: string;
+  baseProductId?: string;
   category: string;
   subcategory?: string;
   childCategory?: string;

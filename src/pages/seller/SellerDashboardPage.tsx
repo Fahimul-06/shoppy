@@ -4,6 +4,8 @@ import { Check, Edit2, Home, Loader2, LogOut, MessageCircle, Package, Plus, Rota
 import { api, clearSession, getSessionUser, getToken } from '../../lib/api';
 import { categories } from '../../data/categories';
 import ImageUploader from '../../components/forms/ImageUploader';
+import MultiImageUploader from '../../components/forms/MultiImageUploader';
+import ProductVariantFields from '../../components/forms/ProductVariantFields';
 import PasswordOtpPanel from '../../components/forms/PasswordOtpPanel';
 import PhoneOtpPanel from '../../components/forms/PhoneOtpPanel';
 import CategoryDropdowns from '../../components/forms/CategoryDropdowns';
@@ -14,6 +16,9 @@ const EMPTY = {
   price: '',
   originalPrice: '',
   image: '',
+  images: [],
+  colors: '',
+  sizes: '',
   category: categories[0]?.slug || 'all',
   subcategory: '',
   childCategory: '',
@@ -142,18 +147,21 @@ export default function SellerDashboardPage() {
 
   const open = (p?: any) => {
     setEditing(p || null);
-    setForm(p ? { ...EMPTY, ...p, image: p.image || p.images?.[0] || '', subcategory: p.subcategory || p.subCategory || '', childCategory: p.childCategory || p.subSubCategory || '', features: (p.features || []).join('\n') } : { ...EMPTY });
+    setForm(p ? { ...EMPTY, ...p, image: p.image || p.images?.[0] || '', images: Array.isArray(p.images) && p.images.length ? p.images : [p.image].filter(Boolean), colors: (p.colorOptions || []).join('\n'), sizes: (p.sizeOptions || []).join('\n'), subcategory: p.subcategory || p.subCategory || '', childCategory: p.childCategory || p.subSubCategory || '', features: (p.features || []).join('\n') } : { ...EMPTY });
     setModal(true);
   };
 
   const save = async () => {
+    const imageList = Array.isArray(form.images) && form.images.length ? form.images.filter(Boolean) : [form.image].filter(Boolean);
     const payload = {
       ...form,
       price: Number(form.price),
       originalPrice: form.originalPrice ? Number(form.originalPrice) : undefined,
       stock: Number(form.stock),
-      image: form.image,
-      images: [form.image].filter(Boolean),
+      image: imageList[0] || form.image,
+      images: imageList,
+      colorOptions: String(form.colors || '').split(/\n|,/).map((x) => x.trim()).filter(Boolean),
+      sizeOptions: String(form.sizes || '').split(/\n|,/).map((x) => x.trim()).filter(Boolean),
       features: String(form.features || '').split('\n').map((x) => x.trim()).filter(Boolean),
       subcategory: form.subcategory || '',
       childCategory: form.childCategory || '',
@@ -456,7 +464,7 @@ export default function SellerDashboardPage() {
         </div>
       </div>}
 
-      {modal && <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"><div className="bg-white rounded-2xl p-5 max-w-2xl w-full max-h-[90vh] overflow-y-auto"><div className="flex justify-between mb-3"><h3 className="font-black">{editing ? 'Edit Product' : 'Add Product'}</h3><button onClick={() => setModal(false)}><X /></button></div><div className="grid sm:grid-cols-2 gap-3"><input className="border rounded-xl p-3 text-sm" placeholder="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /><input className="border rounded-xl p-3 text-sm" placeholder="Price" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} /><input className="border rounded-xl p-3 text-sm" placeholder="Original price" value={form.originalPrice} onChange={(e) => setForm({ ...form, originalPrice: e.target.value })} /><input className="border rounded-xl p-3 text-sm" placeholder="Brand" value={form.brand} onChange={(e) => setForm({ ...form, brand: e.target.value })} /><div className="sm:col-span-2"><ImageUploader value={form.image} token={getToken('seller')} onChange={(url) => setForm({ ...form, image: url })} /></div><input className="border rounded-xl p-3 text-sm sm:col-span-2" placeholder="Or paste Image URL" value={form.image} onChange={(e) => setForm({ ...form, image: e.target.value })} /><div className="sm:col-span-2"><CategoryDropdowns category={form.category} subcategory={form.subcategory} childCategory={form.childCategory} onChange={(next) => setForm({ ...form, ...next })} /></div><input className="border rounded-xl p-3 text-sm" placeholder="Stock" value={form.stock} onChange={(e) => setForm({ ...form, stock: e.target.value })} /><textarea className="border rounded-xl p-3 text-sm sm:col-span-2" placeholder="Description" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /><textarea className="border rounded-xl p-3 text-sm sm:col-span-2" placeholder="Features, one per line" value={form.features} onChange={(e) => setForm({ ...form, features: e.target.value })} /></div><button onClick={save} className="mt-4 w-full bg-orange-500 text-white rounded-xl py-3 font-bold">Save Product</button></div></div>}
+      {modal && <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"><div className="bg-white rounded-2xl p-5 max-w-2xl w-full max-h-[90vh] overflow-y-auto"><div className="flex justify-between mb-3"><h3 className="font-black">{editing ? 'Edit Product' : 'Add Product'}</h3><button onClick={() => setModal(false)}><X /></button></div><div className="grid sm:grid-cols-2 gap-3"><input className="border rounded-xl p-3 text-sm" placeholder="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /><input className="border rounded-xl p-3 text-sm" placeholder="Price" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} /><input className="border rounded-xl p-3 text-sm" placeholder="Original price" value={form.originalPrice} onChange={(e) => setForm({ ...form, originalPrice: e.target.value })} /><input className="border rounded-xl p-3 text-sm" placeholder="Brand" value={form.brand} onChange={(e) => setForm({ ...form, brand: e.target.value })} /><div className="sm:col-span-2"><MultiImageUploader value={form.images || []} token={getToken('seller')} onChange={(urls) => setForm({ ...form, images: urls, image: urls[0] || '' })} /></div><input className="border rounded-xl p-3 text-sm sm:col-span-2" placeholder="Or paste main Image URL" value={form.image} onChange={(e) => setForm({ ...form, image: e.target.value, images: e.target.value ? [e.target.value, ...(form.images || []).filter((url: string) => url !== e.target.value)] : form.images })} /><ProductVariantFields colors={form.colors} sizes={form.sizes} onChange={(next) => setForm({ ...form, ...next })} /><div className="sm:col-span-2"><CategoryDropdowns category={form.category} subcategory={form.subcategory} childCategory={form.childCategory} onChange={(next) => setForm({ ...form, ...next })} /></div><input className="border rounded-xl p-3 text-sm" placeholder="Stock" value={form.stock} onChange={(e) => setForm({ ...form, stock: e.target.value })} /><textarea className="border rounded-xl p-3 text-sm sm:col-span-2" placeholder="Description" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /><textarea className="border rounded-xl p-3 text-sm sm:col-span-2" placeholder="Features, one per line" value={form.features} onChange={(e) => setForm({ ...form, features: e.target.value })} /></div><button onClick={save} className="mt-4 w-full bg-orange-500 text-white rounded-xl py-3 font-bold">Save Product</button></div></div>}
     </div>
   );
 }

@@ -79,7 +79,9 @@ export default function CheckoutPage() {
       const response = await api.post<{ promo: any; discount: number; eligibleItemCount: number }>('/promos/validate', {
         code,
         items: checkoutItems.map(({ product, quantity }) => ({
-          product_id: product.id,
+          product_id: product.baseProductId || product.id,
+          selected_color: product.selectedColor || '',
+          selected_size: product.selectedSize || '',
           product_snapshot: product as unknown as Record<string, unknown>,
           quantity,
           unit_price: product.price,
@@ -135,7 +137,9 @@ export default function CheckoutPage() {
         card_type: cardType,
         shipping_address: address,
         items: checkoutItems.map(({ product, quantity }) => ({
-          product_id: product.id,
+          product_id: product.baseProductId || product.id,
+          selected_color: product.selectedColor || '',
+          selected_size: product.selectedSize || '',
           product_snapshot: product as unknown as Record<string, unknown>,
           quantity,
           unit_price: product.price,

@@ -15,30 +15,32 @@ type CartAction =
   | { type: 'TOGGLE_CART' }
   | { type: 'CLOSE_CART' };
 
+const cartKey = (product: Product) => product.id;
+
 const cartReducer = (state: CartState, action: CartAction): CartState => {
   switch (action.type) {
     case 'ADD_ITEM': {
-      const existing = state.items.find((i) => i.product.id === action.product.id);
+      const existing = state.items.find((i) => cartKey(i.product) === cartKey(action.product));
       if (existing) {
         return {
           ...state,
           items: state.items.map((i) =>
-            i.product.id === action.product.id ? { ...i, quantity: i.quantity + 1 } : i
+            cartKey(i.product) === cartKey(action.product) ? { ...i, quantity: i.quantity + 1 } : i
           ),
         };
       }
       return { ...state, items: [...state.items, { product: action.product, quantity: 1 }] };
     }
     case 'REMOVE_ITEM':
-      return { ...state, items: state.items.filter((i) => i.product.id !== action.productId) };
+      return { ...state, items: state.items.filter((i) => cartKey(i.product) !== action.productId) };
     case 'UPDATE_QUANTITY': {
       if (action.quantity <= 0) {
-        return { ...state, items: state.items.filter((i) => i.product.id !== action.productId) };
+        return { ...state, items: state.items.filter((i) => cartKey(i.product) !== action.productId) };
       }
       return {
         ...state,
         items: state.items.map((i) =>
-          i.product.id === action.productId ? { ...i, quantity: action.quantity } : i
+          cartKey(i.product) === action.productId ? { ...i, quantity: action.quantity } : i
         ),
       };
     }
@@ -46,7 +48,7 @@ const cartReducer = (state: CartState, action: CartAction): CartState => {
       return { ...state, items: [], isOpen: false };
     case 'REMOVE_ITEMS': {
       const removeSet = new Set(action.productIds);
-      return { ...state, items: state.items.filter((i) => !removeSet.has(i.product.id)), isOpen: false };
+      return { ...state, items: state.items.filter((i) => !removeSet.has(cartKey(i.product))), isOpen: false };
     }
     case 'TOGGLE_CART':
       return { ...state, isOpen: !state.isOpen };

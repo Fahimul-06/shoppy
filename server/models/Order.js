@@ -6,6 +6,9 @@ const orderItemSchema = new mongoose.Schema({
   quantity: { type: Number, required: true, min: 1 },
   unitPrice: { type: Number, required: true },
   totalPrice: { type: Number, required: true },
+  cancellationStatus: { type: String, enum: ['none', 'cancelled'], default: 'none' },
+  cancelReason: String,
+  cancelledAt: Date,
 }, { _id: true });
 const orderSchema = new mongoose.Schema({
   orderNumber: { type: String, unique: true, index: true },

@@ -93,3 +93,13 @@ export async function requestReturn(payload: { orderId: string; orderItemId: str
   const { returnRequest } = await api.post<{ returnRequest: any }>('/orders/returns', payload, getToken('user'));
   return returnRequest;
 }
+
+export async function fetchUserCancellations() {
+  const { cancellations } = await api.get<{ cancellations: any[] }>('/orders/cancellations/my', getToken('user'));
+  return cancellations;
+}
+
+export async function cancelOrderedProduct(payload: { orderId: string; orderItemId: string; reason?: string }) {
+  const { cancellation } = await api.post<{ cancellation: any }>('/orders/cancellations', payload, getToken('user'));
+  return cancellation;
+}

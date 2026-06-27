@@ -36,6 +36,9 @@ const emptyAddress: Address = {
   isDefault: true,
 };
 
+const readableAddress = (addr: Address) =>
+  [addr.address, addr.area, addr.district, addr.division].filter(Boolean).join(', ');
+
 export default function AddressManager({ token, user, onChanged, basePath = '/auth', title = 'Delivery Addresses', description = 'Save address manually or use device current location.' }: { token: string | null; user: UserLike; onChanged: (user: any) => void; basePath?: string; title?: string; description?: string }) {
   const displayName = user.fullName || user.name || '';
   const [form, setForm] = useState<Address>({ ...emptyAddress, name: displayName, phone: user.phone || '' });
@@ -141,7 +144,11 @@ export default function AddressManager({ token, user, onChanged, basePath = '/au
         <input className="border rounded-xl px-4 py-3 text-sm" placeholder="Area / Road" value={form.area || ''} onChange={(e)=>update('area', e.target.value)} />
         <textarea className="sm:col-span-2 border rounded-xl px-4 py-3 text-sm min-h-[90px]" placeholder="Full address" value={form.address || ''} onChange={(e)=>update('address', e.target.value)} />
         <input className="sm:col-span-2 border rounded-xl px-4 py-3 text-sm" placeholder="Landmark / delivery note" value={form.landmark || ''} onChange={(e)=>update('landmark', e.target.value)} />
-        {(form.latitude && form.longitude) ? <p className="sm:col-span-2 text-xs text-blue-600 bg-blue-50 rounded-xl px-3 py-2">Location: {form.latitude}, {form.longitude}</p> : null}
+        {(form.latitude && form.longitude) ? (
+          <p className="sm:col-span-2 text-xs text-blue-600 bg-blue-50 rounded-xl px-3 py-2">
+            Current location selected{readableAddress(form) ? `: ${readableAddress(form)}` : '. Please type the address name before saving.'}
+          </p>
+        ) : null}
         <label className="sm:col-span-2 flex items-center gap-2 text-sm font-semibold text-gray-700"><input type="checkbox" checked={Boolean(form.isDefault)} onChange={(e)=>update('isDefault', e.target.checked)} /> Set as default address</label>
         {message && <p className="sm:col-span-2 text-sm text-gray-600 bg-gray-50 rounded-xl px-3 py-2">{message}</p>}
         <button onClick={saveAddress} disabled={loading} className="sm:col-span-2 bg-orange-500 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2">
@@ -156,8 +163,8 @@ export default function AddressManager({ token, user, onChanged, basePath = '/au
               <div>
                 <p className="font-black text-gray-900 flex items-center gap-2">{addr.label || 'Address'} {addr.isDefault && <span className="text-[10px] bg-orange-100 text-orange-600 px-2 py-0.5 rounded-full">Default</span>}</p>
                 <p className="text-sm text-gray-700 mt-1">{addr.name} {addr.phone ? `• ${addr.phone}` : ''}</p>
-                <p className="text-sm text-gray-600 mt-1">{addr.address || [addr.area, addr.district, addr.division].filter(Boolean).join(', ')}</p>
-                {addr.latitude && addr.longitude && <p className="text-xs text-gray-400 mt-1">{addr.latitude}, {addr.longitude}</p>}
+                <p className="text-sm text-gray-600 mt-1">{readableAddress(addr) || 'Address name not available'}</p>
+                {addr.latitude && addr.longitude && !readableAddress(addr) && <p className="text-xs text-orange-500 mt-1">Location saved. Please add the address name.</p>}
               </div>
             </div>
             <div className="flex gap-2 mt-3">

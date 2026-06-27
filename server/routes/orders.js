@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 import Order from '../models/Order.js';
 import Product from '../models/Product.js';
 import ReturnRequest from '../models/ReturnRequest.js';
+import CancellationRequest from '../models/CancellationRequest.js';
 import { requireUser } from '../middleware/auth.js';
 const router = express.Router();
 
@@ -85,13 +86,91 @@ router.post('/returns', requireUser, async (req, res) => {
   res.status(201).json({ message: 'Return request submitted for admin review', returnRequest });
 });
 
+
+const TWELVE_HOURS_MS = 12 * 60 * 60 * 1000;
+const isWithinCancellationWindow = (order) => Date.now() - new Date(order.createdAt).getTime() <= TWELVE_HOURS_MS;
+const activeItems = (order) => order.items.filter((item) => item.cancellationStatus !== 'cancelled');
+
+router.get('/cancellations/my', requireUser, async (req, res) => {
+  const cancellations = await CancellationRequest.find({ user: req.user.id })
+    .populate('order')
+    .populate('product')
+    .populate('seller')
+    .sort({ createdAt: -1 });
+  res.json({ cancellations });
+});
+
+router.post('/cancellations', requireUser, async (req, res) => {
+  const { orderId, orderItemId, reason } = req.body || {};
+  if (!mongoose.isValidObjectId(orderId)) return res.status(400).json({ message: 'Valid orderId is required' });
+  if (!mongoose.isValidObjectId(orderItemId)) return res.status(400).json({ message: 'Valid orderItemId is required' });
+
+  const order = await Order.findOne({ _id: orderId, user: req.user.id });
+  if (!order) return res.status(404).json({ message: 'Order not found' });
+  if (!['pending', 'processing'].includes(order.status)) return res.status(400).json({ message: 'Only pending or processing ordered products can be cancelled' });
+  if (!isWithinCancellationWindow(order)) return res.status(400).json({ message: 'Cancellation is allowed only within 12 hours of placing the order' });
+
+  const item = order.items.id(orderItemId);
+  if (!item) return res.status(404).json({ message: 'Ordered product not found' });
+  if (item.cancellationStatus === 'cancelled') return res.status(409).json({ message: 'This ordered product is already cancelled' });
+
+  const product = await Product.findById(item.product);
+  if (!product) return res.status(404).json({ message: 'Product not found' });
+
+  const exists = await CancellationRequest.findOne({ order: order._id, orderItem: item._id, user: req.user._id });
+  if (exists) return res.status(409).json({ message: 'Cancellation already exists for this ordered product' });
+
+  item.cancellationStatus = 'cancelled';
+  item.cancelReason = reason || 'Cancelled by customer';
+  item.cancelledAt = new Date();
+
+  const cancelledAmount = Number(item.totalPrice || 0);
+  order.subtotal = Math.max(0, Number(order.subtotal || 0) - cancelledAmount);
+  order.totalAmount = Math.max(0, Number(order.totalAmount || 0) - cancelledAmount);
+  order.cancelReason = reason || 'Product cancelled by customer';
+  order.cancelledAt = new Date();
+  if (activeItems(order).length === 0) order.status = 'cancelled';
+
+  const cancellation = await CancellationRequest.create({
+    order: order._id,
+    orderItem: item._id,
+    user: req.user._id,
+    product: product._id,
+    seller: product.seller || null,
+    quantity: item.quantity,
+    reason: reason || 'Cancelled by customer',
+    status: 'cancelled',
+    cancelledAt: item.cancelledAt,
+  });
+
+  await order.save();
+  await cancellation.populate(['order', 'product', 'seller']);
+  res.status(201).json({ message: 'Ordered product cancelled successfully', cancellation, order });
+});
+
 router.patch('/:id/cancel', requireUser, async (req, res) => {
   const order = await Order.findOne({ _id: req.params.id, user: req.user.id });
   if (!order) return res.status(404).json({ message: 'Order not found' });
   if (!['pending', 'processing'].includes(order.status)) return res.status(400).json({ message: 'Only pending or processing orders can be cancelled' });
+  if (!isWithinCancellationWindow(order)) return res.status(400).json({ message: 'Cancellation is allowed only within 12 hours of placing the order' });
   order.status = 'cancelled';
   order.cancelReason = req.body?.reason || 'Cancelled by customer';
   order.cancelledAt = new Date();
+  for (const item of order.items) {
+    if (item.cancellationStatus !== 'cancelled') {
+      item.cancellationStatus = 'cancelled';
+      item.cancelReason = order.cancelReason;
+      item.cancelledAt = order.cancelledAt;
+      const product = await Product.findById(item.product);
+      if (product) {
+        await CancellationRequest.findOneAndUpdate(
+          { order: order._id, orderItem: item._id, user: req.user._id },
+          { order: order._id, orderItem: item._id, user: req.user._id, product: product._id, seller: product.seller || null, quantity: item.quantity, reason: order.cancelReason, status: 'cancelled', cancelledAt: order.cancelledAt },
+          { upsert: true, new: true }
+        );
+      }
+    }
+  }
   await order.save();
   res.json({ message: 'Order cancelled successfully', order });
 });

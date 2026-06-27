@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import Seller from '../models/Seller.js';
 import Product from '../models/Product.js';
 import ReturnRequest from '../models/ReturnRequest.js';
+import CancellationRequest from '../models/CancellationRequest.js';
 import PasswordOtp from '../models/PasswordOtp.js';
 import { requireSeller, signToken } from '../middleware/auth.js';
 import { sendPasswordOtpEmail } from '../utils/email.js';
@@ -281,6 +282,15 @@ router.delete('/addresses/:id', requireSeller, async (req, res) => {
   if (wasDefault && req.seller.addresses.length) req.seller.addresses[0].isDefault = true;
   await req.seller.save();
   res.json({ addresses: req.seller.addresses.map(publicAddress), seller: publicSeller(req.seller) });
+});
+
+router.get('/cancellations', requireSeller, async (req, res) => {
+  const cancellations = await CancellationRequest.find({ seller: req.seller.id })
+    .populate('user')
+    .populate('product')
+    .populate('order')
+    .sort({ createdAt: -1 });
+  res.json({ cancellations });
 });
 
 router.get('/returns', requireSeller, async (req, res) => {

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Check, Edit2, Home, Loader2, LogOut, Package, Plus, RotateCcw, Store, Trash2, User, X } from 'lucide-react';
+import { Check, Edit2, Home, Loader2, LogOut, Package, Plus, RotateCcw, ShieldX, Store, Trash2, User, X } from 'lucide-react';
 import { api, clearSession, getSessionUser, getToken } from '../../lib/api';
 import { categories } from '../../data/categories';
 import ImageUploader from '../../components/forms/ImageUploader';
@@ -40,6 +40,7 @@ const sectionFromPath = (pathname: string) => {
   if (pathname.endsWith('/profile')) return 'profile';
   if (pathname.endsWith('/products')) return 'products';
   if (pathname.endsWith('/returns')) return 'returns';
+  if (pathname.endsWith('/cancellations')) return 'cancellations';
   return 'home';
 };
 
@@ -51,6 +52,7 @@ export default function SellerDashboardPage() {
   const [profileForm, setProfileForm] = useState<any>({ ...emptyProfile, ...(getSessionUser('seller') || {}) });
   const [products, setProducts] = useState<any[]>([]);
   const [returns, setReturns] = useState<any[]>([]);
+  const [cancellations, setCancellations] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [savingProfile, setSavingProfile] = useState(false);
   const [profileMessage, setProfileMessage] = useState('');
@@ -59,12 +61,14 @@ export default function SellerDashboardPage() {
   const [form, setForm] = useState<any>({ ...EMPTY });
 
   const load = async () => {
-    const [productRes, returnRes] = await Promise.all([
+    const [productRes, returnRes, cancellationRes] = await Promise.all([
       api.get<{ products: any[] }>('/seller/products', getToken('seller')),
       api.get<{ returns: any[] }>('/seller/returns', getToken('seller')).catch(() => ({ returns: [] })),
+      api.get<{ cancellations: any[] }>('/seller/cancellations', getToken('seller')).catch(() => ({ cancellations: [] })),
     ]);
     setProducts(productRes.products || []);
     setReturns(returnRes.returns || []);
+    setCancellations(cancellationRes.cancellations || []);
   };
 
   useEffect(() => {
@@ -147,6 +151,7 @@ export default function SellerDashboardPage() {
     { to: '/seller/dashboard/profile', key: 'profile', label: 'Profile', icon: User },
     { to: '/seller/dashboard/products', key: 'products', label: 'Products', icon: Package },
     { to: '/seller/dashboard/returns', key: 'returns', label: 'Returns', icon: RotateCcw },
+    { to: '/seller/dashboard/cancellations', key: 'cancellations', label: 'Cancellations', icon: ShieldX },
   ];
 
   if (loading) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="animate-spin" /></div>;
@@ -186,9 +191,10 @@ export default function SellerDashboardPage() {
               <div className="bg-white rounded-2xl p-5 border"><p className="text-sm text-gray-500">Products</p><p className="text-3xl font-black">{products.length}</p></div>
               <div className="bg-white rounded-2xl p-5 border"><p className="text-sm text-gray-500">Stock</p><p className="text-3xl font-black">{products.reduce((s, p) => s + Number(p.stock || 0), 0)}</p></div>
               <div className="bg-white rounded-2xl p-5 border"><p className="text-sm text-gray-500">Returns</p><p className="text-3xl font-black">{returns.length}</p></div>
+              <div className="bg-white rounded-2xl p-5 border"><p className="text-sm text-gray-500">Cancellations</p><p className="text-3xl font-black">{cancellations.length}</p></div>
             </div>
 
-            <div className="grid md:grid-cols-3 gap-4">
+            <div className="grid md:grid-cols-4 gap-4">
               <Link to="/seller/dashboard/profile" className="bg-white rounded-3xl border p-6 hover:border-orange-300 hover:shadow-sm transition group">
                 <div className="w-14 h-14 rounded-2xl bg-orange-50 text-orange-500 flex items-center justify-center mb-4 group-hover:bg-orange-500 group-hover:text-white transition"><User size={28} /></div>
                 <h2 className="font-black text-xl mb-1">Profile</h2>
@@ -203,6 +209,11 @@ export default function SellerDashboardPage() {
                 <div className="w-14 h-14 rounded-2xl bg-orange-50 text-orange-500 flex items-center justify-center mb-4 group-hover:bg-orange-500 group-hover:text-white transition"><RotateCcw size={28} /></div>
                 <h2 className="font-black text-xl mb-1">Returns</h2>
                 <p className="text-sm text-gray-500">See return requests for products that belong to your seller account.</p>
+              </Link>
+              <Link to="/seller/dashboard/cancellations" className="bg-white rounded-3xl border p-6 hover:border-orange-300 hover:shadow-sm transition group">
+                <div className="w-14 h-14 rounded-2xl bg-red-50 text-red-500 flex items-center justify-center mb-4 group-hover:bg-red-500 group-hover:text-white transition"><ShieldX size={28} /></div>
+                <h2 className="font-black text-xl mb-1">Cancellations</h2>
+                <p className="text-sm text-gray-500">See ordered products cancelled by customers within 12 hours.</p>
               </Link>
             </div>
           </>
@@ -285,6 +296,25 @@ export default function SellerDashboardPage() {
                 <table className="w-full text-sm">
                   <thead className="bg-gray-50"><tr><th className="p-3 text-left">Request</th><th>Product</th><th>Customer</th><th>Status</th><th>Admin note</th></tr></thead>
                   <tbody>{returns.map((r) => <tr key={r.id || r._id} className="border-t align-top"><td className="p-3"><b>{r.order?.orderNumber || 'Order'}</b><p className="text-xs text-gray-400">{r.createdAt ? new Date(r.createdAt).toLocaleString() : ''}</p><p className="text-xs text-gray-500 mt-1">Reason: {r.reason}</p>{r.details && <p className="text-xs text-gray-500">{r.details}</p>}</td><td className="p-3"><div className="flex items-center gap-2"><img src={r.product?.image || r.product?.images?.[0] || 'https://placehold.co/80x80?text=Product'} className="w-10 h-10 rounded-lg object-cover bg-gray-100"/><div><b>{r.product?.name || 'Product'}</b><p className="text-xs text-gray-500">Qty: {r.quantity}</p></div></div></td><td className="p-3 text-center">{r.user?.email || 'Customer'}<p className="text-xs text-gray-400">{r.user?.phone}</p></td><td className="p-3 text-center"><span className={`inline-flex px-3 py-1 rounded-full border text-xs font-bold capitalize ${r.status === 'approved' ? 'bg-green-50 text-green-700 border-green-100' : r.status === 'denied' ? 'bg-red-50 text-red-700 border-red-100' : 'bg-amber-50 text-amber-700 border-amber-100'}`}>{r.status}</span></td><td className="p-3 text-gray-600">{r.adminNote || 'No note yet'}</td></tr>)}</tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        {section === 'cancellations' && (
+          <div className="bg-white rounded-2xl border overflow-hidden">
+            <div className="p-4 border-b flex items-center justify-between">
+              <div>
+                <h2 className="text-xl font-black flex gap-2 items-center"><ShieldX /> Product Cancellations</h2>
+                <p className="text-sm text-gray-500">Only cancellations for your seller products appear here.</p>
+              </div>
+            </div>
+            {cancellations.length === 0 ? <div className="p-8 text-center text-gray-500">No cancelled seller products yet.</div> : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50"><tr><th className="p-3 text-left">Cancelled product</th><th>Order</th><th>Customer</th><th>Reason</th><th>Status</th><th>Cancelled at</th></tr></thead>
+                  <tbody>{cancellations.map((c) => <tr key={c.id || c._id} className="border-t align-top"><td className="p-3"><div className="flex items-center gap-2"><img src={c.product?.image || c.product?.images?.[0] || 'https://placehold.co/80x80?text=Product'} className="w-10 h-10 rounded-lg object-cover bg-gray-100"/><div><b>{c.product?.name || 'Product'}</b><p className="text-xs text-gray-500">Qty: {c.quantity || 1}</p></div></div></td><td className="p-3 text-center"><b>{c.order?.orderNumber || 'Order'}</b><p className="text-xs text-gray-400">{c.order?.createdAt ? new Date(c.order.createdAt).toLocaleString() : ''}</p></td><td className="p-3 text-center">{c.user?.email || 'Customer'}<p className="text-xs text-gray-400">{c.user?.phone}</p></td><td className="p-3 text-gray-600">{c.reason || '-'}</td><td className="p-3 text-center"><span className="inline-flex px-3 py-1 rounded-full border text-xs font-bold capitalize bg-red-50 text-red-700 border-red-100">{c.status}</span></td><td className="p-3 text-center text-gray-500">{c.cancelledAt ? new Date(c.cancelledAt).toLocaleString() : '-'}</td></tr>)}</tbody>
                 </table>
               </div>
             )}

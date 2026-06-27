@@ -6,6 +6,7 @@ import Product from '../models/Product.js';
 import Order from '../models/Order.js';
 import PromoCode from '../models/PromoCode.js';
 import ReturnRequest from '../models/ReturnRequest.js';
+import CancellationRequest from '../models/CancellationRequest.js';
 import { requireAdmin, signToken } from '../middleware/auth.js';
 const router = express.Router();
 const adminUser = (u) => ({ id: u.id, fullName: u.fullName, email: u.email, phone: u.phone, role: u.role });
@@ -42,8 +43,24 @@ router.get('/products', requireAdmin, async (_req, res) => res.json({ products: 
 router.post('/products', requireAdmin, async (req, res) => res.status(201).json({ product: await Product.create(req.body) }));
 router.put('/products/:id', requireAdmin, async (req, res) => res.json({ product: await Product.findByIdAndUpdate(req.params.id, req.body, { new: true }) }));
 router.delete('/products/:id', requireAdmin, async (req, res) => { await Product.findByIdAndDelete(req.params.id); res.json({ ok: true }); });
-router.get('/orders', requireAdmin, async (_req, res) => res.json({ orders: await Order.find().populate('user').sort({ createdAt: -1 }) }));
+router.get('/orders', requireAdmin, async (_req, res) => {
+  const orders = await Order.find()
+    .populate('user')
+    .populate('items.product')
+    .sort({ createdAt: -1 });
+  res.json({ orders });
+});
 router.patch('/orders/:id', requireAdmin, async (req, res) => res.json({ order: await Order.findByIdAndUpdate(req.params.id, req.body, { new: true }) }));
+
+router.get('/cancellations', requireAdmin, async (_req, res) => {
+  const cancellations = await CancellationRequest.find()
+    .populate('user')
+    .populate('seller')
+    .populate('product')
+    .populate('order')
+    .sort({ createdAt: -1 });
+  res.json({ cancellations });
+});
 
 router.get('/returns', requireAdmin, async (_req, res) => {
   const returns = await ReturnRequest.find()

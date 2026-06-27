@@ -19,6 +19,7 @@ type Address = {
 
 type UserLike = {
   fullName?: string;
+  name?: string;
   phone?: string;
   addresses?: Address[];
 };
@@ -35,8 +36,9 @@ const emptyAddress: Address = {
   isDefault: true,
 };
 
-export default function AddressManager({ token, user, onChanged }: { token: string | null; user: UserLike; onChanged: (user: any) => void }) {
-  const [form, setForm] = useState<Address>({ ...emptyAddress, name: user.fullName || '', phone: user.phone || '' });
+export default function AddressManager({ token, user, onChanged, basePath = '/auth', title = 'Delivery Addresses', description = 'Save address manually or use device current location.' }: { token: string | null; user: UserLike; onChanged: (user: any) => void; basePath?: string; title?: string; description?: string }) {
+  const displayName = user.fullName || user.name || '';
+  const [form, setForm] = useState<Address>({ ...emptyAddress, name: displayName, phone: user.phone || '' });
   const [loading, setLoading] = useState(false);
   const [locating, setLocating] = useState(false);
   const [message, setMessage] = useState('');
@@ -59,13 +61,13 @@ export default function AddressManager({ token, user, onChanged }: { token: stri
       const latitude = Number(position.coords.latitude.toFixed(7));
       const longitude = Number(position.coords.longitude.toFixed(7));
       try {
-        const res = await api.get<{ address: Address; warning?: string }>(`/auth/reverse-geocode?lat=${latitude}&lng=${longitude}`, token);
+        const res = await api.get<{ address: Address; warning?: string }>(`${basePath}/reverse-geocode?lat=${latitude}&lng=${longitude}`, token);
         setForm((prev) => ({
           ...prev,
           ...res.address,
           latitude,
           longitude,
-          name: prev.name || user.fullName || '',
+          name: prev.name || displayName || '',
           phone: prev.phone || user.phone || '',
         }));
         setMessage(res.warning || 'Current location captured. Please check the address text before saving.');
@@ -85,9 +87,9 @@ export default function AddressManager({ token, user, onChanged }: { token: stri
     setLoading(true);
     setMessage('');
     try {
-      const res = await api.post<{ user: any; addresses: Address[] }>('/auth/addresses', form, token);
-      syncUser(res.user);
-      setForm({ ...emptyAddress, name: user.fullName || '', phone: user.phone || '' });
+      const res = await api.post<{ user?: any; seller?: any; addresses: Address[] }>(`${basePath}/addresses`, form, token);
+      syncUser(res.user || res.seller);
+      setForm({ ...emptyAddress, name: displayName || '', phone: user.phone || '' });
       setMessage('Address saved successfully.');
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Could not save address');
@@ -100,8 +102,8 @@ export default function AddressManager({ token, user, onChanged }: { token: stri
     if (!address.id) return;
     setLoading(true);
     try {
-      const res = await api.put<{ user: any }>(`/auth/addresses/${address.id}`, { isDefault: true }, token);
-      syncUser(res.user);
+      const res = await api.put<{ user?: any; seller?: any }>(`${basePath}/addresses/${address.id}`, { isDefault: true }, token);
+      syncUser(res.user || res.seller);
     } finally {
       setLoading(false);
     }
@@ -111,8 +113,8 @@ export default function AddressManager({ token, user, onChanged }: { token: stri
     if (!address.id) return;
     setLoading(true);
     try {
-      const res = await api.delete<{ user: any }>(`/auth/addresses/${address.id}`, token);
-      syncUser(res.user);
+      const res = await api.delete<{ user?: any; seller?: any }>(`${basePath}/addresses/${address.id}`, token);
+      syncUser(res.user || res.seller);
     } finally {
       setLoading(false);
     }
@@ -122,8 +124,8 @@ export default function AddressManager({ token, user, onChanged }: { token: stri
     <section className="bg-white rounded-2xl border border-gray-100 p-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
         <div>
-          <h2 className="text-xl font-black text-gray-900 flex items-center gap-2"><MapPin size={20}/> Delivery Addresses</h2>
-          <p className="text-sm text-gray-500">Save address manually or use device current location.</p>
+          <h2 className="text-xl font-black text-gray-900 flex items-center gap-2"><MapPin size={20}/> {title}</h2>
+          <p className="text-sm text-gray-500">{description}</p>
         </div>
         <button onClick={useCurrentLocation} disabled={locating} className="bg-blue-50 text-blue-600 border border-blue-100 font-bold px-4 py-2.5 rounded-xl flex items-center justify-center gap-2 text-sm">
           {locating ? <Loader2 className="animate-spin" size={15}/> : <LocateFixed size={15}/>} Use Current Location

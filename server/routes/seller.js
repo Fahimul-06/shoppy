@@ -9,6 +9,20 @@ import { sendPasswordOtpEmail } from '../utils/email.js';
 import { sendPasswordOtpSms } from '../utils/sms.js';
 
 const router = express.Router();
+const publicAddress = (a) => ({
+  id: a.id,
+  label: a.label,
+  name: a.name,
+  phone: a.phone,
+  division: a.division,
+  district: a.district,
+  area: a.area,
+  address: a.address,
+  landmark: a.landmark,
+  latitude: a.latitude,
+  longitude: a.longitude,
+  isDefault: Boolean(a.isDefault),
+});
 const publicSeller = (s) => ({
   id: s.id,
   name: s.name,
@@ -22,6 +36,7 @@ const publicSeller = (s) => ({
   bankName: s.bankName,
   bankAccount: s.bankAccount,
   documents: s.documents || [],
+  addresses: (s.addresses || []).map(publicAddress),
   status: s.status,
 });
 
@@ -189,6 +204,83 @@ router.post('/password/change', requireSeller, async (req, res) => {
   record.used = true;
   await Promise.all([req.seller.save(), record.save()]);
   res.json({ message: 'Password changed successfully' });
+});
+
+
+router.get('/reverse-geocode', requireSeller, async (req, res) => {
+  const lat = Number(req.query.lat);
+  const lng = Number(req.query.lng);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return res.status(400).json({ message: 'Valid latitude and longitude are required' });
+  try {
+    const url = new URL('https://nominatim.openstreetmap.org/reverse');
+    url.searchParams.set('format', 'jsonv2');
+    url.searchParams.set('lat', String(lat));
+    url.searchParams.set('lon', String(lng));
+    url.searchParams.set('addressdetails', '1');
+    const response = await fetch(url, { headers: { 'User-Agent': `${process.env.APP_NAME || 'Shoppy'} seller-address/1.0` } });
+    if (!response.ok) throw new Error('Reverse geocoding failed');
+    const data = await response.json();
+    const a = data.address || {};
+    res.json({
+      address: {
+        latitude: lat,
+        longitude: lng,
+        address: data.display_name || '',
+        division: a.state || a.division || '',
+        district: a.city || a.town || a.county || a.state_district || '',
+        area: a.suburb || a.neighbourhood || a.road || a.village || '',
+      },
+    });
+  } catch (error) {
+    res.json({ address: { latitude: lat, longitude: lng }, warning: 'Location captured, but address lookup failed. Please type the address manually.' });
+  }
+});
+
+router.get('/addresses', requireSeller, (req, res) => {
+  res.json({ addresses: (req.seller.addresses || []).map(publicAddress) });
+});
+
+router.post('/addresses', requireSeller, async (req, res) => {
+  const payload = req.body || {};
+  if (!payload.address && (!payload.latitude || !payload.longitude)) return res.status(400).json({ message: 'Address text or current location is required' });
+  if (payload.isDefault || !req.seller.addresses?.length) req.seller.addresses.forEach((a) => { a.isDefault = false; });
+  req.seller.addresses.push({
+    label: payload.label || 'Warehouse',
+    name: payload.name || req.seller.name,
+    phone: payload.phone || req.seller.phone,
+    division: payload.division,
+    district: payload.district,
+    area: payload.area,
+    address: payload.address,
+    landmark: payload.landmark,
+    latitude: payload.latitude,
+    longitude: payload.longitude,
+    isDefault: payload.isDefault || !req.seller.addresses.length,
+  });
+  await req.seller.save();
+  res.status(201).json({ addresses: req.seller.addresses.map(publicAddress), seller: publicSeller(req.seller) });
+});
+
+router.put('/addresses/:id', requireSeller, async (req, res) => {
+  const address = req.seller.addresses.id(req.params.id);
+  if (!address) return res.status(404).json({ message: 'Address not found' });
+  const payload = req.body || {};
+  ['label', 'name', 'phone', 'division', 'district', 'area', 'address', 'landmark', 'latitude', 'longitude'].forEach((key) => {
+    if (payload[key] !== undefined) address[key] = payload[key];
+  });
+  if (payload.isDefault) req.seller.addresses.forEach((a) => { a.isDefault = String(a._id) === String(address._id); });
+  await req.seller.save();
+  res.json({ addresses: req.seller.addresses.map(publicAddress), seller: publicSeller(req.seller) });
+});
+
+router.delete('/addresses/:id', requireSeller, async (req, res) => {
+  const address = req.seller.addresses.id(req.params.id);
+  if (!address) return res.status(404).json({ message: 'Address not found' });
+  const wasDefault = address.isDefault;
+  address.deleteOne();
+  if (wasDefault && req.seller.addresses.length) req.seller.addresses[0].isDefault = true;
+  await req.seller.save();
+  res.json({ addresses: req.seller.addresses.map(publicAddress), seller: publicSeller(req.seller) });
 });
 
 router.get('/returns', requireSeller, async (req, res) => {

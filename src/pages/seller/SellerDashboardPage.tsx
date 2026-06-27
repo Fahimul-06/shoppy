@@ -7,6 +7,7 @@ import ImageUploader from '../../components/forms/ImageUploader';
 import PasswordOtpPanel from '../../components/forms/PasswordOtpPanel';
 import PhoneOtpPanel from '../../components/forms/PhoneOtpPanel';
 import CategoryDropdowns from '../../components/forms/CategoryDropdowns';
+import AddressManager from '../../components/forms/AddressManager';
 
 const EMPTY = {
   name: '',
@@ -231,6 +232,20 @@ export default function SellerDashboardPage() {
             <div className="space-y-5">
               <PhoneOtpPanel role="seller" basePath="/seller" token={getToken('seller')} currentPhone={seller?.phone} onChanged={(updated) => { setSeller(updated); setProfileForm({ ...emptyProfile, ...updated }); localStorage.setItem('sellerUser', JSON.stringify(updated)); }} />
               <PasswordOtpPanel role="seller" basePath="/seller" token={getToken('seller')} email={seller?.email} phone={seller?.phone} />
+            </div>
+            <div className="lg:col-span-2">
+              <AddressManager
+                token={getToken('seller')}
+                user={seller || {}}
+                basePath="/seller"
+                title="Seller Delivery / Pickup Addresses"
+                description="Save your shop, warehouse, pickup, or return address manually or by using device current location."
+                onChanged={(updated) => {
+                  setSeller(updated);
+                  setProfileForm({ ...emptyProfile, ...updated });
+                  localStorage.setItem('sellerUser', JSON.stringify(updated));
+                }}
+              />
             </div>
           </div>
         )}

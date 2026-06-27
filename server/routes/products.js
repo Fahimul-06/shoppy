@@ -120,7 +120,7 @@ function categoryRegexes(category) {
 }
 
 function buildPublicProductFilter(query) {
-  const { category, subcategory, childCategory, badge, search, includeInactive, dailySale, flashSale } = query;
+  const { category, subcategory, childCategory, badge, saleTag, search, includeInactive } = query;
   const filter = includeInactive === 'true' ? {} : { active: { $ne: false } };
   if (category && category !== 'all') {
     const regexes = categoryRegexes(category);
@@ -144,16 +144,7 @@ function buildPublicProductFilter(query) {
     ];
   }
   if (badge) filter.badge = badge;
-  if (dailySale === 'true') filter.isDailySale = true;
-  if (flashSale === 'true') filter.isFlashSale = true;
-  if (dailySale === 'true' || flashSale === 'true') {
-    const now = new Date();
-    filter.$and = [
-      ...(filter.$and || []),
-      { $or: [{ saleStartAt: { $exists: false } }, { saleStartAt: null }, { saleStartAt: { $lte: now } }] },
-      { $or: [{ saleEndAt: { $exists: false } }, { saleEndAt: null }, { saleEndAt: { $gte: now } }] },
-    ];
-  }
+  if (saleTag) filter.saleTags = String(saleTag).trim();
   if (search) {
     const terms = compact(String(search).split(/\s+/)).slice(0, 8);
     const regexes = terms.length ? terms.map((term) => new RegExp(esc(term), 'i')) : [new RegExp(esc(search), 'i')];

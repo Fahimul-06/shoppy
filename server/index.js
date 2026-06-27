@@ -22,6 +22,13 @@ const app = express();
 app.set('trust proxy', 1);
 const PORT = process.env.PORT || 5000;
 
+process.on('unhandledRejection', (error) => {
+  console.error('Unhandled rejection:', error);
+});
+process.on('uncaughtException', (error) => {
+  console.error('Uncaught exception:', error);
+});
+
 app.use(cors({ origin: process.env.CLIENT_URL?.split(',') || true, credentials: true }));
 app.use(express.json({ limit: '10mb' }));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
@@ -37,6 +44,15 @@ app.use('/api/seller', sellerRoutes);
 app.use('/api/wishlist', wishlistRoutes);
 app.use('/api/uploads', uploadRoutes);
 app.use('/api/promos', promoRoutes);
+
+
+app.use((err, _req, res, _next) => {
+  console.error('API error:', err);
+  if (res.headersSent) return;
+  res.status(err.status || 500).json({
+    message: err.message || 'Server error. Please check backend logs.',
+  });
+});
 
 const possibleClientDistPaths = [
   path.join(process.cwd(), 'dist'),

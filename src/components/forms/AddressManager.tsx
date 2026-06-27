@@ -38,7 +38,12 @@ const emptyAddress: Address = {
 };
 
 const readableAddress = (addr: Address) =>
-  [addr.address, addr.area, addr.district, addr.division].filter(Boolean).join(', ');
+  [addr.address, addr.landmark, addr.area, addr.district, addr.division]
+    .filter(Boolean)
+    .filter((value, index, arr) => arr.indexOf(value) === index)
+    .join(', ');
+
+const exactLandmarkHint = 'For exact delivery, please type house/road/nearby landmark if it is missing.';
 
 export default function AddressManager({ token, user, onChanged, basePath = '/auth', title = 'Delivery Addresses', description = 'Save address manually or use device current location.' }: { token: string | null; user: UserLike; onChanged: (user: any) => void; basePath?: string; title?: string; description?: string }) {
   const displayName = user.fullName || user.name || '';
@@ -87,10 +92,11 @@ export default function AddressManager({ token, user, onChanged, basePath = '/au
           name: prev.name || displayName || '',
           phone: prev.phone || user.phone || '',
         }));
-        setMessage(`Current location selected${readableAddress(finalAddress) ? `: ${readableAddress(finalAddress)}` : '.'}`);
+        const detectedText = readableAddress(finalAddress);
+        setMessage(detectedText ? `Current location selected: ${detectedText}. ${exactLandmarkHint}` : `Current location selected. ${exactLandmarkHint}`);
       } catch (error) {
-        setForm((prev) => ({ ...prev, latitude, longitude, address: prev.address || 'Current location address selected' }));
-        setMessage('Current location selected. Please check the address name before saving.');
+        setForm((prev) => ({ ...prev, latitude, longitude, address: prev.address || 'Current location selected. Please type house/road/landmark for exact delivery.' }));
+        setMessage(`Current location selected. ${exactLandmarkHint}`);
       } finally {
         setLocating(false);
       }
@@ -160,7 +166,7 @@ export default function AddressManager({ token, user, onChanged, basePath = '/au
         <input className="sm:col-span-2 border rounded-xl px-4 py-3 text-sm" placeholder="Landmark / delivery note" value={form.landmark || ''} onChange={(e)=>update('landmark', e.target.value)} />
         {(form.latitude && form.longitude) ? (
           <p className="sm:col-span-2 text-xs text-blue-600 bg-blue-50 rounded-xl px-3 py-2">
-            Current location selected{readableAddress(form) ? `: ${readableAddress(form)}` : '. Please check the address name before saving.'}
+            Current location selected{readableAddress(form) ? `: ${readableAddress(form)}` : `. ${exactLandmarkHint}`}
           </p>
         ) : null}
         <label className="sm:col-span-2 flex items-center gap-2 text-sm font-semibold text-gray-700"><input type="checkbox" checked={Boolean(form.isDefault)} onChange={(e)=>update('isDefault', e.target.checked)} /> Set as default address</label>
@@ -177,8 +183,7 @@ export default function AddressManager({ token, user, onChanged, basePath = '/au
               <div>
                 <p className="font-black text-gray-900 flex items-center gap-2">{addr.label || 'Address'} {addr.isDefault && <span className="text-[10px] bg-orange-100 text-orange-600 px-2 py-0.5 rounded-full">Default</span>}</p>
                 <p className="text-sm text-gray-700 mt-1">{addr.name} {addr.phone ? `• ${addr.phone}` : ''}</p>
-                <p className="text-sm text-gray-600 mt-1">{readableAddress(addr) || 'Address name not available'}</p>
-                {addr.latitude && addr.longitude && !readableAddress(addr) && <p className="text-xs text-orange-500 mt-1">Current location saved.</p>}
+                <p className="text-sm text-gray-600 mt-1">{readableAddress(addr) || 'Current location saved. Please add full address/landmark.'}</p>
               </div>
             </div>
             <div className="flex gap-2 mt-3">

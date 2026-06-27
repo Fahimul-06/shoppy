@@ -6,6 +6,7 @@ import { requireUser, signToken } from '../middleware/auth.js';
 import { sendPasswordOtpEmail } from '../utils/email.js';
 import { sendPasswordOtpSms } from '../utils/sms.js';
 import { reverseGeocode } from '../utils/geocode.js';
+import { asyncHandler } from '../utils/asyncHandler.js';
 
 const router = express.Router();
 const publicAddress = (a) => ({
@@ -30,6 +31,26 @@ const publicUser = (u) => ({
   profilePhoto: u.profilePhoto,
   role: u.role,
   addresses: (u.addresses || []).map(publicAddress),
+});
+
+const cleanString = (value) => String(value ?? '').trim();
+const cleanNumber = (value) => {
+  if (value === undefined || value === null || value === '') return undefined;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : undefined;
+};
+const makeAddressPayload = (payload = {}, defaults = {}) => ({
+  label: cleanString(payload.label) || defaults.label || 'Home',
+  name: cleanString(payload.name) || defaults.name || '',
+  phone: cleanString(payload.phone) || defaults.phone || '',
+  division: cleanString(payload.division),
+  district: cleanString(payload.district),
+  area: cleanString(payload.area),
+  address: cleanString(payload.address),
+  landmark: cleanString(payload.landmark),
+  latitude: cleanNumber(payload.latitude),
+  longitude: cleanNumber(payload.longitude),
+  isDefault: Boolean(payload.isDefault),
 });
 const makeOtp = () => String(Math.floor(100000 + Math.random() * 900000));
 const otpResponse = ({ mailResult, smsResult, otp }) => {
@@ -71,13 +92,13 @@ router.post('/login', async (req, res) => {
 
 router.get('/me', requireUser, (req, res) => res.json({ user: publicUser(req.user) }));
 
-router.put('/profile', requireUser, async (req, res) => {
+router.put('/profile', requireUser, asyncHandler(async (req, res) => {
   const { fullName, name, profilePhoto } = req.body;
   req.user.fullName = fullName ?? name ?? req.user.fullName;
   if (profilePhoto !== undefined) req.user.profilePhoto = profilePhoto;
   await req.user.save();
   res.json({ user: publicUser(req.user) });
-});
+}));
 
 router.post('/password/request-otp', requireUser, async (req, res) => {
   const otp = makeOtp();
@@ -147,52 +168,44 @@ router.post('/email/change', requireUser, async (req, res) => {
 });
 
 
-router.get('/reverse-geocode', requireUser, async (req, res) => {
+router.get('/reverse-geocode', requireUser, asyncHandler(async (req, res) => {
   const lat = Number(req.query.lat);
   const lng = Number(req.query.lng);
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) return res.status(400).json({ message: 'Valid latitude and longitude are required' });
   const result = await reverseGeocode(lat, lng);
   res.json(result);
-});
+}));
 
 router.get('/addresses', requireUser, (req, res) => {
   res.json({ addresses: (req.user.addresses || []).map(publicAddress) });
 });
 
-router.post('/addresses', requireUser, async (req, res) => {
-  const payload = req.body || {};
-  if (!payload.address && (!payload.latitude || !payload.longitude)) return res.status(400).json({ message: 'Address text or current location is required' });
+router.post('/addresses', requireUser, asyncHandler(async (req, res) => {
+  const payload = makeAddressPayload(req.body, { label: 'Home', name: req.user.fullName || '', phone: req.user.phone || '' });
+  if (!payload.address && payload.latitude === undefined && payload.longitude === undefined) return res.status(400).json({ message: 'Address text or current location is required' });
+  if (!payload.address && (payload.latitude !== undefined || payload.longitude !== undefined)) {
+    payload.address = 'Current location selected. Please type house/road/landmark for exact delivery.';
+  }
   if (payload.isDefault || !req.user.addresses?.length) req.user.addresses.forEach((a) => { a.isDefault = false; });
-  req.user.addresses.push({
-    label: payload.label || 'Home',
-    name: payload.name || req.user.fullName || '',
-    phone: payload.phone || req.user.phone || '',
-    division: payload.division || '',
-    district: payload.district || '',
-    area: payload.area || '',
-    address: payload.address || '',
-    landmark: payload.landmark || '',
-    latitude: payload.latitude,
-    longitude: payload.longitude,
-    isDefault: payload.isDefault || !req.user.addresses.length,
-  });
+  payload.isDefault = payload.isDefault || !req.user.addresses.length;
+  req.user.addresses.push(payload);
   await req.user.save();
   res.status(201).json({ addresses: req.user.addresses.map(publicAddress), user: publicUser(req.user) });
-});
+}));
 
-router.put('/addresses/:id', requireUser, async (req, res) => {
+router.put('/addresses/:id', requireUser, asyncHandler(async (req, res) => {
   const address = req.user.addresses.id(req.params.id);
   if (!address) return res.status(404).json({ message: 'Address not found' });
-  const payload = req.body || {};
+  const payload = makeAddressPayload(req.body, {});
   ['label','name','phone','division','district','area','address','landmark','latitude','longitude'].forEach((key) => {
     if (payload[key] !== undefined) address[key] = payload[key];
   });
-  if (payload.isDefault) req.user.addresses.forEach((a) => { a.isDefault = String(a._id) === String(address._id); });
+  if (req.body?.isDefault) req.user.addresses.forEach((a) => { a.isDefault = String(a._id) === String(address._id); });
   await req.user.save();
   res.json({ addresses: req.user.addresses.map(publicAddress), user: publicUser(req.user) });
-});
+}));
 
-router.delete('/addresses/:id', requireUser, async (req, res) => {
+router.delete('/addresses/:id', requireUser, asyncHandler(async (req, res) => {
   const address = req.user.addresses.id(req.params.id);
   if (!address) return res.status(404).json({ message: 'Address not found' });
   const wasDefault = address.isDefault;
@@ -200,6 +213,6 @@ router.delete('/addresses/:id', requireUser, async (req, res) => {
   if (wasDefault && req.user.addresses.length) req.user.addresses[0].isDefault = true;
   await req.user.save();
   res.json({ addresses: req.user.addresses.map(publicAddress), user: publicUser(req.user) });
-});
+}));
 
 export default router;

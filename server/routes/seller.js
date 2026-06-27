@@ -9,6 +9,7 @@ import { requireSeller, signToken } from '../middleware/auth.js';
 import { sendPasswordOtpEmail } from '../utils/email.js';
 import { sendPasswordOtpSms } from '../utils/sms.js';
 import { reverseGeocode } from '../utils/geocode.js';
+import { asyncHandler } from '../utils/asyncHandler.js';
 
 const router = express.Router();
 const publicAddress = (a) => ({
@@ -42,6 +43,26 @@ const publicSeller = (s) => ({
   status: s.status,
 });
 
+
+const cleanString = (value) => String(value ?? '').trim();
+const cleanNumber = (value) => {
+  if (value === undefined || value === null || value === '') return undefined;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : undefined;
+};
+const makeAddressPayload = (payload = {}, defaults = {}) => ({
+  label: cleanString(payload.label) || defaults.label || 'Warehouse',
+  name: cleanString(payload.name) || defaults.name || '',
+  phone: cleanString(payload.phone) || defaults.phone || '',
+  division: cleanString(payload.division),
+  district: cleanString(payload.district),
+  area: cleanString(payload.area),
+  address: cleanString(payload.address),
+  landmark: cleanString(payload.landmark),
+  latitude: cleanNumber(payload.latitude),
+  longitude: cleanNumber(payload.longitude),
+  isDefault: Boolean(payload.isDefault),
+});
 const otpResponse = ({ mailResult, smsResult, otp }) => {
   const smsSent = Boolean(smsResult?.sent);
   const emailSent = Boolean(mailResult?.sent);
@@ -75,7 +96,7 @@ router.post('/login', async (req, res) => {
 
 router.get('/me', requireSeller, (req, res) => res.json({ seller: publicSeller(req.seller) }));
 
-router.put('/profile', requireSeller, async (req, res) => {
+router.put('/profile', requireSeller, asyncHandler(async (req, res) => {
   const { name, shopName, shopAddress, businessType, nidNumber, tinNumber, bankName, bankAccount } = req.body;
   Object.assign(req.seller, {
     name: name ?? req.seller.name,
@@ -89,7 +110,7 @@ router.put('/profile', requireSeller, async (req, res) => {
   });
   await req.seller.save();
   res.json({ seller: publicSeller(req.seller) });
-});
+}));
 
 router.post('/password/request-otp', requireSeller, async (req, res) => {
   const otp = String(Math.floor(100000 + Math.random() * 900000));
@@ -209,52 +230,44 @@ router.post('/password/change', requireSeller, async (req, res) => {
 });
 
 
-router.get('/reverse-geocode', requireSeller, async (req, res) => {
+router.get('/reverse-geocode', requireSeller, asyncHandler(async (req, res) => {
   const lat = Number(req.query.lat);
   const lng = Number(req.query.lng);
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) return res.status(400).json({ message: 'Valid latitude and longitude are required' });
   const result = await reverseGeocode(lat, lng);
   res.json(result);
-});
+}));
 
 router.get('/addresses', requireSeller, (req, res) => {
   res.json({ addresses: (req.seller.addresses || []).map(publicAddress) });
 });
 
-router.post('/addresses', requireSeller, async (req, res) => {
-  const payload = req.body || {};
-  if (!payload.address && (!payload.latitude || !payload.longitude)) return res.status(400).json({ message: 'Address text or current location is required' });
+router.post('/addresses', requireSeller, asyncHandler(async (req, res) => {
+  const payload = makeAddressPayload(req.body, { label: 'Warehouse', name: req.seller.name || '', phone: req.seller.phone || '' });
+  if (!payload.address && payload.latitude === undefined && payload.longitude === undefined) return res.status(400).json({ message: 'Address text or current location is required' });
+  if (!payload.address && (payload.latitude !== undefined || payload.longitude !== undefined)) {
+    payload.address = 'Current location selected. Please type house/road/landmark for exact delivery.';
+  }
   if (payload.isDefault || !req.seller.addresses?.length) req.seller.addresses.forEach((a) => { a.isDefault = false; });
-  req.seller.addresses.push({
-    label: payload.label || 'Warehouse',
-    name: payload.name || req.seller.name,
-    phone: payload.phone || req.seller.phone,
-    division: payload.division,
-    district: payload.district,
-    area: payload.area,
-    address: payload.address,
-    landmark: payload.landmark,
-    latitude: payload.latitude,
-    longitude: payload.longitude,
-    isDefault: payload.isDefault || !req.seller.addresses.length,
-  });
+  payload.isDefault = payload.isDefault || !req.seller.addresses.length;
+  req.seller.addresses.push(payload);
   await req.seller.save();
   res.status(201).json({ addresses: req.seller.addresses.map(publicAddress), seller: publicSeller(req.seller) });
-});
+}));
 
-router.put('/addresses/:id', requireSeller, async (req, res) => {
+router.put('/addresses/:id', requireSeller, asyncHandler(async (req, res) => {
   const address = req.seller.addresses.id(req.params.id);
   if (!address) return res.status(404).json({ message: 'Address not found' });
-  const payload = req.body || {};
+  const payload = makeAddressPayload(req.body, {});
   ['label', 'name', 'phone', 'division', 'district', 'area', 'address', 'landmark', 'latitude', 'longitude'].forEach((key) => {
     if (payload[key] !== undefined) address[key] = payload[key];
   });
-  if (payload.isDefault) req.seller.addresses.forEach((a) => { a.isDefault = String(a._id) === String(address._id); });
+  if (req.body?.isDefault) req.seller.addresses.forEach((a) => { a.isDefault = String(a._id) === String(address._id); });
   await req.seller.save();
   res.json({ addresses: req.seller.addresses.map(publicAddress), seller: publicSeller(req.seller) });
-});
+}));
 
-router.delete('/addresses/:id', requireSeller, async (req, res) => {
+router.delete('/addresses/:id', requireSeller, asyncHandler(async (req, res) => {
   const address = req.seller.addresses.id(req.params.id);
   if (!address) return res.status(404).json({ message: 'Address not found' });
   const wasDefault = address.isDefault;
@@ -262,7 +275,7 @@ router.delete('/addresses/:id', requireSeller, async (req, res) => {
   if (wasDefault && req.seller.addresses.length) req.seller.addresses[0].isDefault = true;
   await req.seller.save();
   res.json({ addresses: req.seller.addresses.map(publicAddress), seller: publicSeller(req.seller) });
-});
+}));
 
 router.get('/cancellations', requireSeller, async (req, res) => {
   const cancellations = await CancellationRequest.find({ seller: req.seller.id })

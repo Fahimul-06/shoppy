@@ -13,6 +13,24 @@ type ImageUploaderProps = {
 const MAX_IMAGE_MB = 15;
 const MAX_IMAGE_BYTES = MAX_IMAGE_MB * 1024 * 1024;
 
+async function compressImage(file: File): Promise<File> {
+  if (!file.type.startsWith('image/') || file.size <= 2.5 * 1024 * 1024 || file.type === 'image/gif') return file;
+  const bitmap = await createImageBitmap(file);
+  const maxSide = 1600;
+  const scale = Math.min(1, maxSide / Math.max(bitmap.width, bitmap.height));
+  const width = Math.max(1, Math.round(bitmap.width * scale));
+  const height = Math.max(1, Math.round(bitmap.height * scale));
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return file;
+  ctx.drawImage(bitmap, 0, 0, width, height);
+  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.82));
+  if (!blob) return file;
+  return new File([blob], file.name.replace(/\.[^.]+$/, '') + '.jpg', { type: 'image/jpeg' });
+}
+
 export default function ImageUploader({
   value,
   onChange,
@@ -28,16 +46,12 @@ export default function ImageUploader({
   const [error, setError] = useState('');
   const [localPreview, setLocalPreview] = useState('');
 
-  const uploadFile = async (file?: File) => {
-    if (!file) return;
+  const uploadFile = async (inputFile?: File) => {
+    if (!inputFile) return;
     setError('');
 
-    if (!file.type.startsWith('image/')) {
+    if (!inputFile.type.startsWith('image/')) {
       setError('Please upload an image file only.');
-      return;
-    }
-    if (file.size > MAX_IMAGE_BYTES) {
-      setError(`Image size must be less than ${MAX_IMAGE_MB} MB. Please choose a smaller photo.`);
       return;
     }
     if (!token) {
@@ -45,21 +59,26 @@ export default function ImageUploader({
       return;
     }
 
-    const previewUrl = URL.createObjectURL(file);
-    setLocalPreview(previewUrl);
-
-    const data = new FormData();
-    data.append('file', file, file.name || `photo-${Date.now()}.jpg`);
+    let previewUrl = '';
     setUploading(true);
     try {
+      const file = await compressImage(inputFile);
+      if (file.size > MAX_IMAGE_BYTES) {
+        setError(`Image size must be less than ${MAX_IMAGE_MB} MB. Please choose a smaller photo.`);
+        return;
+      }
+      previewUrl = URL.createObjectURL(file);
+      setLocalPreview(previewUrl);
+      const data = new FormData();
+      data.append('file', file, file.name || `photo-${Date.now()}.jpg`);
       const res = await api.upload<{ url: string }>('/uploads', data, token);
       onChange(res.url);
       setLocalPreview('');
-      URL.revokeObjectURL(previewUrl);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Upload failed');
+      setError(err instanceof Error ? err.message : 'Upload failed. Please try another image.');
     } finally {
       setUploading(false);
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
     }
   };
 
@@ -112,7 +131,7 @@ export default function ImageUploader({
                 <Camera size={16} /> Capture
               </label>
             </div>
-            <p className="text-xs text-gray-500">Supported: JPG, PNG, WEBP, GIF. Max size: {MAX_IMAGE_MB} MB.</p>
+            <p className="text-xs text-gray-500">Supported: JPG, PNG, WEBP, GIF. Large phone photos are compressed before upload.</p>
             {uploading && <p className="text-xs text-blue-600 font-semibold">Uploading photo...</p>}
             {error && <p className="text-xs text-red-500 font-semibold">{error}</p>}
           </div>

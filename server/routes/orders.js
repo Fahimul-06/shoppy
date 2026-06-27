@@ -123,7 +123,7 @@ router.get('/reviews/my', requireUser, async (req, res) => {
 });
 
 router.post('/reviews', requireUser, async (req, res) => {
-  const { orderId, orderItemId, rating, comment } = req.body || {};
+  const { orderId, orderItemId, rating, comment, photos } = req.body || {};
   if (!mongoose.isValidObjectId(orderId)) return res.status(400).json({ message: 'Valid orderId is required' });
   if (!mongoose.isValidObjectId(orderItemId)) return res.status(400).json({ message: 'Valid orderItemId is required' });
   const score = Number(rating);
@@ -140,11 +140,23 @@ router.post('/reviews', requireUser, async (req, res) => {
   const product = await Product.findById(item.product);
   if (!product) return res.status(404).json({ message: 'Product not found' });
 
+  const cleanPhotos = Array.isArray(photos)
+    ? photos.map((url) => String(url || '').trim()).filter(Boolean).slice(0, 6)
+    : [];
+
   const review = await ProductReview.findOneAndUpdate(
     { user: req.user._id, order: order._id, orderItem: item._id },
-    { user: req.user._id, order: order._id, orderItem: item._id, product: product._id, rating: score, comment: String(comment || '').trim() },
+    {
+      user: req.user._id,
+      order: order._id,
+      orderItem: item._id,
+      product: product._id,
+      rating: score,
+      comment: String(comment || '').trim(),
+      photos: cleanPhotos,
+    },
     { new: true, upsert: true, runValidators: true, setDefaultsOnInsert: true }
-  );
+  ).populate('user', 'fullName email profilePhoto');
 
   const stats = await ProductReview.aggregate([
     { $match: { product: product._id } },

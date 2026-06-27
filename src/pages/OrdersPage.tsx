@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { ArrowLeft, Clock3, CreditCard, Loader2, MessageCircle, Package, PackageCheck, RotateCcw, ShieldX, Star, Truck, X } from 'lucide-react';
 import { fetchUserCancellations, fetchUserOrders, fetchUserReturns, fetchUserReviews, submitProductReview } from '../lib/db';
 import { api, getToken } from '../lib/api';
+import ImageUploader from '../components/forms/ImageUploader';
 
 type OrderTab = 'all' | 'pay' | 'ship' | 'receive' | 'review' | 'returns' | 'cancellations';
 
@@ -32,6 +33,7 @@ export default function OrdersPage(){
   const [rating,setRating]=useState(5);
   const [comment,setComment]=useState('');
   const [reviewBusy,setReviewBusy]=useState(false);
+  const [reviewPhotos,setReviewPhotos]=useState<string[]>([]);
 
   const loadOrders = async () => {
     setLoading(true);
@@ -119,10 +121,11 @@ export default function OrdersPage(){
     if (!reviewTarget) return;
     setReviewBusy(true);
     try {
-      await submitProductReview({ orderId: orderId(reviewTarget.order), orderItemId: itemId(reviewTarget.item), rating, comment });
+      await submitProductReview({ orderId: orderId(reviewTarget.order), orderItemId: itemId(reviewTarget.item), rating, comment, photos: reviewPhotos });
       setReviewTarget(null);
       setComment('');
       setRating(5);
+      setReviewPhotos([]);
       await loadOrders();
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Review failed');
@@ -183,7 +186,7 @@ export default function OrdersPage(){
                 {activeTab === 'pay' && <button onClick={()=>alert('Payment gateway is not connected yet. This button is ready for bKash/Nagad/card integration.')} className="rounded-xl bg-orange-500 text-white px-4 py-2 text-sm font-bold">Pay Now</button>}
                 {activeTab === 'ship' && <span className="inline-flex items-center gap-2 rounded-xl bg-blue-50 text-blue-700 px-4 py-2 text-sm font-bold"><Clock3 size={16}/> Waiting for shipment</span>}
                 {activeTab === 'receive' && <span className="inline-flex items-center gap-2 rounded-xl bg-green-50 text-green-700 px-4 py-2 text-sm font-bold"><Truck size={16}/> On the way</span>}
-                {activeTab === 'review' && <button onClick={()=>setReviewTarget({order,item})} className="rounded-xl bg-yellow-500 text-white px-4 py-2 text-sm font-bold inline-flex gap-2 items-center"><Star size={16}/> Review</button>}
+                {activeTab === 'review' && <button onClick={()=>{ setReviewTarget({order,item}); setReviewPhotos([]); setComment(''); setRating(5); }} className="rounded-xl bg-yellow-500 text-white px-4 py-2 text-sm font-bold inline-flex gap-2 items-center"><Star size={16}/> Review</button>}
                 {seller && <button onClick={()=>openChat(order,item)} className="inline-flex items-center gap-2 rounded-xl bg-gray-900 text-white px-4 py-2 text-sm font-bold"><MessageCircle size={16}/> Message Seller</button>}
               </div>
             </div>
@@ -211,9 +214,19 @@ export default function OrdersPage(){
 
     {reviewTarget && <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl w-full max-w-md p-5">
-        <div className="flex justify-between items-start gap-3 mb-4"><div><h3 className="text-lg font-black">Review Product</h3><p className="text-sm text-gray-500">{itemName(reviewTarget.item)}</p></div><button onClick={()=>setReviewTarget(null)}><X /></button></div>
+        <div className="flex justify-between items-start gap-3 mb-4"><div><h3 className="text-lg font-black">Review Product</h3><p className="text-sm text-gray-500">{itemName(reviewTarget.item)}</p></div><button onClick={()=>{setReviewTarget(null); setReviewPhotos([]);}}><X /></button></div>
         <div className="flex gap-1 mb-4">{[1,2,3,4,5].map((n)=><button key={n} onClick={()=>setRating(n)}><Star className={n <= rating ? 'text-yellow-400 fill-yellow-400' : 'text-gray-300'} /></button>)}</div>
         <textarea value={comment} onChange={(e)=>setComment(e.target.value)} className="w-full border rounded-xl p-3 text-sm min-h-28" placeholder="Write your product review..." />
+        <div className="mt-4">
+          <ImageUploader
+            label="Review photo"
+            helperText="Upload or capture a real product photo for this review"
+            value=""
+            token={getToken('user')}
+            onChange={(url)=>setReviewPhotos((prev)=>prev.includes(url) ? prev : [...prev, url].slice(0, 6))}
+          />
+          {reviewPhotos.length > 0 && <div className="mt-3 flex flex-wrap gap-2">{reviewPhotos.map((url)=><div key={url} className="relative w-20 h-20 rounded-xl overflow-hidden border bg-gray-50"><img src={url} className="w-full h-full object-cover"/><button type="button" onClick={()=>setReviewPhotos((prev)=>prev.filter((x)=>x!==url))} className="absolute top-1 right-1 bg-black/70 text-white rounded-full w-6 h-6 flex items-center justify-center"><X size={13}/></button></div>)}</div>}
+        </div>
         <button disabled={reviewBusy} onClick={saveReview} className="mt-4 w-full bg-orange-500 text-white rounded-xl py-3 font-bold flex items-center justify-center gap-2">{reviewBusy && <Loader2 className="animate-spin" size={16}/>} Submit Review</button>
       </div>
     </div>}

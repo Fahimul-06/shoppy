@@ -1,6 +1,7 @@
 import express from 'express';
 import multer from 'multer';
 import Product from '../models/Product.js';
+import ProductReview from '../models/ProductReview.js';
 
 const router = express.Router();
 const esc = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -244,6 +245,29 @@ router.get('/:id/related', async (req, res) => {
     .sort((a, b) => b.score - a.score || new Date(b.candidate.createdAt || 0) - new Date(a.candidate.createdAt || 0));
 
   res.json({ products: scored.slice(0, limit).map((item) => item.candidate) });
+});
+
+
+router.get('/:id/reviews', async (req, res) => {
+  const id = req.params.id;
+  const product = id.match(/^[a-f\d]{24}$/i)
+    ? await Product.findById(id)
+    : await Product.findOne({ legacyId: id });
+
+  if (!product) return res.status(404).json({ message: 'Product not found' });
+
+  const reviews = await ProductReview.find({ product: product._id })
+    .populate('user', 'fullName email profilePhoto')
+    .sort({ createdAt: -1 })
+    .lean();
+
+  const distribution = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+  for (const review of reviews) {
+    const rating = Math.max(1, Math.min(5, Math.round(Number(review.rating || 0))));
+    distribution[rating] += 1;
+  }
+
+  res.json({ reviews, distribution });
 });
 
 router.get('/:id', async (req, res) => {

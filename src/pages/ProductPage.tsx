@@ -4,15 +4,8 @@ import { Star, ShoppingCart, Heart, Share2, Shield, Truck, RotateCcw, ChevronRig
 import { useCart } from '../context/CartContext';
 import ProductCard from '../components/ProductCard';
 import type { Product } from '../types';
-import { fetchProductById, fetchRelatedProducts } from '../lib/db';
+import { fetchProductById, fetchProductReviews, fetchRelatedProducts } from '../lib/db';
 import { useProducts } from '../hooks/useProducts';
-
-const mockReviews = [
-  { id: '1', author: 'Rahim Ahmed', rating: 5, date: '2024-03-10', comment: 'Excellent product! Exactly as described. Fast delivery and well packed.', verified: true },
-  { id: '2', author: 'Fatema Khatun', rating: 4, date: '2024-02-28', comment: 'Good quality, satisfied with the purchase. Would recommend to others.', verified: true },
-  { id: '3', author: 'Karim Hassan', rating: 5, date: '2024-02-15', comment: 'Amazing! Super fast delivery. The product exceeded my expectations.', verified: true },
-  { id: '4', author: 'Sumaiya Islam', rating: 4, date: '2024-01-30', comment: 'Great value for the price. Product is exactly what I needed.', verified: false },
-];
 
 export default function ProductPage() {
   const { id } = useParams<{ id: string }>();
@@ -26,11 +19,16 @@ export default function ProductPage() {
   const [added, setAdded] = useState(false);
   const [relatedProducts, setRelatedProducts] = useState<Product[]>([]);
   const [relatedLoading, setRelatedLoading] = useState(false);
+  const [reviews, setReviews] = useState<any[]>([]);
+  const [reviewDistribution, setReviewDistribution] = useState<Record<string, number>>({});
+  const [reviewsLoading, setReviewsLoading] = useState(false);
 
   useEffect(() => {
     let alive = true;
     setLoading(true);
     setRelatedProducts([]);
+    setReviews([]);
+    setReviewDistribution({});
     setActiveImage(0);
     if (!id) {
       setProduct(null);
@@ -52,6 +50,21 @@ export default function ProductPage() {
       .then((rows) => { if (alive) setRelatedProducts(rows || []); })
       .catch(() => { if (alive) setRelatedProducts([]); })
       .finally(() => { if (alive) setRelatedLoading(false); });
+    return () => { alive = false; };
+  }, [product?.id]);
+
+  useEffect(() => {
+    let alive = true;
+    if (!product?.id) return;
+    setReviewsLoading(true);
+    fetchProductReviews(product.id)
+      .then((data) => {
+        if (!alive) return;
+        setReviews(data.reviews || []);
+        setReviewDistribution(data.distribution || {});
+      })
+      .catch(() => { if (alive) { setReviews([]); setReviewDistribution({}); } })
+      .finally(() => { if (alive) setReviewsLoading(false); });
     return () => { alive = false; };
   }, [product?.id]);
 
@@ -282,7 +295,7 @@ export default function ProductPage() {
                     : 'text-gray-500 border-transparent hover:text-gray-700'
                 }`}
               >
-                {tab === 'specs' ? 'Specifications' : tab === 'reviews' ? `Reviews (${mockReviews.length})` : tab}
+                {tab === 'specs' ? 'Specifications' : tab === 'reviews' ? `Reviews (${reviews.length || Number(product.reviewCount ?? 0)})` : tab}
               </button>
             ))}
           </div>
@@ -332,7 +345,9 @@ export default function ProductPage() {
                   </div>
                   <div className="flex-1 space-y-1.5">
                     {[5, 4, 3, 2, 1].map((star) => {
-                      const pct = star === 5 ? 68 : star === 4 ? 20 : star === 3 ? 8 : star === 2 ? 3 : 1;
+                      const count = Number(reviewDistribution[String(star)] || 0);
+                      const total = reviews.length || Number(product.reviewCount ?? 0) || 0;
+                      const pct = total ? Math.round((count / total) * 100) : 0;
                       return (
                         <div key={star} className="flex items-center gap-2 text-xs text-gray-500">
                           <span className="w-3">{star}</span>
@@ -346,28 +361,46 @@ export default function ProductPage() {
                     })}
                   </div>
                 </div>
-                {mockReviews.map((review) => (
-                  <div key={review.id} className="pb-5 border-b border-gray-50 last:border-0">
+                {reviewsLoading ? (
+                  <div className="py-8 text-center text-gray-400">Loading customer reviews...</div>
+                ) : reviews.length === 0 ? (
+                  <div className="py-8 text-center text-gray-500">No customer reviews yet for this product.</div>
+                ) : reviews.map((review) => {
+                  const author = review.user?.fullName || review.user?.email?.split('@')?.[0] || 'Customer';
+                  const photo = review.user?.profilePhoto;
+                  return (
+                  <div key={review.id || review._id} className="pb-5 border-b border-gray-50 last:border-0">
                     <div className="flex items-center justify-between mb-2">
                       <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 bg-orange-100 rounded-full flex items-center justify-center text-orange-600 font-bold text-sm">
-                          {review.author[0]}
-                        </div>
+                        {photo ? <img src={photo} className="w-8 h-8 rounded-full object-cover bg-gray-100" /> : (
+                          <div className="w-8 h-8 bg-orange-100 rounded-full flex items-center justify-center text-orange-600 font-bold text-sm">
+                            {author[0]}
+                          </div>
+                        )}
                         <div>
-                          <p className="font-semibold text-sm text-gray-800">{review.author}</p>
-                          {review.verified && <span className="text-xs text-green-600 font-medium">Verified Purchase</span>}
+                          <p className="font-semibold text-sm text-gray-800">{author}</p>
+                          <span className="text-xs text-green-600 font-medium">Verified Purchase</span>
                         </div>
                       </div>
-                      <span className="text-xs text-gray-400">{review.date}</span>
+                      <span className="text-xs text-gray-400">{review.createdAt ? new Date(review.createdAt).toLocaleDateString() : ''}</span>
                     </div>
                     <div className="flex items-center gap-0.5 mb-1.5">
                       {[...Array(5)].map((_, i) => (
                         <Star key={i} size={13} className={i < review.rating ? 'text-orange-400 fill-orange-400' : 'text-gray-200 fill-gray-200'} />
                       ))}
                     </div>
-                    <p className="text-sm text-gray-700">{review.comment}</p>
+                    {review.comment && <p className="text-sm text-gray-700">{review.comment}</p>}
+                    {Array.isArray(review.photos) && review.photos.length > 0 && (
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {review.photos.map((url: string, index: number) => (
+                          <a key={`${url}-${index}`} href={url} target="_blank" rel="noreferrer" className="block w-20 h-20 rounded-xl overflow-hidden border bg-gray-50">
+                            <img src={url} alt={`Review photo ${index + 1}`} className="w-full h-full object-cover" />
+                          </a>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                ))}
+                );})}
               </div>
             )}
           </div>

@@ -57,4 +57,6 @@ export interface Review {
   date: string;
   comment: string;
   verified: boolean;
+  photos?: string[];
+  user?: { fullName?: string; email?: string; profilePhoto?: string };
 }

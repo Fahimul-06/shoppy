@@ -8,6 +8,7 @@ const productReviewSchema = new mongoose.Schema({
   orderItem: { type: mongoose.Schema.Types.ObjectId, required: true },
   rating: { type: Number, required: true, min: 1, max: 5 },
   comment: { type: String, default: '', trim: true },
+  photos: [{ type: String, trim: true }],
 }, { timestamps: true });
 
 productReviewSchema.index({ user: 1, order: 1, orderItem: 1 }, { unique: true });

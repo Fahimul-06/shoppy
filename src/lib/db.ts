@@ -27,6 +27,10 @@ export async function fetchRelatedProducts(productId: string): Promise<Product[]
   return products;
 }
 
+export async function fetchProductReviews(productId: string): Promise<{ reviews: any[]; distribution: Record<string, number> }> {
+  return api.get<{ reviews: any[]; distribution: Record<string, number> }>(`/products/${encodeURIComponent(productId)}/reviews`);
+}
+
 export async function searchProducts(query: string): Promise<Product[]> {
   const { products } = await api.get<{ products: Product[] }>(`/products?search=${encodeURIComponent(query)}`);
   return products;
@@ -121,7 +125,7 @@ export async function fetchUserReviews() {
   return reviews;
 }
 
-export async function submitProductReview(payload: { orderId: string; orderItemId: string; rating: number; comment?: string }) {
+export async function submitProductReview(payload: { orderId: string; orderItemId: string; rating: number; comment?: string; photos?: string[] }) {
   const { review } = await api.post<{ review: any }>('/orders/reviews', payload, getToken('user'));
   return review;
 }

@@ -2,11 +2,14 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Trash2, Plus, Minus, ShoppingBag, Tag, ChevronRight, ArrowLeft } from 'lucide-react';
 import { useCart } from '../context/CartContext';
+import { api } from '../lib/api';
 
 export default function CartPage() {
   const { state, removeItem, updateQuantity, totalItems } = useCart();
   const [coupon, setCoupon] = useState('');
-  const [couponApplied, setCouponApplied] = useState(false);
+  const [couponLoading, setCouponLoading] = useState(false);
+  const [couponMessage, setCouponMessage] = useState('');
+  const [promoInfo, setPromoInfo] = useState<{ code: string; discount: number; eligibleItemCount?: number } | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>(() => state.items.map((item) => item.product.id));
 
   useEffect(() => {
@@ -25,27 +28,62 @@ export default function CartPage() {
   );
   const selectedTotalItems = selectedItems.reduce((sum, item) => sum + item.quantity, 0);
   const selectedTotalPrice = selectedItems.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
-  const discount = couponApplied ? Math.round(selectedTotalPrice * 0.1) : 0;
+  const discount = promoInfo?.discount || 0;
   const shipping = selectedTotalPrice > 2000 ? 0 : 120;
   const finalTotal = selectedTotalPrice - discount + shipping;
   const allSelected = state.items.length > 0 && selectedIds.length === state.items.length;
 
-  const applyCoupon = () => {
-    if (coupon.trim().toUpperCase() === 'CARTUP10') setCouponApplied(true);
+  const applyCoupon = async () => {
+    const code = coupon.trim().toUpperCase();
+    if (!code) {
+      setCouponMessage('Enter a coupon code first.');
+      return;
+    }
+    if (selectedItems.length === 0) {
+      setCouponMessage('Select at least one product before applying coupon.');
+      return;
+    }
+    setCouponLoading(true);
+    setCouponMessage('');
+    try {
+      const response = await api.post<{ promo: { code: string }; discount: number; eligibleItemCount: number }>('/promos/validate', {
+        code,
+        items: selectedItems.map(({ product, quantity }) => ({
+          product_id: product.id,
+          product_snapshot: product as unknown as Record<string, unknown>,
+          quantity,
+          unit_price: product.price,
+        })),
+      });
+      setPromoInfo({ code: response.promo.code, discount: response.discount, eligibleItemCount: response.eligibleItemCount });
+      setCoupon(response.promo.code);
+      setCouponMessage(`Coupon applied to ${response.eligibleItemCount || selectedItems.length} product(s).`);
+    } catch (error) {
+      setPromoInfo(null);
+      setCouponMessage(error instanceof Error ? error.message : 'Coupon could not be applied.');
+    } finally {
+      setCouponLoading(false);
+    }
   };
 
   const toggleSelection = (productId: string) => {
     setSelectedIds((current) =>
       current.includes(productId) ? current.filter((id) => id !== productId) : [...current, productId]
     );
+    setPromoInfo(null);
+    setCouponMessage('Coupon removed because selected products changed. Apply again if needed.');
   };
 
   const toggleAll = () => {
     setSelectedIds(allSelected ? [] : state.items.map((item) => item.product.id));
+    setPromoInfo(null);
+    setCouponMessage('Coupon removed because selected products changed. Apply again if needed.');
   };
 
   const saveCheckoutSelection = () => {
     localStorage.setItem('checkoutItemIds', JSON.stringify(selectedIds));
+    if (promoInfo?.code) localStorage.setItem('checkoutPromoCode', promoInfo.code);
+    else localStorage.removeItem('checkoutPromoCode');
   };
 
   return (
@@ -147,10 +185,10 @@ export default function CartPage() {
                   <Tag size={16} className="text-orange-500" />
                   <h3 className="font-semibold text-gray-900">Coupon Code</h3>
                 </div>
-                {couponApplied ? (
+                {promoInfo ? (
                   <div className="flex items-center justify-between bg-green-50 border border-green-200 rounded-xl px-3 py-2.5">
-                    <span className="text-green-700 font-semibold text-sm">CARTUP10 applied!</span>
-                    <button onClick={() => { setCouponApplied(false); setCoupon(''); }} className="text-gray-400 hover:text-red-500 transition-colors">
+                    <span className="text-green-700 font-semibold text-sm">{promoInfo.code} applied!</span>
+                    <button onClick={() => { setPromoInfo(null); setCoupon(''); setCouponMessage(''); localStorage.removeItem('checkoutPromoCode'); }} className="text-gray-400 hover:text-red-500 transition-colors">
                       <Trash2 size={14} />
                     </button>
                   </div>
@@ -164,12 +202,15 @@ export default function CartPage() {
                       onKeyDown={(e) => e.key === 'Enter' && applyCoupon()}
                       className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-orange-400 transition-colors"
                     />
-                    <button onClick={applyCoupon} className="bg-orange-500 hover:bg-orange-600 text-white text-sm font-semibold px-4 py-2 rounded-xl transition-colors">
-                      Apply
+                    <button onClick={applyCoupon} disabled={couponLoading || selectedItems.length === 0} className="bg-orange-500 hover:bg-orange-600 disabled:bg-orange-300 text-white text-sm font-semibold px-4 py-2 rounded-xl transition-colors">
+                      {couponLoading ? '...' : 'Apply'}
                     </button>
                   </div>
                 )}
-                <p className="text-xs text-gray-400 mt-2">Try: <span className="font-mono font-semibold text-gray-600">CARTUP10</span></p>
+                {couponMessage && (
+                  <p className={`text-xs mt-2 ${promoInfo ? 'text-green-600' : 'text-red-500'}`}>{couponMessage}</p>
+                )}
+                <p className="text-xs text-gray-400 mt-2">Use any active voucher/coupon from the Vouchers & Coupons page.</p>
               </div>
 
               {/* Summary */}
@@ -180,9 +221,9 @@ export default function CartPage() {
                     <span>Selected subtotal ({selectedTotalItems} items)</span>
                     <span className="font-medium text-gray-800">৳{selectedTotalPrice.toLocaleString()}</span>
                   </div>
-                  {couponApplied && (
+                  {promoInfo && (
                     <div className="flex justify-between text-green-600">
-                      <span>Discount (10%)</span>
+                      <span>Coupon discount ({promoInfo.code})</span>
                       <span className="font-medium">-৳{discount.toLocaleString()}</span>
                     </div>
                   )}

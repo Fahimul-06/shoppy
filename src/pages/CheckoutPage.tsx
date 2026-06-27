@@ -27,7 +27,7 @@ export default function CheckoutPage() {
   const [orderNumber, setOrderNumber] = useState('');
   const [placing, setPlacing] = useState(false);
   const [error, setError] = useState('');
-  const [promoCode, setPromoCode] = useState('');
+  const [promoCode, setPromoCode] = useState(() => localStorage.getItem('checkoutPromoCode') || '');
   const [promoInfo, setPromoInfo] = useState<{ code: string; discount: number; eligibleItemCount?: number } | null>(null);
   const [promoLoading, setPromoLoading] = useState(false);
   const [checkoutItemIds] = useState<string[] | null>(() => {
@@ -92,6 +92,17 @@ export default function CheckoutPage() {
     }
   };
 
+  useEffect(() => {
+    const storedCode = localStorage.getItem('checkoutPromoCode');
+    if (!storedCode || promoInfo || promoLoading || checkoutItems.length === 0) return;
+    setPromoCode(storedCode);
+    const timer = window.setTimeout(() => {
+      applyPromo();
+    }, 50);
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [checkoutItems.length]);
+
   const placeOrder = async () => {
     if (!getToken('user')) {
       navigate('/account');
@@ -124,6 +135,7 @@ export default function CheckoutPage() {
       setOrderNumber(order.orderNumber || order.id);
       removeItems(checkoutItems.map(({ product }) => product.id));
       localStorage.removeItem('checkoutItemIds');
+      localStorage.removeItem('checkoutPromoCode');
       setOrdered(true);
       setStep(2);
     } catch (e) {

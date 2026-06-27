@@ -32,6 +32,13 @@ export async function searchProducts(query: string): Promise<Product[]> {
   return products;
 }
 
+
+export async function searchProductsByImage(file: File): Promise<{ products: Product[]; labels: string[]; message?: string }> {
+  const formData = new FormData();
+  formData.append('file', file);
+  return api.upload<{ products: Product[]; labels: string[]; message?: string }>('/products/image-search', formData);
+}
+
 export async function fetchCategories(): Promise<Category[]> {
   const { categories } = await api.get<{ categories: Category[] }>('/categories');
   return categories;

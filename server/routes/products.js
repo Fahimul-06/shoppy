@@ -1,23 +1,149 @@
 import express from 'express';
+import multer from 'multer';
 import Product from '../models/Product.js';
+
 const router = express.Router();
 const esc = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const compact = (items) => [...new Set(items.map((x) => String(x || '').trim()).filter(Boolean))];
+const textOfProduct = (product) => [
+  product.name,
+  product.brand,
+  product.category,
+  product.subcategory,
+  product.childCategory,
+  product.description,
+  ...(Array.isArray(product.features) ? product.features : []),
+  product.seller?.name,
+  product.seller?.shopName,
+].filter(Boolean).join(' ').toLowerCase();
 
-router.get('/', async (req, res) => {
-  const { category, badge, search, includeInactive } = req.query;
-  // Treat missing `active` as public because older seller-created products may not have this field.
+const imageUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 15 * 1024 * 1024, files: 1 },
+  fileFilter: (_req, file, cb) => {
+    if (!file.mimetype?.startsWith('image/')) return cb(new Error('Only image files are allowed'));
+    cb(null, true);
+  },
+});
+
+async function detectImageLabels(file) {
+  const labels = [];
+
+  // Filename terms are useful for uploaded product screenshots such as "red-shoes.jpg".
+  const filenameTerms = String(file.originalname || '')
+    .replace(/\.[a-z0-9]+$/i, '')
+    .split(/[^a-zA-Z0-9]+/)
+    .filter((word) => word.length >= 3 && !['image', 'photo', 'capture', 'camera', 'screenshot'].includes(word.toLowerCase()));
+  labels.push(...filenameTerms);
+
+  // Optional real visual search. Add GOOGLE_VISION_API_KEY on Render Web Service to enable label detection.
+  if (process.env.GOOGLE_VISION_API_KEY) {
+    try {
+      const body = {
+        requests: [{
+          image: { content: file.buffer.toString('base64') },
+          features: [
+            { type: 'LABEL_DETECTION', maxResults: 12 },
+            { type: 'WEB_DETECTION', maxResults: 8 },
+            { type: 'OBJECT_LOCALIZATION', maxResults: 8 },
+          ],
+        }],
+      };
+      const response = await fetch(`https://vision.googleapis.com/v1/images:annotate?key=${process.env.GOOGLE_VISION_API_KEY}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (response.ok) {
+        const data = await response.json();
+        const result = data.responses?.[0] || {};
+        labels.push(...(result.labelAnnotations || []).map((item) => item.description));
+        labels.push(...(result.localizedObjectAnnotations || []).map((item) => item.name));
+        labels.push(...(result.webDetection?.webEntities || []).map((item) => item.description));
+        labels.push(...(result.webDetection?.bestGuessLabels || []).map((item) => item.label));
+      } else {
+        console.warn('Google Vision image search failed:', response.status, await response.text());
+      }
+    } catch (error) {
+      console.warn('Google Vision image search error:', error.message);
+    }
+  }
+
+  return compact(labels).slice(0, 24);
+}
+
+function buildPublicProductFilter(query) {
+  const { category, badge, search, includeInactive } = query;
   const filter = includeInactive === 'true' ? {} : { active: { $ne: false } };
   if (category) filter.category = category;
   if (badge) filter.badge = badge;
-  if (search) filter.$or = [
-    { name: new RegExp(esc(search), 'i') },
-    { brand: new RegExp(esc(search), 'i') },
-    { description: new RegExp(esc(search), 'i') },
-  ];
-  const products = await Product.find(filter).populate('seller', 'name shopName shopLogo shopAddress status').sort({ createdAt: -1 });
+  if (search) {
+    const terms = compact(String(search).split(/\s+/)).slice(0, 8);
+    const regexes = terms.length ? terms.map((term) => new RegExp(esc(term), 'i')) : [new RegExp(esc(search), 'i')];
+    filter.$or = regexes.flatMap((rx) => [
+      { name: rx },
+      { brand: rx },
+      { description: rx },
+      { category: rx },
+      { subcategory: rx },
+      { childCategory: rx },
+      { features: rx },
+    ]);
+  }
+  return filter;
+}
+
+router.get('/', async (req, res) => {
+  const filter = buildPublicProductFilter(req.query);
+  let products = await Product.find(filter).populate('seller', 'name shopName shopLogo shopAddress status').sort({ createdAt: -1 });
+
+  // Search seller/shop names too, after populate, because those fields live in the Seller collection.
+  if (req.query.search) {
+    const q = String(req.query.search).toLowerCase();
+    const terms = compact(q.split(/\s+/));
+    products = products.filter((product) => {
+      const haystack = textOfProduct(product);
+      return terms.every((term) => haystack.includes(term)) || haystack.includes(q);
+    });
+  }
+
   res.json({ products });
 });
 
+router.post('/image-search', imageUpload.single('file'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ message: 'Please upload or capture a product photo first.' });
+
+  const labels = await detectImageLabels(req.file);
+  const products = await Product.find({ active: { $ne: false } })
+    .populate('seller', 'name shopName shopLogo shopAddress status')
+    .sort({ createdAt: -1 })
+    .limit(300);
+
+  const normalizedLabels = labels.map((label) => label.toLowerCase());
+  const scored = products.map((product) => {
+    const haystack = textOfProduct(product);
+    let score = 0;
+    for (const label of normalizedLabels) {
+      if (!label) continue;
+      if (haystack.includes(label)) score += label.length > 6 ? 8 : 5;
+      for (const part of label.split(/\s+/).filter((x) => x.length >= 3)) {
+        if (haystack.includes(part)) score += 2;
+      }
+    }
+    return { product, score };
+  }).sort((a, b) => b.score - a.score || new Date(b.product.createdAt || 0) - new Date(a.product.createdAt || 0));
+
+  const matched = scored.filter((item) => item.score > 0).slice(0, 30).map((item) => item.product);
+  const fallback = scored.slice(0, 20).map((item) => item.product);
+
+  res.json({
+    products: matched.length ? matched : fallback,
+    labels,
+    message: matched.length
+      ? `Matched from photo: ${labels.slice(0, 6).join(', ')}`
+      : 'Photo captured successfully. Add GOOGLE_VISION_API_KEY on backend for stronger visual matching; showing popular/recent products for now.',
+  });
+});
 
 router.get('/:id/related', async (req, res) => {
   const id = req.params.id;
@@ -61,4 +187,13 @@ router.get('/:id', async (req, res) => {
     : await Product.findOne({ legacyId: id }).populate('seller', 'name shopName shopLogo shopAddress status');
   res.json({ product });
 });
+
+router.use((err, _req, res, _next) => {
+  if (err instanceof multer.MulterError && err.code === 'LIMIT_FILE_SIZE') {
+    return res.status(400).json({ message: 'Image size must be less than 15 MB. Please choose a smaller image.' });
+  }
+  if (err instanceof multer.MulterError) return res.status(400).json({ message: err.message || 'Image search failed' });
+  return res.status(400).json({ message: err.message || 'Image search failed' });
+});
+
 export default router;

@@ -2,13 +2,14 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   Search, ShoppingCart, User, Menu, X, ChevronDown, ChevronRight,
-  Grid3X3, Zap, Sparkles, Tag, Award, Store,
+  Grid3X3, Zap, Sparkles, Tag, Award, Store, Camera, Loader2,
 } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { categories } from '../data/categories';
 import { products } from '../data/products';
 
 import { subSubMap } from '../data/categoryOptions';
+import { searchProductsByImage } from '../lib/db';
 
 const categoryUrl = (categorySlug: string, sub?: string, child?: string) => {
   const params = new URLSearchParams();
@@ -184,6 +185,7 @@ export default function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [catDropdownOpen, setCatDropdownOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [imageSearching, setImageSearching] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const catRef = useRef<HTMLDivElement>(null);
 
@@ -209,6 +211,24 @@ export default function Header() {
     if (q) {
       navigate(`/search?q=${encodeURIComponent(q)}`);
       setSearchQuery('');
+    }
+  };
+
+  const handleImageSearch = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+
+    try {
+      setImageSearching(true);
+      const data = await searchProductsByImage(file);
+      sessionStorage.setItem('photoSearchResults', JSON.stringify(data));
+      navigate('/search?photo=1');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Photo search failed. Please try again.';
+      alert(message);
+    } finally {
+      setImageSearching(false);
     }
   };
 
@@ -249,6 +269,20 @@ export default function Header() {
                 placeholder="Search products, brands & categories..."
                 className="flex-1 bg-transparent px-3 py-2.5 text-sm outline-none text-gray-700 placeholder-gray-400"
               />
+              <label
+                title="Search by photo"
+                className="relative cursor-pointer text-gray-500 hover:text-orange-600 px-2 py-2 rounded-lg hover:bg-orange-50 transition-colors"
+              >
+                {imageSearching ? <Loader2 size={18} className="animate-spin" /> : <Camera size={18} />}
+                <input
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  onChange={handleImageSearch}
+                  className="sr-only"
+                  disabled={imageSearching}
+                />
+              </label>
               <button type="submit" className="bg-orange-500 hover:bg-orange-600 text-white text-sm font-medium px-4 py-2 rounded-r-xl transition-colors duration-150 hidden sm:block">
                 Search
               </button>

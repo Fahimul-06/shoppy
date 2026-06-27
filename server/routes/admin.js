@@ -100,40 +100,68 @@ function sanitizeSaleProductPayload(body = {}) {
 async function applySaleToProducts({ saleType, productIds, discount, replaceExisting = true }) {
   const tag = saleType === 'flash' ? 'flash' : 'daily';
   const discountField = tag === 'daily' ? 'dailySaleDiscount' : 'flashSaleDiscount';
-  const otherDiscountField = tag === 'daily' ? 'flashSaleDiscount' : 'dailySaleDiscount';
-  const ids = Array.isArray(productIds) ? productIds.map((id) => String(id || '').trim()).filter(Boolean) : [];
+  const ids = Array.isArray(productIds)
+    ? productIds.map((id) => String(id || '').trim()).filter((id) => id && Product.db.base.Types.ObjectId.isValid(id))
+    : [];
   const safeDiscount = clampSaleDiscount(discount);
+  const result = { selectedCount: ids.length, removedCount: 0, updatedCount: 0 };
 
   if (replaceExisting) {
-    await Product.updateMany(
-      { saleTags: tag, _id: { $nin: ids } },
-      { $pull: { saleTags: tag }, $set: { [discountField]: 0 } }
+    const removePipeline = [
+      {
+        $set: {
+          saleTags: {
+            $filter: {
+              input: { $ifNull: ['$saleTags', []] },
+              as: 'saleTag',
+              cond: { $ne: ['$$saleTag', tag] },
+            },
+          },
+          [discountField]: 0,
+        },
+      },
+      {
+        $set: {
+          discount: {
+            $max: [
+              { $ifNull: ['$dailySaleDiscount', 0] },
+              { $ifNull: ['$flashSaleDiscount', 0] },
+            ],
+          },
+        },
+      },
+    ];
+    const removed = await Product.updateMany(
+      { saleTags: tag, ...(ids.length ? { _id: { $nin: ids } } : {}) },
+      removePipeline
     );
+    result.removedCount = removed.modifiedCount || 0;
   }
 
   if (ids.length) {
-    await Product.updateMany(
-      { _id: { $in: ids } },
-      { $addToSet: { saleTags: tag }, $set: { [discountField]: safeDiscount } }
-    );
+    const applyPipeline = [
+      {
+        $set: {
+          saleTags: { $setUnion: [{ $ifNull: ['$saleTags', []] }, [tag]] },
+          [discountField]: safeDiscount,
+        },
+      },
+      {
+        $set: {
+          discount: {
+            $max: [
+              { $ifNull: ['$dailySaleDiscount', 0] },
+              { $ifNull: ['$flashSaleDiscount', 0] },
+            ],
+          },
+        },
+      },
+    ];
+    const updated = await Product.updateMany({ _id: { $in: ids } }, applyPipeline);
+    result.updatedCount = updated.modifiedCount || updated.matchedCount || 0;
   }
 
-  const affected = await Product.find({ _id: { $in: ids } });
-  for (const product of affected) {
-    product.discount = Math.max(Number(product.dailySaleDiscount || 0), Number(product.flashSaleDiscount || 0), Number(product.discount || 0));
-    await product.save();
-  }
-
-  if (replaceExisting) {
-    const removed = await Product.find({ saleTags: { $ne: tag }, [discountField]: { $gt: 0 } });
-    for (const product of removed) {
-      product[discountField] = 0;
-      product.discount = Math.max(Number(product[otherDiscountField] || 0), 0);
-      await product.save();
-    }
-  }
-
-  return Product.find({ saleTags: tag }).sort({ createdAt: -1 }).populate('seller');
+  return result;
 }
 
 async function ensureDefaultAdmin() {
@@ -213,12 +241,16 @@ router.post('/products', requireAdmin, async (req, res) => res.status(201).json(
 router.put('/products/:id', requireAdmin, async (req, res) => res.json({ product: await Product.findByIdAndUpdate(req.params.id, sanitizeSaleProductPayload(req.body), { new: true }) }));
 router.delete('/products/:id', requireAdmin, async (req, res) => { await Product.findByIdAndDelete(req.params.id); res.json({ ok: true }); });
 
-router.post('/sales/apply', requireAdmin, async (req, res) => {
-  const { saleType = 'daily', discount = 0, productIds = [], replaceExisting = true } = req.body || {};
-  if (!['daily', 'flash'].includes(saleType)) return res.status(400).json({ message: 'Invalid sale type' });
-  if (!Array.isArray(productIds)) return res.status(400).json({ message: 'productIds must be an array' });
-  const products = await applySaleToProducts({ saleType, productIds, discount, replaceExisting });
-  res.json({ message: 'Sale products updated', products });
+router.post('/sales/apply', requireAdmin, async (req, res, next) => {
+  try {
+    const { saleType = 'daily', discount = 0, productIds = [], replaceExisting = true } = req.body || {};
+    if (!['daily', 'flash'].includes(saleType)) return res.status(400).json({ message: 'Invalid sale type' });
+    if (!Array.isArray(productIds)) return res.status(400).json({ message: 'productIds must be an array' });
+    const result = await applySaleToProducts({ saleType, productIds, discount, replaceExisting });
+    res.json({ message: 'Sale products updated', saleType, discount: clampSaleDiscount(discount), ...result });
+  } catch (error) {
+    next(error);
+  }
 });
 router.get('/orders', requireAdmin, async (_req, res) => {
   const orders = await Order.find()

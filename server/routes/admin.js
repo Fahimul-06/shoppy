@@ -11,64 +11,6 @@ import { requireAdmin, signToken } from '../middleware/auth.js';
 const router = express.Router();
 const adminUser = (u) => ({ id: u.id, fullName: u.fullName, email: u.email, phone: u.phone, role: u.role });
 
-const safeNumber = (value) => Number(value || 0);
-
-async function getSellerAnalytics(sellerId) {
-  const products = await Product.find({ seller: sellerId }).sort({ createdAt: -1 });
-  const productIds = products.map((p) => p._id);
-  const productIdSet = new Set(productIds.map((id) => id.toString()));
-
-  const orders = productIds.length
-    ? await Order.find({ 'items.product': { $in: productIds } }).populate('user').populate('items.product').sort({ createdAt: -1 })
-    : [];
-
-  let productsSold = 0;
-  let totalSale = 0;
-  const sellerOrders = [];
-
-  for (const order of orders) {
-    const sellerItems = [];
-    for (const item of order.items || []) {
-      const productId = item.product?._id?.toString?.() || item.product?.toString?.();
-      if (!productIdSet.has(productId)) continue;
-      if (item.cancellationStatus === 'cancelled') continue;
-      productsSold += safeNumber(item.quantity);
-      totalSale += safeNumber(item.totalPrice);
-      sellerItems.push(item);
-    }
-    if (sellerItems.length) sellerOrders.push({ order, items: sellerItems });
-  }
-
-  return {
-    products,
-    orders: sellerOrders,
-    stats: {
-      totalProducts: products.length,
-      activeProducts: products.filter((p) => p.active !== false).length,
-      totalOrders: sellerOrders.length,
-      productsSold,
-      totalSale,
-      stockAvailable: products.reduce((sum, p) => sum + safeNumber(p.stock), 0),
-    },
-  };
-}
-
-function formatCustomerSummary(user, orders) {
-  const totalSpent = orders.reduce((sum, order) => sum + safeNumber(order.totalAmount), 0);
-  return {
-    id: user.id,
-    fullName: user.fullName,
-    email: user.email,
-    phone: user.phone,
-    profilePhoto: user.profilePhoto,
-    addresses: user.addresses || [],
-    createdAt: user.createdAt,
-    totalOrders: orders.length,
-    totalSpent,
-    lastOrderAt: orders[0]?.createdAt || null,
-  };
-}
-
 async function ensureDefaultAdmin() {
   const email = process.env.ADMIN_EMAIL || 'admin@gmail.com';
   const password = process.env.ADMIN_PASSWORD || 'Qwertyuiop09';
@@ -92,41 +34,7 @@ router.get('/stats', requireAdmin, async (_req, res) => {
   ]);
   res.json({ stats: { totalSellers, pendingSellers, totalProducts, totalOrders, activePromos, revenue: paidOrders.reduce((s, o) => s + Number(o.totalAmount || 0), 0) } });
 });
-router.get('/sellers', requireAdmin, async (_req, res) => {
-  const sellers = await Seller.find().sort({ createdAt: -1 });
-  res.json({ sellers });
-});
-
-router.get('/sellers/:id/detail', requireAdmin, async (req, res) => {
-  const seller = await Seller.findById(req.params.id);
-  if (!seller) return res.status(404).json({ message: 'Seller not found' });
-
-  const { products, orders, stats } = await getSellerAnalytics(seller._id);
-  const returns = await ReturnRequest.find({ seller: seller._id }).populate('user').populate('product').populate('order').sort({ createdAt: -1 });
-  const cancellations = await CancellationRequest.find({ seller: seller._id }).populate('user').populate('product').populate('order').sort({ createdAt: -1 });
-
-  res.json({ seller, stats, products, orders, returns, cancellations });
-});
-
-router.get('/customers', requireAdmin, async (_req, res) => {
-  const users = await User.find({ role: 'user' }).sort({ createdAt: -1 });
-  const customers = await Promise.all(users.map(async (user) => {
-    const orders = await Order.find({ user: user._id }).sort({ createdAt: -1 });
-    return formatCustomerSummary(user, orders);
-  }));
-  res.json({ customers });
-});
-
-router.get('/customers/:id/detail', requireAdmin, async (req, res) => {
-  const customer = await User.findOne({ _id: req.params.id, role: 'user' });
-  if (!customer) return res.status(404).json({ message: 'Customer not found' });
-  const [orders, returns, cancellations] = await Promise.all([
-    Order.find({ user: customer._id }).populate('items.product').sort({ createdAt: -1 }),
-    ReturnRequest.find({ user: customer._id }).populate('seller').populate('product').populate('order').sort({ createdAt: -1 }),
-    CancellationRequest.find({ user: customer._id }).populate('seller').populate('product').populate('order').sort({ createdAt: -1 }),
-  ]);
-  res.json({ customer: formatCustomerSummary(customer, orders), orders, returns, cancellations });
-});
+router.get('/sellers', requireAdmin, async (_req, res) => res.json({ sellers: await Seller.find().sort({ createdAt: -1 }) }));
 router.patch('/sellers/:id/status', requireAdmin, async (req, res) => {
   const seller = await Seller.findByIdAndUpdate(req.params.id, { status: req.body.status }, { new: true });
   res.json({ seller });

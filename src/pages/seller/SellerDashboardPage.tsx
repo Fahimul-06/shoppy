@@ -6,6 +6,7 @@ import { categories } from '../../data/categories';
 import ImageUploader from '../../components/forms/ImageUploader';
 import PasswordOtpPanel from '../../components/forms/PasswordOtpPanel';
 import PhoneOtpPanel from '../../components/forms/PhoneOtpPanel';
+import CategoryDropdowns from '../../components/forms/CategoryDropdowns';
 
 const EMPTY = {
   name: '',
@@ -13,6 +14,8 @@ const EMPTY = {
   originalPrice: '',
   image: '',
   category: categories[0]?.slug || 'all',
+  subcategory: '',
+  childCategory: '',
   brand: '',
   stock: '1',
   description: '',
@@ -107,7 +110,7 @@ export default function SellerDashboardPage() {
 
   const open = (p?: any) => {
     setEditing(p || null);
-    setForm(p ? { ...EMPTY, ...p, image: p.image || p.images?.[0] || '', features: (p.features || []).join('\n') } : { ...EMPTY });
+    setForm(p ? { ...EMPTY, ...p, image: p.image || p.images?.[0] || '', subcategory: p.subcategory || p.subCategory || '', childCategory: p.childCategory || p.subSubCategory || '', features: (p.features || []).join('\n') } : { ...EMPTY });
     setModal(true);
   };
 
@@ -120,6 +123,8 @@ export default function SellerDashboardPage() {
       image: form.image,
       images: [form.image].filter(Boolean),
       features: String(form.features || '').split('\n').map((x) => x.trim()).filter(Boolean),
+      subcategory: form.subcategory || '',
+      childCategory: form.childCategory || '',
     };
     if (editing) await api.put(`/seller/products/${editing.id || editing._id}`, payload, getToken('seller'));
     else await api.post('/seller/products', payload, getToken('seller'));
@@ -274,7 +279,7 @@ export default function SellerDashboardPage() {
         <Link to="/" className="block text-center mt-5 text-gray-400">Back to store</Link>
       </main>
 
-      {modal && <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"><div className="bg-white rounded-2xl p-5 max-w-2xl w-full max-h-[90vh] overflow-y-auto"><div className="flex justify-between mb-3"><h3 className="font-black">{editing ? 'Edit Product' : 'Add Product'}</h3><button onClick={() => setModal(false)}><X /></button></div><div className="grid sm:grid-cols-2 gap-3"><input className="border rounded-xl p-3 text-sm" placeholder="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /><input className="border rounded-xl p-3 text-sm" placeholder="Price" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} /><input className="border rounded-xl p-3 text-sm" placeholder="Original price" value={form.originalPrice} onChange={(e) => setForm({ ...form, originalPrice: e.target.value })} /><input className="border rounded-xl p-3 text-sm" placeholder="Brand" value={form.brand} onChange={(e) => setForm({ ...form, brand: e.target.value })} /><div className="sm:col-span-2"><ImageUploader value={form.image} token={getToken('seller')} onChange={(url) => setForm({ ...form, image: url })} /></div><input className="border rounded-xl p-3 text-sm sm:col-span-2" placeholder="Or paste Image URL" value={form.image} onChange={(e) => setForm({ ...form, image: e.target.value })} /><select className="border rounded-xl p-3 text-sm" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>{categories.map((c) => <option key={c.slug} value={c.slug}>{c.name}</option>)}</select><input className="border rounded-xl p-3 text-sm" placeholder="Stock" value={form.stock} onChange={(e) => setForm({ ...form, stock: e.target.value })} /><textarea className="border rounded-xl p-3 text-sm sm:col-span-2" placeholder="Description" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /><textarea className="border rounded-xl p-3 text-sm sm:col-span-2" placeholder="Features, one per line" value={form.features} onChange={(e) => setForm({ ...form, features: e.target.value })} /></div><button onClick={save} className="mt-4 w-full bg-orange-500 text-white rounded-xl py-3 font-bold">Save Product</button></div></div>}
+      {modal && <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"><div className="bg-white rounded-2xl p-5 max-w-2xl w-full max-h-[90vh] overflow-y-auto"><div className="flex justify-between mb-3"><h3 className="font-black">{editing ? 'Edit Product' : 'Add Product'}</h3><button onClick={() => setModal(false)}><X /></button></div><div className="grid sm:grid-cols-2 gap-3"><input className="border rounded-xl p-3 text-sm" placeholder="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /><input className="border rounded-xl p-3 text-sm" placeholder="Price" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} /><input className="border rounded-xl p-3 text-sm" placeholder="Original price" value={form.originalPrice} onChange={(e) => setForm({ ...form, originalPrice: e.target.value })} /><input className="border rounded-xl p-3 text-sm" placeholder="Brand" value={form.brand} onChange={(e) => setForm({ ...form, brand: e.target.value })} /><div className="sm:col-span-2"><ImageUploader value={form.image} token={getToken('seller')} onChange={(url) => setForm({ ...form, image: url })} /></div><input className="border rounded-xl p-3 text-sm sm:col-span-2" placeholder="Or paste Image URL" value={form.image} onChange={(e) => setForm({ ...form, image: e.target.value })} /><div className="sm:col-span-2"><CategoryDropdowns category={form.category} subcategory={form.subcategory} childCategory={form.childCategory} onChange={(next) => setForm({ ...form, ...next })} /></div><input className="border rounded-xl p-3 text-sm" placeholder="Stock" value={form.stock} onChange={(e) => setForm({ ...form, stock: e.target.value })} /><textarea className="border rounded-xl p-3 text-sm sm:col-span-2" placeholder="Description" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /><textarea className="border rounded-xl p-3 text-sm sm:col-span-2" placeholder="Features, one per line" value={form.features} onChange={(e) => setForm({ ...form, features: e.target.value })} /></div><button onClick={save} className="mt-4 w-full bg-orange-500 text-white rounded-xl py-3 font-bold">Save Product</button></div></div>}
     </div>
   );
 }

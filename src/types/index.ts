@@ -6,6 +6,8 @@ export interface Product {
   image: string;
   images?: string[];
   category: string;
+  subcategory?: string;
+  childCategory?: string;
   rating: number;
   reviewCount: number;
   badge?: 'sale' | 'new' | 'hot';
@@ -15,6 +17,7 @@ export interface Product {
   specifications?: Record<string, string>;
   features?: string[];
   stock?: number;
+  active?: boolean;
 }
 
 export interface Category {

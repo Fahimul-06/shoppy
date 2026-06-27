@@ -19,7 +19,7 @@ function normalizePublicPromo(promo) {
     id,
     code: String(obj.code || '').toUpperCase(),
     discountType: obj.discountType || 'percentage',
-    discountValue: Number(obj.discountValue || obj.discount || 0),
+    discountValue: Number(obj.discountValue ?? obj.discount ?? obj.value ?? obj.amount ?? 0),
     minOrderAmount: Number(obj.minOrderAmount || 0),
     maxDiscountAmount: Number(obj.maxDiscountAmount || 0),
     active: obj.active !== false,
@@ -36,7 +36,7 @@ function normalizePublicPromo(promo) {
 function isVisibleCustomerPromo(promo) {
   if (!promo || promo.active === false) return false;
   if (!promo.code) return false;
-  if (!Number.isFinite(Number(promo.discountValue)) || Number(promo.discountValue) <= 0) return false;
+  if (!Number.isFinite(Number(promo.discountValue ?? promo.discount ?? promo.value ?? promo.amount)) || Number(promo.discountValue ?? promo.discount ?? promo.value ?? promo.amount) <= 0) return false;
 
   // Hide only promos that are definitely expired/used up. Do not hide future
   // startsAt promos from the coupon page because admin-created date/time values
@@ -73,8 +73,18 @@ router.post('/validate', async (req, res, next) => {
     if (!code) return res.status(400).json({ message: 'Promo code is required' });
     if (!items.length) return res.status(400).json({ message: 'Add products before applying promo' });
 
-    const promo = await PromoCode.findOne({ code, active: { $ne: false } }).populate(promoPopulate);
-    if (!promo || !isPromoActive(promo)) return res.status(404).json({ message: 'Promo code is invalid or expired' });
+    const escapedCode = code.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const promo = await PromoCode.findOne({
+      code: { $regex: `^${escapedCode}$`, $options: 'i' },
+      active: { $ne: false },
+    }).populate(promoPopulate);
+
+    if (!promo) {
+      return res.status(404).json({ message: 'Promo code was not found. Please check the code spelling.' });
+    }
+    if (!isPromoActive(promo)) {
+      return res.status(400).json({ message: 'Promo code is expired or usage limit is finished.' });
+    }
 
     const productIds = items.map((item) => String(item.product_id || item.productId || item.product?.id || item.product?._id || '')).filter(Boolean);
     const products = await Product.find({ _id: { $in: productIds } }).populate('seller', 'name shopName shopLogo status');

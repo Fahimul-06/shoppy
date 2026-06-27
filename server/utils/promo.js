@@ -10,11 +10,30 @@ const normalize = (value) => String(value || '')
 const toId = (value) => value?._id?.toString?.() || value?.id?.toString?.() || value?.toString?.() || '';
 const list = (items) => Array.isArray(items) ? items : [];
 
-export function isPromoActive(promo, now = new Date()) {
+function validDate(value) {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+export function isPromoActive(promo, now = new Date(), options = {}) {
   if (!promo || promo.active === false) return false;
-  if (promo.startsAt && new Date(promo.startsAt) > now) return false;
-  if (promo.expiresAt && new Date(promo.expiresAt) < now) return false;
-  if (promo.maxUses && Number(promo.usedCount || 0) >= Number(promo.maxUses)) return false;
+
+  // Existing admin-created promos may contain timezone-shifted startsAt values
+  // from date inputs. For checkout/customer validation we should not reject a
+  // promo only because startsAt is a few hours/days ahead; expiry and active
+  // status are the important safety checks. Pass strictStart=true only where
+  // a hard scheduled launch is required.
+  if (options.strictStart) {
+    const starts = validDate(promo.startsAt || promo.startDate || promo.validFrom);
+    if (starts && starts > now) return false;
+  }
+
+  const expires = validDate(promo.expiresAt || promo.expiryDate || promo.expiresOn || promo.endDate || promo.validUntil);
+  if (expires && expires < now) return false;
+
+  const maxUses = Number(promo.maxUses || promo.usageLimit || 0);
+  if (maxUses > 0 && Number(promo.usedCount || promo.used || 0) >= maxUses) return false;
   return true;
 }
 
@@ -67,9 +86,11 @@ export function calculatePromoDiscount(promo, items = [], subtotalOverride = nul
     }, 0);
 
   if (eligibleSubtotal <= 0) return { discount: 0, eligibleSubtotal, eligibleItems };
-  let discount = promo.discountType === 'percentage'
-    ? Math.round((eligibleSubtotal * Number(promo.discountValue || 0)) / 100)
-    : Number(promo.discountValue || 0);
+  const discountType = promo.discountType || promo.type || 'percentage';
+  const discountValue = Number(promo.discountValue ?? promo.discount ?? promo.value ?? promo.amount ?? 0);
+  let discount = discountType === 'percentage'
+    ? Math.round((eligibleSubtotal * discountValue) / 100)
+    : discountValue;
   if (promo.maxDiscountAmount && Number(promo.maxDiscountAmount) > 0) {
     discount = Math.min(discount, Number(promo.maxDiscountAmount));
   }

@@ -4,6 +4,9 @@ import Seller from '../models/Seller.js';
 import Product from '../models/Product.js';
 import ReturnRequest from '../models/ReturnRequest.js';
 import CancellationRequest from '../models/CancellationRequest.js';
+import Order from '../models/Order.js';
+import ChatMessage from '../models/ChatMessage.js';
+import mongoose from 'mongoose';
 import PasswordOtp from '../models/PasswordOtp.js';
 import { requireSeller, signToken } from '../middleware/auth.js';
 import { sendPasswordOtpEmail } from '../utils/email.js';
@@ -276,6 +279,102 @@ router.delete('/addresses/:id', requireSeller, asyncHandler(async (req, res) => 
   await req.seller.save();
   res.json({ addresses: req.seller.addresses.map(publicAddress), seller: publicSeller(req.seller) });
 }));
+
+
+
+async function resolveSellerChatContext(req, res) {
+  const { orderId, orderItemId } = req.params;
+  if (!mongoose.isValidObjectId(orderId)) {
+    res.status(400).json({ message: 'Valid orderId is required' });
+    return null;
+  }
+  if (!mongoose.isValidObjectId(orderItemId)) {
+    res.status(400).json({ message: 'Valid orderItemId is required' });
+    return null;
+  }
+  const order = await Order.findById(orderId).populate('user').populate('items.product');
+  if (!order) {
+    res.status(404).json({ message: 'Order not found' });
+    return null;
+  }
+  const item = order.items.id(orderItemId);
+  if (!item) {
+    res.status(404).json({ message: 'Ordered product not found' });
+    return null;
+  }
+  const product = item.product?._id ? item.product : await Product.findById(item.product);
+  if (!product) {
+    res.status(404).json({ message: 'Product not found' });
+    return null;
+  }
+  if (String(product.seller || '') !== String(req.seller._id)) {
+    res.status(403).json({ message: 'You can only chat for your own ordered products' });
+    return null;
+  }
+  return { order, item, product };
+}
+
+router.get('/orders', requireSeller, async (req, res) => {
+  const sellerProductIds = await Product.find({ seller: req.seller._id }).distinct('_id');
+  if (!sellerProductIds.length) return res.json({ orders: [] });
+  const orders = await Order.find({ 'items.product': { $in: sellerProductIds } })
+    .populate('user')
+    .populate('items.product')
+    .sort({ createdAt: -1 });
+
+  const sellerOrders = orders.map((order) => {
+    const items = (order.items || []).filter((item) => {
+      const product = item.product;
+      return product?.seller && String(product.seller) === String(req.seller._id);
+    });
+    const sellerSubtotal = items.reduce((sum, item) => sum + Number(item.totalPrice || 0), 0);
+    return {
+      id: order.id,
+      _id: order._id,
+      orderNumber: order.orderNumber,
+      user: order.user,
+      items,
+      sellerSubtotal,
+      paymentMethod: order.paymentMethod,
+      paymentStatus: order.paymentStatus,
+      status: order.status,
+      shippingAddress: order.shippingAddress,
+      createdAt: order.createdAt,
+      updatedAt: order.updatedAt,
+    };
+  }).filter((order) => order.items.length > 0);
+
+  res.json({ orders: sellerOrders });
+});
+
+router.get('/chats/:orderId/:orderItemId', requireSeller, async (req, res) => {
+  const ctx = await resolveSellerChatContext(req, res);
+  if (!ctx) return;
+  await ChatMessage.updateMany({ order: ctx.order._id, orderItem: ctx.item._id, seller: req.seller._id }, { readBySeller: true });
+  const messages = await ChatMessage.find({ order: ctx.order._id, orderItem: ctx.item._id, seller: req.seller._id })
+    .sort({ createdAt: 1 });
+  res.json({ order: ctx.order, orderItem: ctx.item, product: ctx.product, messages });
+});
+
+router.post('/chats/:orderId/:orderItemId', requireSeller, async (req, res) => {
+  const ctx = await resolveSellerChatContext(req, res);
+  if (!ctx) return;
+  const message = String(req.body?.message || '').trim();
+  if (!message) return res.status(400).json({ message: 'Message is required' });
+  const chatMessage = await ChatMessage.create({
+    order: ctx.order._id,
+    orderItem: ctx.item._id,
+    product: ctx.product._id,
+    seller: req.seller._id,
+    customer: ctx.order.user._id || ctx.order.user,
+    senderType: 'seller',
+    sender: req.seller._id,
+    message,
+    readByCustomer: false,
+    readBySeller: true,
+  });
+  res.status(201).json({ message: chatMessage });
+});
 
 router.get('/cancellations', requireSeller, async (req, res) => {
   const cancellations = await CancellationRequest.find({ seller: req.seller.id })

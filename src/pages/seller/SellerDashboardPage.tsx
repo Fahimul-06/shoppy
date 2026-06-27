@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Check, Edit2, Home, Loader2, LogOut, Package, Plus, RotateCcw, ShieldX, Store, Trash2, User, X } from 'lucide-react';
+import { Check, Edit2, Home, Loader2, LogOut, MessageCircle, Package, Plus, RotateCcw, ShieldX, ShoppingBag, Store, Trash2, User, X } from 'lucide-react';
 import { api, clearSession, getSessionUser, getToken } from '../../lib/api';
 import { categories } from '../../data/categories';
 import ImageUploader from '../../components/forms/ImageUploader';
@@ -39,6 +39,7 @@ const emptyProfile = {
 const sectionFromPath = (pathname: string) => {
   if (pathname.endsWith('/profile')) return 'profile';
   if (pathname.endsWith('/products')) return 'products';
+  if (pathname.endsWith('/orders')) return 'orders';
   if (pathname.endsWith('/returns')) return 'returns';
   if (pathname.endsWith('/cancellations')) return 'cancellations';
   return 'home';
@@ -53,6 +54,11 @@ export default function SellerDashboardPage() {
   const [products, setProducts] = useState<any[]>([]);
   const [returns, setReturns] = useState<any[]>([]);
   const [cancellations, setCancellations] = useState<any[]>([]);
+  const [sellerOrders, setSellerOrders] = useState<any[]>([]);
+  const [chat, setChat] = useState<any>(null);
+  const [chatMessages, setChatMessages] = useState<any[]>([]);
+  const [chatText, setChatText] = useState('');
+  const [chatLoading, setChatLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [savingProfile, setSavingProfile] = useState(false);
   const [profileMessage, setProfileMessage] = useState('');
@@ -61,14 +67,16 @@ export default function SellerDashboardPage() {
   const [form, setForm] = useState<any>({ ...EMPTY });
 
   const load = async () => {
-    const [productRes, returnRes, cancellationRes] = await Promise.all([
+    const [productRes, returnRes, cancellationRes, orderRes] = await Promise.all([
       api.get<{ products: any[] }>('/seller/products', getToken('seller')),
       api.get<{ returns: any[] }>('/seller/returns', getToken('seller')).catch(() => ({ returns: [] })),
       api.get<{ cancellations: any[] }>('/seller/cancellations', getToken('seller')).catch(() => ({ cancellations: [] })),
+      api.get<{ orders: any[] }>('/seller/orders', getToken('seller')).catch(() => ({ orders: [] })),
     ]);
     setProducts(productRes.products || []);
     setReturns(returnRes.returns || []);
     setCancellations(cancellationRes.cancellations || []);
+    setSellerOrders(orderRes.orders || []);
   };
 
   useEffect(() => {
@@ -146,10 +154,34 @@ export default function SellerDashboardPage() {
 
   const updateProfile = (key: string, value: string) => setProfileForm((prev: any) => ({ ...prev, [key]: value }));
 
+  const openChat = async (order: any, item: any) => {
+    setChat({ order, item });
+    setChatText('');
+    setChatLoading(true);
+    try {
+      const res = await api.get<{ messages: any[] }>(`/seller/chats/${order.id || order._id}/${item.id || item._id}`, getToken('seller'));
+      setChatMessages(res.messages || []);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Could not open chat');
+      setChat(null);
+    } finally {
+      setChatLoading(false);
+    }
+  };
+
+  const sendChat = async () => {
+    if (!chat || !chatText.trim()) return;
+    const text = chatText.trim();
+    setChatText('');
+    const res = await api.post<{ message: any }>(`/seller/chats/${chat.order.id || chat.order._id}/${chat.item.id || chat.item._id}`, { message: text }, getToken('seller'));
+    setChatMessages((prev) => [...prev, res.message]);
+  };
+
   const navItems = [
     { to: '/seller/dashboard', key: 'home', label: 'Home', icon: Home },
     { to: '/seller/dashboard/profile', key: 'profile', label: 'Profile', icon: User },
     { to: '/seller/dashboard/products', key: 'products', label: 'Products', icon: Package },
+    { to: '/seller/dashboard/orders', key: 'orders', label: 'Orders', icon: ShoppingBag },
     { to: '/seller/dashboard/returns', key: 'returns', label: 'Returns', icon: RotateCcw },
     { to: '/seller/dashboard/cancellations', key: 'cancellations', label: 'Cancellations', icon: ShieldX },
   ];
@@ -189,7 +221,7 @@ export default function SellerDashboardPage() {
           <>
             <div className="grid sm:grid-cols-3 gap-4 mb-5">
               <div className="bg-white rounded-2xl p-5 border"><p className="text-sm text-gray-500">Products</p><p className="text-3xl font-black">{products.length}</p></div>
-              <div className="bg-white rounded-2xl p-5 border"><p className="text-sm text-gray-500">Stock</p><p className="text-3xl font-black">{products.reduce((s, p) => s + Number(p.stock || 0), 0)}</p></div>
+              <div className="bg-white rounded-2xl p-5 border"><p className="text-sm text-gray-500">Orders</p><p className="text-3xl font-black">{sellerOrders.length}</p></div>
               <div className="bg-white rounded-2xl p-5 border"><p className="text-sm text-gray-500">Returns</p><p className="text-3xl font-black">{returns.length}</p></div>
               <div className="bg-white rounded-2xl p-5 border"><p className="text-sm text-gray-500">Cancellations</p><p className="text-3xl font-black">{cancellations.length}</p></div>
             </div>
@@ -204,6 +236,11 @@ export default function SellerDashboardPage() {
                 <div className="w-14 h-14 rounded-2xl bg-orange-50 text-orange-500 flex items-center justify-center mb-4 group-hover:bg-orange-500 group-hover:text-white transition"><Package size={28} /></div>
                 <h2 className="font-black text-xl mb-1">Products</h2>
                 <p className="text-sm text-gray-500">Add, edit, upload product photos, update price and stock, or delete products.</p>
+              </Link>
+              <Link to="/seller/dashboard/orders" className="bg-white rounded-3xl border p-6 hover:border-orange-300 hover:shadow-sm transition group">
+                <div className="w-14 h-14 rounded-2xl bg-orange-50 text-orange-500 flex items-center justify-center mb-4 group-hover:bg-orange-500 group-hover:text-white transition"><ShoppingBag size={28} /></div>
+                <h2 className="font-black text-xl mb-1">Orders</h2>
+                <p className="text-sm text-gray-500">See orders that contain your products and chat with the customer.</p>
               </Link>
               <Link to="/seller/dashboard/returns" className="bg-white rounded-3xl border p-6 hover:border-orange-300 hover:shadow-sm transition group">
                 <div className="w-14 h-14 rounded-2xl bg-orange-50 text-orange-500 flex items-center justify-center mb-4 group-hover:bg-orange-500 group-hover:text-white transition"><RotateCcw size={28} /></div>
@@ -283,6 +320,46 @@ export default function SellerDashboardPage() {
           </>
         )}
 
+        {section === 'orders' && (
+          <div className="bg-white rounded-2xl border overflow-hidden">
+            <div className="p-4 border-b flex items-center justify-between">
+              <div>
+                <h2 className="text-xl font-black flex gap-2 items-center"><ShoppingBag /> Product Orders</h2>
+                <p className="text-sm text-gray-500">Only orders containing your seller products appear here. Open chat to message the customer.</p>
+              </div>
+            </div>
+            {sellerOrders.length === 0 ? <div className="p-8 text-center text-gray-500">No customer orders for your products yet.</div> : (
+              <div className="divide-y">
+                {sellerOrders.map((order) => (
+                  <div key={order.id || order._id} className="p-4">
+                    <div className="flex flex-wrap justify-between gap-3 mb-3">
+                      <div>
+                        <p className="font-black">{order.orderNumber}</p>
+                        <p className="text-xs text-gray-400">{order.createdAt ? new Date(order.createdAt).toLocaleString() : ''}</p>
+                        <p className="text-xs text-gray-500 mt-1">Customer: {order.user?.name || order.user?.email || 'Customer'} {order.user?.phone ? `• ${order.user.phone}` : ''}</p>
+                        {order.shippingAddress && <p className="text-xs text-gray-500">Address: {order.shippingAddress.address || order.shippingAddress.area || order.shippingAddress.district || 'Saved delivery address'}</p>}
+                      </div>
+                      <div className="text-right">
+                        <p className="font-black">৳{Number(order.sellerSubtotal || 0).toLocaleString()}</p>
+                        <p className="text-xs capitalize text-gray-500">{order.status} • {order.paymentStatus}</p>
+                      </div>
+                    </div>
+                    <div className="grid gap-2">
+                      {(order.items || []).map((item: any) => (
+                        <div key={item.id || item._id} className="flex flex-wrap items-center gap-3 bg-gray-50 rounded-xl p-3">
+                          <img src={item.product?.image || item.productSnapshot?.image || 'https://placehold.co/80x80?text=Product'} className="w-12 h-12 rounded-lg object-cover bg-white" />
+                          <div className="flex-1 min-w-[180px]"><p className="text-sm font-bold">{item.product?.name || item.productSnapshot?.name}</p><p className="text-xs text-gray-500">Qty: {item.quantity} • ৳{Number(item.totalPrice || 0).toLocaleString()}</p></div>
+                          <button onClick={() => openChat(order, item)} className="inline-flex items-center gap-2 rounded-xl bg-orange-500 text-white px-3 py-2 text-sm font-bold"><MessageCircle size={16}/> Chat customer</button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         {section === 'returns' && (
           <div className="bg-white rounded-2xl border overflow-hidden">
             <div className="p-4 border-b flex items-center justify-between">
@@ -323,6 +400,26 @@ export default function SellerDashboardPage() {
 
         <Link to="/" className="block text-center mt-5 text-gray-400">Back to store</Link>
       </main>
+
+      {chat && <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+        <div className="bg-white rounded-2xl w-full max-w-lg overflow-hidden">
+          <div className="p-4 border-b flex items-center justify-between">
+            <div><h3 className="font-black flex items-center gap-2"><MessageCircle size={18}/> Customer Chat</h3><p className="text-xs text-gray-500">{chat.order?.orderNumber} • {chat.item?.product?.name || chat.item?.productSnapshot?.name}</p></div>
+            <button onClick={() => setChat(null)}><X /></button>
+          </div>
+          <div className="h-80 overflow-y-auto p-4 space-y-2 bg-gray-50">
+            {chatLoading ? <div className="h-full flex items-center justify-center"><Loader2 className="animate-spin" /></div> : chatMessages.length === 0 ? <p className="text-center text-gray-500 text-sm mt-20">No messages yet. Send the first message to the customer.</p> : chatMessages.map((m) => (
+              <div key={m.id || m._id} className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm ${m.senderType === 'seller' ? 'ml-auto bg-orange-500 text-white' : 'bg-white border text-gray-700'}`}>
+                <p>{m.message}</p><p className={`text-[10px] mt-1 ${m.senderType === 'seller' ? 'text-orange-100' : 'text-gray-400'}`}>{m.createdAt ? new Date(m.createdAt).toLocaleString() : ''}</p>
+              </div>
+            ))}
+          </div>
+          <div className="p-3 border-t flex gap-2">
+            <input value={chatText} onChange={(e) => setChatText(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') sendChat(); }} className="flex-1 border rounded-xl px-3 py-2 text-sm" placeholder="Write message..." />
+            <button onClick={sendChat} className="bg-orange-500 text-white rounded-xl px-4 font-bold">Send</button>
+          </div>
+        </div>
+      </div>}
 
       {modal && <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"><div className="bg-white rounded-2xl p-5 max-w-2xl w-full max-h-[90vh] overflow-y-auto"><div className="flex justify-between mb-3"><h3 className="font-black">{editing ? 'Edit Product' : 'Add Product'}</h3><button onClick={() => setModal(false)}><X /></button></div><div className="grid sm:grid-cols-2 gap-3"><input className="border rounded-xl p-3 text-sm" placeholder="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /><input className="border rounded-xl p-3 text-sm" placeholder="Price" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} /><input className="border rounded-xl p-3 text-sm" placeholder="Original price" value={form.originalPrice} onChange={(e) => setForm({ ...form, originalPrice: e.target.value })} /><input className="border rounded-xl p-3 text-sm" placeholder="Brand" value={form.brand} onChange={(e) => setForm({ ...form, brand: e.target.value })} /><div className="sm:col-span-2"><ImageUploader value={form.image} token={getToken('seller')} onChange={(url) => setForm({ ...form, image: url })} /></div><input className="border rounded-xl p-3 text-sm sm:col-span-2" placeholder="Or paste Image URL" value={form.image} onChange={(e) => setForm({ ...form, image: e.target.value })} /><div className="sm:col-span-2"><CategoryDropdowns category={form.category} subcategory={form.subcategory} childCategory={form.childCategory} onChange={(next) => setForm({ ...form, ...next })} /></div><input className="border rounded-xl p-3 text-sm" placeholder="Stock" value={form.stock} onChange={(e) => setForm({ ...form, stock: e.target.value })} /><textarea className="border rounded-xl p-3 text-sm sm:col-span-2" placeholder="Description" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /><textarea className="border rounded-xl p-3 text-sm sm:col-span-2" placeholder="Features, one per line" value={form.features} onChange={(e) => setForm({ ...form, features: e.target.value })} /></div><button onClick={save} className="mt-4 w-full bg-orange-500 text-white rounded-xl py-3 font-bold">Save Product</button></div></div>}
     </div>

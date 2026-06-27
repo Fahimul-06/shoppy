@@ -4,6 +4,7 @@ import Order from '../models/Order.js';
 import Product from '../models/Product.js';
 import ReturnRequest from '../models/ReturnRequest.js';
 import CancellationRequest from '../models/CancellationRequest.js';
+import ChatMessage from '../models/ChatMessage.js';
 import { requireUser } from '../middleware/auth.js';
 const router = express.Router();
 
@@ -38,8 +39,76 @@ router.post('/', requireUser, async (req, res) => {
 });
 
 router.get('/my', requireUser, async (req, res) => {
-  const orders = await Order.find({ user: req.user.id }).sort({ createdAt: -1 });
+  const orders = await Order.find({ user: req.user.id })
+    .populate('items.product')
+    .sort({ createdAt: -1 });
   res.json({ orders });
+});
+
+async function resolveCustomerChatContext(req, res) {
+  const { orderId, orderItemId } = req.params;
+  if (!mongoose.isValidObjectId(orderId)) {
+    res.status(400).json({ message: 'Valid orderId is required' });
+    return null;
+  }
+  if (!mongoose.isValidObjectId(orderItemId)) {
+    res.status(400).json({ message: 'Valid orderItemId is required' });
+    return null;
+  }
+  const order = await Order.findOne({ _id: orderId, user: req.user.id }).populate('items.product');
+  if (!order) {
+    res.status(404).json({ message: 'Order not found' });
+    return null;
+  }
+  const item = order.items.id(orderItemId);
+  if (!item) {
+    res.status(404).json({ message: 'Ordered product not found' });
+    return null;
+  }
+  const product = item.product?._id ? item.product : await Product.findById(item.product);
+  if (!product) {
+    res.status(404).json({ message: 'Product not found' });
+    return null;
+  }
+  if (!product.seller) {
+    res.status(400).json({ message: 'This product is not sold by a seller' });
+    return null;
+  }
+  return { order, item, product };
+}
+
+router.get('/chats/:orderId/:orderItemId', requireUser, async (req, res) => {
+  const ctx = await resolveCustomerChatContext(req, res);
+  if (!ctx) return;
+  await ChatMessage.updateMany({ order: ctx.order._id, orderItem: ctx.item._id, customer: req.user._id }, { readByCustomer: true });
+  const messages = await ChatMessage.find({ order: ctx.order._id, orderItem: ctx.item._id, customer: req.user._id })
+    .sort({ createdAt: 1 });
+  res.json({
+    order: ctx.order,
+    orderItem: ctx.item,
+    product: ctx.product,
+    messages,
+  });
+});
+
+router.post('/chats/:orderId/:orderItemId', requireUser, async (req, res) => {
+  const ctx = await resolveCustomerChatContext(req, res);
+  if (!ctx) return;
+  const message = String(req.body?.message || '').trim();
+  if (!message) return res.status(400).json({ message: 'Message is required' });
+  const chatMessage = await ChatMessage.create({
+    order: ctx.order._id,
+    orderItem: ctx.item._id,
+    product: ctx.product._id,
+    seller: ctx.product.seller,
+    customer: req.user._id,
+    senderType: 'customer',
+    sender: req.user._id,
+    message,
+    readByCustomer: true,
+    readBySeller: false,
+  });
+  res.status(201).json({ message: chatMessage });
 });
 
 router.get('/returns/my', requireUser, async (req, res) => {

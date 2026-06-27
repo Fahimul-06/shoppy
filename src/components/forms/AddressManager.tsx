@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Check, Loader2, LocateFixed, MapPin, Plus, Star, Trash2 } from 'lucide-react';
 import { api } from '../../lib/api';
+import { reverseGeocodeInBrowser } from '../../utils/geocode';
 
 type Address = {
   id?: string;
@@ -64,19 +65,32 @@ export default function AddressManager({ token, user, onChanged, basePath = '/au
       const latitude = Number(position.coords.latitude.toFixed(7));
       const longitude = Number(position.coords.longitude.toFixed(7));
       try {
-        const res = await api.get<{ address: Address; warning?: string }>(`${basePath}/reverse-geocode?lat=${latitude}&lng=${longitude}`, token);
+        let detected: Address = {};
+        try {
+          const localAddress = await reverseGeocodeInBrowser(latitude, longitude);
+          detected = localAddress;
+        } catch {}
+        if (!detected.address && !detected.district && !detected.area) {
+          try {
+            const res = await api.get<{ address: Address; warning?: string }>(`${basePath}/reverse-geocode?lat=${latitude}&lng=${longitude}`, token);
+            detected = res.address || {};
+          } catch {}
+        }
+        const finalAddress: Address = detected.address || detected.district || detected.area
+          ? detected
+          : { address: 'Current location address selected' };
         setForm((prev) => ({
           ...prev,
-          ...res.address,
+          ...finalAddress,
           latitude,
           longitude,
           name: prev.name || displayName || '',
           phone: prev.phone || user.phone || '',
         }));
-        setMessage(res.warning || 'Current location selected. Please check the address name before saving.');
+        setMessage(`Current location selected${readableAddress(finalAddress) ? `: ${readableAddress(finalAddress)}` : '.'}`);
       } catch (error) {
-        setForm((prev) => ({ ...prev, latitude, longitude }));
-        setMessage('Current location selected. Please type your address name before saving.');
+        setForm((prev) => ({ ...prev, latitude, longitude, address: prev.address || 'Current location address selected' }));
+        setMessage('Current location selected. Please check the address name before saving.');
       } finally {
         setLocating(false);
       }
@@ -146,7 +160,7 @@ export default function AddressManager({ token, user, onChanged, basePath = '/au
         <input className="sm:col-span-2 border rounded-xl px-4 py-3 text-sm" placeholder="Landmark / delivery note" value={form.landmark || ''} onChange={(e)=>update('landmark', e.target.value)} />
         {(form.latitude && form.longitude) ? (
           <p className="sm:col-span-2 text-xs text-blue-600 bg-blue-50 rounded-xl px-3 py-2">
-            Current location selected{readableAddress(form) ? `: ${readableAddress(form)}` : '. Please type your address name before saving.'}
+            Current location selected{readableAddress(form) ? `: ${readableAddress(form)}` : '. Please check the address name before saving.'}
           </p>
         ) : null}
         <label className="sm:col-span-2 flex items-center gap-2 text-sm font-semibold text-gray-700"><input type="checkbox" checked={Boolean(form.isDefault)} onChange={(e)=>update('isDefault', e.target.checked)} /> Set as default address</label>
@@ -164,7 +178,7 @@ export default function AddressManager({ token, user, onChanged, basePath = '/au
                 <p className="font-black text-gray-900 flex items-center gap-2">{addr.label || 'Address'} {addr.isDefault && <span className="text-[10px] bg-orange-100 text-orange-600 px-2 py-0.5 rounded-full">Default</span>}</p>
                 <p className="text-sm text-gray-700 mt-1">{addr.name} {addr.phone ? `• ${addr.phone}` : ''}</p>
                 <p className="text-sm text-gray-600 mt-1">{readableAddress(addr) || 'Address name not available'}</p>
-                {addr.latitude && addr.longitude && !readableAddress(addr) && <p className="text-xs text-orange-500 mt-1">Current location saved. Please add the address name.</p>}
+                {addr.latitude && addr.longitude && !readableAddress(addr) && <p className="text-xs text-orange-500 mt-1">Current location saved.</p>}
               </div>
             </div>
             <div className="flex gap-2 mt-3">

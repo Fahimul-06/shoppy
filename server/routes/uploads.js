@@ -20,7 +20,7 @@ const storage = multer.diskStorage({
 
 const upload = multer({
   storage,
-  limits: { fileSize: 5 * 1024 * 1024 },
+  limits: { fileSize: 15 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
     if (!file.mimetype?.startsWith('image/')) return cb(new Error('Only image files are allowed'));
     cb(null, true);
@@ -69,7 +69,7 @@ router.post('/', requireLoggedInUploader, upload.single('file'), (req, res) => {
 
 router.use((err, _req, res, _next) => {
   if (err instanceof multer.MulterError && err.code === 'LIMIT_FILE_SIZE') {
-    return res.status(400).json({ message: 'Image size must be less than 5 MB' });
+    return res.status(400).json({ message: 'Image size must be less than 15 MB' });
   }
   return res.status(400).json({ message: err.message || 'Image upload failed' });
 });

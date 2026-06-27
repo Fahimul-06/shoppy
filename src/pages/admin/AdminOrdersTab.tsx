@@ -10,11 +10,13 @@ type OrderAddress = {
   area?: string;
   address?: string;
   landmark?: string;
+  latitude?: number;
+  longitude?: number;
 };
 
 const formatAddress = (address?: OrderAddress) => {
   if (!address) return 'No delivery address saved';
-  return [address.address, address.area, address.district, address.division].filter(Boolean).join(', ') || 'No delivery address saved';
+  return [address.address, address.landmark, address.area, address.district, address.division].filter(Boolean).join(', ') || 'No delivery address saved';
 };
 
 export default function AdminOrdersTab() {
@@ -80,6 +82,7 @@ export default function AdminOrdersTab() {
                     <td className="p-3 max-w-xs">
                       <p className="font-semibold text-gray-800 flex items-start gap-1"><MapPin size={14} className="mt-0.5 flex-shrink-0"/> <span>{formatAddress(address)}</span></p>
                       {address.landmark && <p className="text-xs text-gray-500 mt-1">Landmark: {address.landmark}</p>}
+                      {address.latitude && address.longitude && <a className="text-xs text-blue-600 font-bold mt-1 inline-block" href={`https://www.google.com/maps?q=${address.latitude},${address.longitude}`} target="_blank" rel="noreferrer">Open pinned location</a>}
                     </td>
                     <td className="p-3 text-center font-bold">৳{Number(o.totalAmount || 0).toLocaleString()}</td>
                     <td className="p-3 text-center">
@@ -111,6 +114,7 @@ export default function AdminOrdersTab() {
                               <p><b>Email:</b> {o.user?.email || 'N/A'}</p>
                               <p><b>Address:</b> {formatAddress(address)}</p>
                               {address.landmark && <p><b>Landmark:</b> {address.landmark}</p>}
+                              {address.latitude && address.longitude && <p><b>Map:</b> <a className="text-blue-600 font-bold" href={`https://www.google.com/maps?q=${address.latitude},${address.longitude}`} target="_blank" rel="noreferrer">Open pinned delivery location</a></p>}
                             </div>
                           </div>
                           <div className="bg-white border rounded-2xl p-4 lg:col-span-2">

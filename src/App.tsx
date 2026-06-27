@@ -20,6 +20,7 @@ import WishlistPage from './pages/WishlistPage';
 import CouponsPage from './pages/CouponsPage';
 import ReturnsPage from './pages/ReturnsPage';
 import CancellationsPage from './pages/CancellationsPage';
+import NotificationsPage from './pages/NotificationsPage';
 import SellerRegisterPage from './pages/seller/SellerRegisterPage';
 import SellerLoginPage from './pages/seller/SellerLoginPage';
 import SellerDashboardPage from './pages/seller/SellerDashboardPage';
@@ -62,6 +63,7 @@ export default function App() {
           <Route path="/coupons" element={<StorePage><CouponsPage /></StorePage>} />
           <Route path="/returns" element={<StorePage><ReturnsPage /></StorePage>} />
           <Route path="/cancellations" element={<StorePage><CancellationsPage /></StorePage>} />
+          <Route path="/notifications" element={<StorePage><NotificationsPage /></StorePage>} />
 
           {/* Seller routes */}
           <Route path="/seller/register" element={<SellerRegisterPage />} />

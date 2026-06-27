@@ -9,6 +9,7 @@ import ReturnRequest from '../models/ReturnRequest.js';
 import CancellationRequest from '../models/CancellationRequest.js';
 import ChatMessage from '../models/ChatMessage.js';
 import CustomerCareMessage from '../models/CustomerCareMessage.js';
+import CustomerNotification from '../models/CustomerNotification.js';
 import { requireAdmin, signToken } from '../middleware/auth.js';
 const router = express.Router();
 const adminUser = (u) => ({ id: u.id, fullName: u.fullName, email: u.email, phone: u.phone, role: u.role });
@@ -154,7 +155,36 @@ router.get('/orders', requireAdmin, async (_req, res) => {
     .sort({ createdAt: -1 });
   res.json({ orders });
 });
-router.patch('/orders/:id', requireAdmin, async (req, res) => res.json({ order: await Order.findByIdAndUpdate(req.params.id, req.body, { new: true }) }));
+router.patch('/orders/:id', requireAdmin, async (req, res) => {
+  const existing = await Order.findById(req.params.id).populate('user');
+  if (!existing) return res.status(404).json({ message: 'Order not found' });
+  const previousStatus = existing.status;
+  const order = await Order.findByIdAndUpdate(req.params.id, req.body, { new: true }).populate('user');
+
+  if (req.body?.status && req.body.status !== previousStatus && ['processing', 'shipped', 'delivered'].includes(req.body.status)) {
+    const typeMap = {
+      processing: 'order_processing',
+      shipped: 'order_shipped',
+      delivered: 'order_delivered',
+    };
+    const titleMap = {
+      processing: 'Your order is processing',
+      shipped: 'Your order has shipped',
+      delivered: 'Your order has been delivered',
+    };
+    await CustomerNotification.create({
+      user: order.user?._id || order.user,
+      audience: 'customer',
+      type: typeMap[req.body.status],
+      title: titleMap[req.body.status],
+      message: `Order ${order.orderNumber || ''} is now ${req.body.status}.`,
+      link: '/orders',
+      order: order._id,
+    });
+  }
+
+  res.json({ order });
+});
 
 router.get('/cancellations', requireAdmin, async (_req, res) => {
   const cancellations = await CancellationRequest.find()
@@ -298,9 +328,61 @@ router.post('/customer-care/:customerId', requireAdmin, async (req, res) => {
 });
 
 router.get('/promos', requireAdmin, async (_req, res) => res.json({ promos: await PromoCode.find().sort({ createdAt: -1 }) }));
-router.post('/promos', requireAdmin, async (req, res) => res.status(201).json({ promo: await PromoCode.create(req.body) }));
+router.post('/promos', requireAdmin, async (req, res) => {
+  const promo = await PromoCode.create(req.body);
+  if (promo.active !== false) {
+    await CustomerNotification.create({
+      user: null,
+      audience: 'customers',
+      type: 'promo',
+      title: `New promo: ${promo.code}`,
+      message: promo.description || `Use code ${promo.code} to get ${promo.discountType === 'percentage' ? `${promo.discountValue}%` : `৳${promo.discountValue}`} off.`,
+      link: '/coupons',
+      promo: promo._id,
+    });
+  }
+  res.status(201).json({ promo });
+});
 router.put('/promos/:id', requireAdmin, async (req, res) => res.json({ promo: await PromoCode.findByIdAndUpdate(req.params.id, req.body, { new: true }) }));
 router.delete('/promos/:id', requireAdmin, async (req, res) => { await PromoCode.findByIdAndDelete(req.params.id); res.json({ ok: true }); });
+
+router.get('/customer-notifications', requireAdmin, async (_req, res) => {
+  const notifications = await CustomerNotification.find({ user: null, audience: 'customers' })
+    .populate('promo', 'code discountType discountValue')
+    .sort({ createdAt: -1 })
+    .limit(100);
+  res.json({ notifications });
+});
+
+router.post('/customer-notifications', requireAdmin, async (req, res) => {
+  const { type = 'event', title, message, link, image } = req.body || {};
+  const allowed = ['promo', 'sale', 'event', 'system'];
+  if (!allowed.includes(type)) return res.status(400).json({ message: 'Invalid notification type' });
+  if (!String(title || '').trim()) return res.status(400).json({ message: 'Title is required' });
+  if (!String(message || '').trim()) return res.status(400).json({ message: 'Message is required' });
+  const notification = await CustomerNotification.create({
+    user: null,
+    audience: 'customers',
+    type,
+    title: String(title).trim(),
+    message: String(message).trim(),
+    link: link || '/notifications',
+    image: image || '',
+  });
+  res.status(201).json({ notification });
+});
+
+router.patch('/customer-notifications/:id', requireAdmin, async (req, res) => {
+  const notification = await CustomerNotification.findByIdAndUpdate(req.params.id, req.body, { new: true });
+  if (!notification) return res.status(404).json({ message: 'Notification not found' });
+  res.json({ notification });
+});
+
+router.delete('/customer-notifications/:id', requireAdmin, async (req, res) => {
+  await CustomerNotification.findByIdAndDelete(req.params.id);
+  res.json({ ok: true });
+});
+
 router.put('/settings', requireAdmin, async (req, res) => {
   const { fullName, email, password } = req.body;
   if (fullName !== undefined) req.user.fullName = fullName;

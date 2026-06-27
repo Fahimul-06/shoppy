@@ -1,7 +1,8 @@
 import React, { useMemo, useState } from 'react';
-import { Check, Loader2, LocateFixed, MapPin, Plus, Star, Trash2 } from 'lucide-react';
+import { Check, Loader2, LocateFixed, Map, MapPin, Plus, Star, Trash2 } from 'lucide-react';
 import { api } from '../../lib/api';
 import { reverseGeocodeInBrowser } from '../../utils/geocode';
+import MapLocationPicker from './MapLocationPicker';
 
 type Address = {
   id?: string;
@@ -51,12 +52,39 @@ export default function AddressManager({ token, user, onChanged, basePath = '/au
   const [loading, setLoading] = useState(false);
   const [locating, setLocating] = useState(false);
   const [message, setMessage] = useState('');
+  const [mapOpen, setMapOpen] = useState(false);
   const addresses = useMemo(() => user.addresses || [], [user.addresses]);
 
   const update = (key: keyof Address, value: string | number | boolean) => setForm((prev) => ({ ...prev, [key]: value }));
 
   const syncUser = (updatedUser: any) => {
     if (updatedUser) onChanged(updatedUser);
+  };
+
+  const applyCoordinates = async (latitude: number, longitude: number, source: 'current' | 'map') => {
+    let detected: Address = {};
+    try {
+      detected = await reverseGeocodeInBrowser(latitude, longitude);
+    } catch {}
+    if (!detected.address && !detected.district && !detected.area) {
+      try {
+        const res = await api.get<{ address: Address; warning?: string }>(`${basePath}/reverse-geocode?lat=${latitude}&lng=${longitude}`, token);
+        detected = res.address || {};
+      } catch {}
+    }
+    const finalAddress: Address = detected.address || detected.district || detected.area
+      ? detected
+      : { address: source === 'map' ? 'Pinned location selected' : 'Current location selected' };
+    setForm((prev) => ({
+      ...prev,
+      ...finalAddress,
+      latitude,
+      longitude,
+      name: prev.name || displayName || '',
+      phone: prev.phone || user.phone || '',
+    }));
+    const detectedText = readableAddress(finalAddress);
+    setMessage(detectedText ? `${source === 'map' ? 'Map pin selected' : 'Current location selected'}: ${detectedText}. ${exactLandmarkHint}` : `${source === 'map' ? 'Map pin selected' : 'Current location selected'}. ${exactLandmarkHint}`);
   };
 
   const useCurrentLocation = async () => {
@@ -70,32 +98,9 @@ export default function AddressManager({ token, user, onChanged, basePath = '/au
       const latitude = Number(position.coords.latitude.toFixed(7));
       const longitude = Number(position.coords.longitude.toFixed(7));
       try {
-        let detected: Address = {};
-        try {
-          const localAddress = await reverseGeocodeInBrowser(latitude, longitude);
-          detected = localAddress;
-        } catch {}
-        if (!detected.address && !detected.district && !detected.area) {
-          try {
-            const res = await api.get<{ address: Address; warning?: string }>(`${basePath}/reverse-geocode?lat=${latitude}&lng=${longitude}`, token);
-            detected = res.address || {};
-          } catch {}
-        }
-        const finalAddress: Address = detected.address || detected.district || detected.area
-          ? detected
-          : { address: 'Current location address selected' };
-        setForm((prev) => ({
-          ...prev,
-          ...finalAddress,
-          latitude,
-          longitude,
-          name: prev.name || displayName || '',
-          phone: prev.phone || user.phone || '',
-        }));
-        const detectedText = readableAddress(finalAddress);
-        setMessage(detectedText ? `Current location selected: ${detectedText}. ${exactLandmarkHint}` : `Current location selected. ${exactLandmarkHint}`);
+        await applyCoordinates(latitude, longitude, 'current');
       } catch (error) {
-        setForm((prev) => ({ ...prev, latitude, longitude, address: prev.address || 'Current location selected. Please type house/road/landmark for exact delivery.' }));
+        setForm((prev) => ({ ...prev, latitude, longitude, address: prev.address || 'Current location selected' }));
         setMessage(`Current location selected. ${exactLandmarkHint}`);
       } finally {
         setLocating(false);
@@ -103,7 +108,18 @@ export default function AddressManager({ token, user, onChanged, basePath = '/au
     }, (error) => {
       setMessage(error.message || 'Location permission was denied.');
       setLocating(false);
-    }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 });
+    }, { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 });
+  };
+
+  const useMapPin = async (coords: { latitude: number; longitude: number }) => {
+    setMapOpen(false);
+    setLocating(true);
+    setMessage('Detecting address name from selected map pin...');
+    try {
+      await applyCoordinates(coords.latitude, coords.longitude, 'map');
+    } finally {
+      setLocating(false);
+    }
   };
 
   const saveAddress = async () => {
@@ -145,14 +161,26 @@ export default function AddressManager({ token, user, onChanged, basePath = '/au
 
   return (
     <section className="bg-white rounded-2xl border border-gray-100 p-6">
+      <MapLocationPicker
+        open={mapOpen}
+        initialLatitude={form.latitude}
+        initialLongitude={form.longitude}
+        onClose={() => setMapOpen(false)}
+        onPick={useMapPin}
+      />
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
         <div>
           <h2 className="text-xl font-black text-gray-900 flex items-center gap-2"><MapPin size={20}/> {title}</h2>
           <p className="text-sm text-gray-500">{description}</p>
         </div>
-        <button onClick={useCurrentLocation} disabled={locating} className="bg-blue-50 text-blue-600 border border-blue-100 font-bold px-4 py-2.5 rounded-xl flex items-center justify-center gap-2 text-sm">
-          {locating ? <Loader2 className="animate-spin" size={15}/> : <LocateFixed size={15}/>} Use Current Location
-        </button>
+        <div className="flex flex-col sm:flex-row gap-2">
+          <button onClick={useCurrentLocation} disabled={locating} className="bg-blue-50 text-blue-600 border border-blue-100 font-bold px-4 py-2.5 rounded-xl flex items-center justify-center gap-2 text-sm">
+            {locating ? <Loader2 className="animate-spin" size={15}/> : <LocateFixed size={15}/>} Use Current Location
+          </button>
+          <button onClick={() => setMapOpen(true)} disabled={locating} className="bg-orange-50 text-orange-600 border border-orange-100 font-bold px-4 py-2.5 rounded-xl flex items-center justify-center gap-2 text-sm">
+            <Map size={15}/> Choose on Map
+          </button>
+        </div>
       </div>
 
       <div className="grid sm:grid-cols-2 gap-3">

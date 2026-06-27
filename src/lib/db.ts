@@ -59,7 +59,7 @@ export interface OrderPayload {
   delivery_fee: number;
   total_amount: number;
   payment_method: string;
-  shipping_address: Record<string, string>;
+  shipping_address: Record<string, string | number | boolean | undefined>;
   items: Array<{
     product_id: string;
     product_snapshot: Record<string, unknown>;

@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   Search, ShoppingCart, User, Menu, X, ChevronDown, ChevronRight,
-  Grid3X3, Zap, Sparkles, Tag, Award, Store, Camera, Loader2,
+  Grid3X3, Zap, Sparkles, Tag, Award, Store, Camera, Loader2, Bell,
 } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { categories } from '../data/categories';
@@ -10,6 +10,7 @@ import { products } from '../data/products';
 
 import { subSubMap } from '../data/categoryOptions';
 import { searchProductsByImage } from '../lib/db';
+import { api, getToken } from '../lib/api';
 
 const categoryUrl = (categorySlug: string, sub?: string, child?: string) => {
   const params = new URLSearchParams();
@@ -187,12 +188,30 @@ export default function Header() {
   const [searchQuery, setSearchQuery] = useState('');
   const [imageSearching, setImageSearching] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const [notificationCount, setNotificationCount] = useState(0);
   const catRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 10);
     window.addEventListener('scroll', onScroll);
     return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+
+
+  useEffect(() => {
+    const loadNotificationCount = async () => {
+      const token = getToken('user');
+      if (!token) { setNotificationCount(0); return; }
+      try {
+        const res = await api.get<{ count: number }>('/notifications/unread-count', token);
+        setNotificationCount(Number(res.count || 0));
+      } catch {
+        setNotificationCount(0);
+      }
+    };
+    loadNotificationCount();
+    const timer = window.setInterval(loadNotificationCount, 15000);
+    return () => window.clearInterval(timer);
   }, []);
 
   useEffect(() => {
@@ -297,6 +316,15 @@ export default function Header() {
               <Store size={16} />
               <span className="hidden lg:block">Sell on Cartup</span>
             </Link>
+            <Link to="/notifications" className="relative hidden sm:flex items-center gap-1.5 px-3 py-2 text-sm text-gray-700 hover:text-orange-500 hover:bg-orange-50 rounded-lg transition-colors" title="Notifications">
+              <Bell size={18} />
+              <span className="hidden md:block font-medium">Notifications</span>
+              {notificationCount > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 bg-red-500 text-white text-xs font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1 leading-none">
+                  {notificationCount > 99 ? '99+' : notificationCount}
+                </span>
+              )}
+            </Link>
             <Link to="/account" className="hidden sm:flex items-center gap-1.5 px-3 py-2 text-sm text-gray-700 hover:text-orange-500 hover:bg-orange-50 rounded-lg transition-colors">
               <User size={18} />
               <span className="hidden md:block font-medium">Account</span>
@@ -373,6 +401,10 @@ export default function Header() {
             <hr className="border-gray-100 my-2" />
             <Link to="/seller/login" className="flex items-center gap-2 px-3 py-2 text-sm text-orange-600 font-semibold hover:bg-orange-50 rounded-lg transition-colors" onClick={() => setMobileMenuOpen(false)}>
               <Store size={15} />Sell on Cartup
+            </Link>
+            <Link to="/notifications" className="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:text-orange-500 hover:bg-orange-50 rounded-lg transition-colors" onClick={() => setMobileMenuOpen(false)}>
+              <Bell size={15} />Notifications
+              {notificationCount > 0 && <span className="ml-auto bg-red-500 text-white text-[10px] font-black rounded-full min-w-5 h-5 flex items-center justify-center px-1">{notificationCount > 99 ? '99+' : notificationCount}</span>}
             </Link>
             <Link to="/account" className="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:text-orange-500 hover:bg-orange-50 rounded-lg transition-colors" onClick={() => setMobileMenuOpen(false)}>
               <User size={15} />My Account

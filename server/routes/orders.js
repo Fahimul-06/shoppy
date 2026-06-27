@@ -26,6 +26,17 @@ router.post('/', requireUser, async (req, res) => {
       totalPrice: Number(item.total_price ?? item.totalPrice),
     });
   }
+  const defaultAddress = (req.user.addresses || []).find((a) => a.isDefault) || (req.user.addresses || [])[0];
+  const shippingAddress = shipping_address && Object.keys(shipping_address || {}).length
+    ? shipping_address
+    : defaultAddress
+      ? defaultAddress.toObject ? defaultAddress.toObject() : defaultAddress
+      : {};
+
+  if (!shippingAddress?.name) shippingAddress.name = req.user.fullName || '';
+  if (!shippingAddress?.phone) shippingAddress.phone = req.user.phone || '';
+  if (!shippingAddress?.address) return res.status(400).json({ message: 'Delivery address is required before placing order' });
+
   const order = await Order.create({
     user: req.user.id,
     items: orderItems,
@@ -34,7 +45,7 @@ router.post('/', requireUser, async (req, res) => {
     deliveryFee: delivery_fee ?? 0,
     totalAmount: total_amount,
     paymentMethod: payment_method,
-    shippingAddress: shipping_address,
+    shippingAddress,
   });
   res.status(201).json({ order });
 });

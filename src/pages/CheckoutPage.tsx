@@ -1,11 +1,13 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Check, ChevronRight, MapPin, CreditCard, Package, Loader2, AlertCircle } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { placeOrder as saveOrder } from '../lib/db';
-import { getToken } from '../lib/api';
+import { api, getToken } from '../lib/api';
 
 const steps = ['Delivery Address', 'Payment Method', 'Confirmation'];
+
+type DeliveryAddress = { id?: string; label?: string; name?: string; phone?: string; division?: string; district?: string; area?: string; address?: string; landmark?: string; latitude?: number; longitude?: number; isDefault?: boolean };
 
 const paymentMethods = [
   { id: 'bkash', label: 'bKash', color: 'bg-pink-500' },
@@ -19,7 +21,8 @@ export default function CheckoutPage() {
   const navigate = useNavigate();
   const [step, setStep] = useState(0);
   const [payment, setPayment] = useState('bkash');
-  const [address, setAddress] = useState({ name: '', phone: '', division: '', district: '', area: '', address: '' });
+  const [address, setAddress] = useState<DeliveryAddress>({ name: '', phone: '', division: '', district: '', area: '', address: '', landmark: '' });
+  const [savedAddresses, setSavedAddresses] = useState<DeliveryAddress[]>([]);
   const [ordered, setOrdered] = useState(false);
   const [orderNumber, setOrderNumber] = useState('');
   const [placing, setPlacing] = useState(false);
@@ -27,6 +30,22 @@ export default function CheckoutPage() {
 
   const shipping = totalPrice > 2000 ? 0 : 120;
   const total = totalPrice + shipping;
+
+  const readableAddress = (addr: DeliveryAddress) => [addr.address, addr.landmark, addr.area, addr.district, addr.division].filter(Boolean).join(', ');
+
+  useEffect(() => {
+    const token = getToken('user');
+    if (!token) return;
+    api.get<{ user: { addresses?: DeliveryAddress[]; fullName?: string; phone?: string } }>('/auth/me', token)
+      .then(({ user }) => {
+        const addresses = user.addresses || [];
+        setSavedAddresses(addresses);
+        const preferred = addresses.find((a) => a.isDefault) || addresses[0];
+        if (preferred) setAddress({ ...preferred, name: preferred.name || user.fullName || '', phone: preferred.phone || user.phone || '' });
+        else setAddress((prev) => ({ ...prev, name: user.fullName || prev.name || '', phone: user.phone || prev.phone || '' }));
+      })
+      .catch(() => {});
+  }, []);
 
   const placeOrder = async () => {
     if (!getToken('user')) {
@@ -111,6 +130,26 @@ export default function CheckoutPage() {
                   <MapPin size={18} className="text-orange-500" />
                   <h2 className="text-lg font-bold text-gray-900">Delivery Address</h2>
                 </div>
+                {savedAddresses.length > 0 && (
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Choose saved delivery address</label>
+                    <select
+                      className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-orange-400"
+                      value={address.id || ''}
+                      onChange={(e) => {
+                        const selected = savedAddresses.find((a) => a.id === e.target.value);
+                        if (selected) setAddress(selected);
+                      }}
+                    >
+                      <option value="">Use manual address</option>
+                      {savedAddresses.map((addr) => (
+                        <option key={addr.id} value={addr.id}>
+                          {(addr.label || 'Address') + ' - ' + (readableAddress(addr) || addr.address || 'Saved location')}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {[
                     { key: 'name', label: 'Full Name', placeholder: 'Your full name', col: 1 },
@@ -123,7 +162,7 @@ export default function CheckoutPage() {
                       <label className="block text-sm font-medium text-gray-700 mb-1.5">{label}</label>
                       <input
                         type="text"
-                        value={address[key as keyof typeof address]}
+                        value={String(address[key as keyof typeof address] || '')}
                         onChange={(e) => setAddress({ ...address, [key]: e.target.value })}
                         placeholder={placeholder}
                         className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-orange-400 transition-colors"
@@ -133,13 +172,25 @@ export default function CheckoutPage() {
                   <div className="sm:col-span-2">
                     <label className="block text-sm font-medium text-gray-700 mb-1.5">Street Address</label>
                     <textarea
-                      value={address.address}
+                      value={address.address || ''}
                       onChange={(e) => setAddress({ ...address, address: e.target.value })}
                       placeholder="House no, road, block, sector..."
                       rows={3}
                       className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-orange-400 transition-colors resize-none"
                     />
                   </div>
+                  <div className="sm:col-span-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Landmark / Delivery Note</label>
+                    <input
+                      value={address.landmark || ''}
+                      onChange={(e) => setAddress({ ...address, landmark: e.target.value })}
+                      placeholder="Nearby landmark, building, floor, gate, etc."
+                      className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-orange-400 transition-colors"
+                    />
+                  </div>
+                  {address.latitude && address.longitude && (
+                    <p className="sm:col-span-2 text-xs bg-blue-50 text-blue-600 rounded-xl px-3 py-2">Map/current-location address selected. Admin will see this delivery address in the order details.</p>
+                  )}
                 </div>
                 {error && <div className="mt-4 flex items-center gap-2 bg-red-50 text-red-600 border border-red-100 rounded-xl p-3 text-sm"><AlertCircle size={15} />{error}</div>}
                 <button

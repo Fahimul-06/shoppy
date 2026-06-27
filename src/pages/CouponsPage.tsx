@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowLeft, Copy, TicketPercent, Loader2, CalendarClock, Store, Tags } from 'lucide-react';
+import { ArrowLeft, Copy, TicketPercent, Loader2, CalendarClock, Store, Tags, ShoppingCart } from 'lucide-react';
 import { api } from '../lib/api';
 
 type Promo = {
@@ -27,6 +27,15 @@ type Promo = {
 const discountText = (promo: Promo) => promo.discountType === 'percentage'
   ? `${Number(promo.discountValue || 0)}% OFF`
   : `৳${Number(promo.discountValue || 0).toLocaleString()} OFF`;
+
+
+const couponUsePath = (promo: Promo) => {
+  const firstProduct = promo.products?.[0]?.id;
+  if (firstProduct) return `/product/${firstProduct}`;
+  const firstCategory = promo.categories?.[0];
+  if (firstCategory) return `/category/${encodeURIComponent(firstCategory.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, ''))}`;
+  return '/cart';
+};
 
 const targetText = (promo: Promo) => {
   const parts: string[] = [];
@@ -116,12 +125,21 @@ export default function CouponsPage() {
                     {promo.sellers?.length ? <p className="flex items-center gap-1.5"><Store size={13}/> Seller voucher</p> : null}
                   </div>
                 </div>
-                <button
-                  onClick={() => copy(promo.code)}
-                  className="h-fit px-4 py-2 rounded-xl bg-gray-900 text-white font-bold text-sm flex items-center gap-2 hover:bg-orange-600 transition-colors"
-                >
-                  <Copy size={15}/>{copied === promo.code ? 'Copied' : 'Copy'}
-                </button>
+                <div className="flex flex-col gap-2 flex-shrink-0">
+                  <button
+                    onClick={() => copy(promo.code)}
+                    className="h-fit px-4 py-2 rounded-xl bg-gray-900 text-white font-bold text-sm flex items-center justify-center gap-2 hover:bg-orange-600 transition-colors"
+                  >
+                    <Copy size={15}/>{copied === promo.code ? 'Copied' : 'Copy'}
+                  </button>
+                  <Link
+                    to={couponUsePath(promo)}
+                    onClick={() => copy(promo.code)}
+                    className="h-fit px-4 py-2 rounded-xl bg-orange-500 text-white font-bold text-sm flex items-center justify-center gap-2 hover:bg-orange-600 transition-colors"
+                  >
+                    <ShoppingCart size={15}/> Use Now
+                  </Link>
+                </div>
               </div>
             </div>
           ))}

@@ -108,6 +108,7 @@ export default function CheckoutPage() {
       const order = await saveOrder({
         subtotal: checkoutTotalPrice,
         discount_amount: discount,
+        promo_code: promoInfo?.code || '',
         delivery_fee: shipping,
         total_amount: total,
         payment_method: payment,

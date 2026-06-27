@@ -56,6 +56,7 @@ export default function SellerDashboardPage() {
   const [returns, setReturns] = useState<any[]>([]);
   const [cancellations, setCancellations] = useState<any[]>([]);
   const [sellerOrders, setSellerOrders] = useState<any[]>([]);
+  const [notificationCounts, setNotificationCounts] = useState({ orders: 0, returns: 0, cancellations: 0 });
   const [chat, setChat] = useState<any>(null);
   const [chatMessages, setChatMessages] = useState<any[]>([]);
   const [chatText, setChatText] = useState('');
@@ -66,6 +67,19 @@ export default function SellerDashboardPage() {
   const [modal, setModal] = useState(false);
   const [editing, setEditing] = useState<any>(null);
   const [form, setForm] = useState<any>({ ...EMPTY });
+
+  const loadNotificationCounts = async () => {
+    try {
+      const res = await api.get<{ counts: any }>('/seller/notification-counts', getToken('seller'));
+      setNotificationCounts({
+        orders: Number(res.counts?.orders || 0),
+        returns: Number(res.counts?.returns || 0),
+        cancellations: Number(res.counts?.cancellations || 0),
+      });
+    } catch {
+      // Keep the last visible counts if the network temporarily fails.
+    }
+  };
 
   const load = async () => {
     const [productRes, returnRes, cancellationRes, orderRes] = await Promise.all([
@@ -78,6 +92,7 @@ export default function SellerDashboardPage() {
     setReturns(returnRes.returns || []);
     setCancellations(cancellationRes.cancellations || []);
     setSellerOrders(orderRes.orders || []);
+    await loadNotificationCounts();
   };
 
   useEffect(() => {
@@ -99,6 +114,9 @@ export default function SellerDashboardPage() {
         nav('/seller/login');
       })
       .finally(() => setLoading(false));
+
+    const timer = window.setInterval(loadNotificationCounts, 15000);
+    return () => window.clearInterval(timer);
   }, [nav]);
 
   const logout = () => {
@@ -215,7 +233,10 @@ export default function SellerDashboardPage() {
               return (
                 <Link key={item.key} to={item.to} className={`shrink-0 flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-bold border ${active ? 'bg-orange-500 text-white border-orange-500' : 'bg-white text-gray-700 hover:bg-orange-50 border-gray-200'}`}>
                   <Icon size={16} /> {item.label}
-                  {item.key === 'orders' && activeSellerOrderCount > 0 && <span className={`ml-1 inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[10px] font-black ${active ? 'bg-white text-orange-600' : 'bg-red-500 text-white'}`}>{activeSellerOrderCount}</span>}
+                  {(['orders', 'returns', 'cancellations'].includes(item.key)) && (() => {
+                    const badge = item.key === 'orders' ? notificationCounts.orders : item.key === 'returns' ? notificationCounts.returns : notificationCounts.cancellations;
+                    return badge > 0 ? <span className={`ml-1 inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[10px] font-black ${active ? 'bg-white text-orange-600' : 'bg-red-500 text-white'}`}>{badge > 99 ? '99+' : badge}</span> : null;
+                  })()}
                 </Link>
               );
             })}
@@ -226,7 +247,7 @@ export default function SellerDashboardPage() {
 
       <main className="max-w-6xl mx-auto p-4">
         {seller?.status !== 'approved' && <div className="bg-amber-50 border border-amber-200 text-amber-700 rounded-2xl p-4 mb-4 text-sm">Your seller account is not approved yet. You can prepare products, but admin approval is required.</div>}
-        {activeSellerOrderCount > 0 && <Link to="/seller/dashboard/orders" className="block bg-orange-50 border border-orange-200 text-orange-800 rounded-2xl p-4 mb-4 text-sm font-bold">🔔 You have {activeSellerOrderCount} active product order{activeSellerOrderCount > 1 ? 's' : ''}. Click here to view and message customers.</Link>}
+        {notificationCounts.orders > 0 && <Link to="/seller/dashboard/orders" className="block bg-orange-50 border border-orange-200 text-orange-800 rounded-2xl p-4 mb-4 text-sm font-bold">🔔 You have {notificationCounts.orders} active product order{notificationCounts.orders > 1 ? 's' : ''}. Click here to view and message customers.</Link>}
 
         {section === 'home' && (
           <>

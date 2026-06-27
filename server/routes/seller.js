@@ -98,6 +98,19 @@ router.post('/login', async (req, res) => {
   res.json({ token: signToken({ id: seller.id, role: 'seller' }), seller: publicSeller(seller) });
 });
 
+
+router.get('/notification-counts', requireSeller, async (req, res) => {
+  const sellerProductIds = await Product.find({ seller: req.seller._id }).distinct('_id');
+  const [orders, returns, cancellations] = await Promise.all([
+    sellerProductIds.length
+      ? Order.countDocuments({ status: { $in: ['pending', 'processing'] }, 'items.product': { $in: sellerProductIds } })
+      : Promise.resolve(0),
+    ReturnRequest.countDocuments({ seller: req.seller._id, status: 'requested' }),
+    CancellationRequest.countDocuments({ seller: req.seller._id, status: 'cancelled' }),
+  ]);
+  res.json({ counts: { orders, returns, cancellations } });
+});
+
 router.get('/me', requireSeller, (req, res) => res.json({ seller: publicSeller(req.seller) }));
 
 router.put('/profile', requireSeller, asyncHandler(async (req, res) => {

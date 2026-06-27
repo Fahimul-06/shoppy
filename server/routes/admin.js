@@ -94,6 +94,16 @@ router.get('/stats', requireAdmin, async (_req, res) => {
   ]);
   res.json({ stats: { totalSellers, pendingSellers, totalProducts, totalOrders, activePromos, revenue: paidOrders.reduce((s, o) => s + Number(o.totalAmount || 0), 0) } });
 });
+
+router.get('/notification-counts', requireAdmin, async (_req, res) => {
+  const [orders, returns, cancellations] = await Promise.all([
+    Order.countDocuments({ status: { $in: ['pending', 'processing'] } }),
+    ReturnRequest.countDocuments({ status: 'requested' }),
+    CancellationRequest.countDocuments({ status: 'cancelled' }),
+  ]);
+  res.json({ counts: { orders, returns, cancellations } });
+});
+
 router.get('/sellers', requireAdmin, async (_req, res) => {
   const sellers = await Seller.find().sort({ createdAt: -1 });
   res.json({ sellers });

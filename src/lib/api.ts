@@ -61,7 +61,7 @@ export async function apiFetch<T>(path: string, options: ApiOptions = {}): Promi
     res = await fetch(`${API_BASE_URL}${path}`, { ...options, headers, signal: controller.signal });
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') {
-      throw new Error('Request timed out. Please try a smaller image or redeploy/check the backend service.');
+      throw new Error(isForm ? 'Upload timed out. Please try a smaller image or check the backend service.' : 'Request timed out. Please try again or check the backend service logs.');
     }
     throw new Error('Could not connect to API server. Check VITE_API_URL and backend service.');
   } finally {
@@ -86,6 +86,7 @@ export async function apiFetch<T>(path: string, options: ApiOptions = {}): Promi
 export const api = {
   get: <T>(path: string, token?: string | null) => apiFetch<T>(path, { token }),
   post: <T>(path: string, body?: unknown, token?: string | null) => apiFetch<T>(path, { method: 'POST', body: JSON.stringify(body ?? {}), token }),
+  postWithTimeout: <T>(path: string, body: unknown, token: string | null | undefined, timeoutMs: number) => apiFetch<T>(path, { method: 'POST', body: JSON.stringify(body ?? {}), token, timeoutMs }),
   put: <T>(path: string, body?: unknown, token?: string | null) => apiFetch<T>(path, { method: 'PUT', body: JSON.stringify(body ?? {}), token }),
   patch: <T>(path: string, body?: unknown, token?: string | null) => apiFetch<T>(path, { method: 'PATCH', body: JSON.stringify(body ?? {}), token }),
   delete: <T>(path: string, token?: string | null) => apiFetch<T>(path, { method: 'DELETE', token }),

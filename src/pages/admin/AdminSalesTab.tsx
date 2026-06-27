@@ -104,12 +104,12 @@ export default function AdminSalesTab() {
     setError('');
     setMessage('');
     try {
-      await api.post('/admin/sales/apply', {
+      await api.postWithTimeout('/admin/sales/apply', {
         saleType,
         discount: Number(discount || 0),
         productIds: selected,
         replaceExisting: true,
-      }, getToken('admin'));
+      }, getToken('admin'), 120000);
       setMessage(`${saleConfig[saleType].label} updated for ${selected.length} product(s).`);
       await load();
     } catch (e) {

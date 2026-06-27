@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   Search, ShoppingCart, User, Menu, X, ChevronDown, ChevronRight,
-  Grid3X3, Zap, Sparkles, Tag, Award, Store, Camera, Loader2, Bell,
+  Grid3X3, Store, Camera, Loader2, Bell,
 } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { categories } from '../data/categories';
@@ -170,14 +170,6 @@ function MegaDropdown({ onClose }: { onClose: () => void }) {
     </div>
   );
 }
-
-// ── Nav links ─────────────────────────────────────────────────────────────────
-const navLinks = [
-  { label: 'New Arrivals', to: '/new-arrivals', icon: Sparkles },
-  { label: 'Flash Sale',   to: '/flash-sale',   icon: Zap },
-  { label: 'Top Brands',   to: '/search?q=brand', icon: Award },
-  { label: 'Vouchers',     to: '/account',      icon: Tag },
-];
 
 // ── Header ────────────────────────────────────────────────────────────────────
 export default function Header() {
@@ -362,18 +354,6 @@ export default function Header() {
             {catDropdownOpen && <MegaDropdown onClose={() => setCatDropdownOpen(false)} />}
           </div>
 
-          <div className="w-px h-4 bg-gray-200 mx-1" />
-
-          {navLinks.map((link) => (
-            <Link
-              key={link.label}
-              to={link.to}
-              className="flex items-center gap-1.5 text-sm text-gray-600 hover:text-orange-500 hover:bg-orange-50 px-3 py-2 rounded-lg transition-colors font-medium"
-            >
-              <link.icon size={14} />
-              {link.label}
-            </Link>
-          ))}
         </nav>
       </div>
 
@@ -384,11 +364,6 @@ export default function Header() {
             <Link to="/category/all" className="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:text-orange-500 hover:bg-orange-50 rounded-lg transition-colors font-medium" onClick={() => setMobileMenuOpen(false)}>
               <Grid3X3 size={15} />All Categories
             </Link>
-            {navLinks.map((link) => (
-              <Link key={link.label} to={link.to} className="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:text-orange-500 hover:bg-orange-50 rounded-lg transition-colors" onClick={() => setMobileMenuOpen(false)}>
-                <link.icon size={15} />{link.label}
-              </Link>
-            ))}
             <hr className="border-gray-100 my-2" />
             <p className="px-3 py-1 text-xs font-semibold text-gray-400 uppercase tracking-wider">Categories</p>
             {categories.map((cat) => {

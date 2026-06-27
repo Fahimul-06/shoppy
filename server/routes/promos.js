@@ -10,15 +10,14 @@ const promoPopulate = [
 ];
 
 router.get('/', async (_req, res) => {
-  const now = new Date();
-  const promos = await PromoCode.find({
-    active: { $ne: false },
-    $and: [
-      { $or: [{ startsAt: null }, { startsAt: { $exists: false } }, { startsAt: { $lte: now } }] },
-      { $or: [{ expiresAt: null }, { expiresAt: { $exists: false } }, { expiresAt: { $gt: now } }] },
-    ],
-  }).populate(promoPopulate).sort({ createdAt: -1 });
-  res.json({ promos });
+  // Customer voucher/coupon page: show every active, currently valid promo,
+  // including targeted category/brand/seller/product promos. Keep the Mongo
+  // query broad and use the shared validator so older promo records with
+  // missing date fields do not disappear from the customer page.
+  const promos = await PromoCode.find({ active: { $ne: false } })
+    .populate(promoPopulate)
+    .sort({ createdAt: -1 });
+  res.json({ promos: promos.filter((promo) => isPromoActive(promo)) });
 });
 
 router.post('/validate', async (req, res) => {

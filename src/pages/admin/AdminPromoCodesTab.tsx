@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 import { api, getToken } from '../../lib/api';
+import ImageUploader from '../../components/forms/ImageUploader';
 import { categoryOptions } from '../../data/categoryOptions';
 
 type ProductOption = { id: string; name: string; brand?: string; category?: string; subcategory?: string; childCategory?: string; image?: string; seller?: any };
@@ -9,6 +10,7 @@ type SellerOption = { id: string; name?: string; shopName?: string; email?: stri
 const emptyForm = {
   code: '',
   description: '',
+  image: '',
   discountType: 'percentage',
   discountValue: '',
   minOrderAmount: '0',
@@ -164,6 +166,17 @@ export default function AdminPromoCodesTab() {
             </div>
           </div>
         )}
+
+        <div className="mt-4">
+          <ImageUploader
+            label="Voucher / coupon photo"
+            helperText="Upload an image/banner for this voucher card"
+            value={form.image}
+            onChange={(url) => setForm({ ...form, image: url })}
+            token={token}
+          />
+        </div>
+
 
         <button onClick={add} disabled={loading} className="mt-4 bg-blue-600 disabled:bg-blue-300 text-white rounded-xl font-bold px-5 py-2.5 flex items-center gap-2"><Plus size={16}/>{loading ? 'Saving...' : 'Create Promo'}</button>
       </div>

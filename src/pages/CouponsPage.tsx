@@ -7,6 +7,7 @@ type Promo = {
   id: string;
   code: string;
   description?: string;
+  image?: string;
   discountType: 'percentage' | 'fixed';
   discountValue: number;
   minOrderAmount?: number;
@@ -122,9 +123,11 @@ export default function CouponsPage() {
       ) : (
         <div className="grid md:grid-cols-2 gap-4">
           {visiblePromos.map((promo) => (
-            <div key={promo.id || promo.code} className="relative overflow-hidden bg-white border rounded-2xl p-5 shadow-sm">
-              <div className="absolute -right-8 -top-8 w-24 h-24 rounded-full bg-orange-50" />
-              <div className="relative flex justify-between gap-4">
+            <div key={promo.id || promo.code} className="relative overflow-hidden bg-white border rounded-2xl shadow-sm">
+              {promo.image && <img src={promo.image} alt={promo.code} className="w-full h-32 object-cover" />}
+              <div className="relative p-5">
+                <div className="absolute -right-8 -top-8 w-24 h-24 rounded-full bg-orange-50" />
+                <div className="relative flex justify-between gap-4">
                 <div className="min-w-0">
                   <p className="inline-flex items-center gap-1 text-xs font-black text-orange-600 bg-orange-50 rounded-full px-2 py-1 mb-2">
                     <TicketPercent size={13}/> {discountText(promo)}
@@ -155,6 +158,7 @@ export default function CouponsPage() {
                     <ShoppingCart size={15}/> Use Now
                   </Link>
                 </div>
+              </div>
               </div>
             </div>
           ))}

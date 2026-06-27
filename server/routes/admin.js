@@ -74,20 +74,66 @@ function formatCustomerSummary(user, orders) {
 }
 
 
+function clampSaleDiscount(value) {
+  const n = Number(value || 0);
+  if (!Number.isFinite(n)) return 0;
+  return Math.max(0, Math.min(100, n));
+}
+
 function sanitizeSaleProductPayload(body = {}) {
   const payload = { ...body };
-  const saleTags = Array.isArray(payload.saleTags) ? payload.saleTags.filter((tag) => ['daily', 'flash'].includes(tag)) : [];
-  payload.saleTags = [...new Set(saleTags)];
-  const clampDiscount = (value) => {
-    const n = Number(value || 0);
-    if (!Number.isFinite(n)) return 0;
-    return Math.max(0, Math.min(100, n));
-  };
-  payload.dailySaleDiscount = payload.saleTags.includes('daily') ? clampDiscount(payload.dailySaleDiscount ?? payload.discount) : 0;
-  payload.flashSaleDiscount = payload.saleTags.includes('flash') ? clampDiscount(payload.flashSaleDiscount ?? payload.discount) : 0;
-  payload.discount = Math.max(payload.dailySaleDiscount || 0, payload.flashSaleDiscount || 0, clampDiscount(payload.discount));
+  if (Array.isArray(payload.saleTags)) {
+    const saleTags = payload.saleTags.filter((tag) => ['daily', 'flash'].includes(tag));
+    payload.saleTags = [...new Set(saleTags)];
+    payload.dailySaleDiscount = payload.saleTags.includes('daily') ? clampSaleDiscount(payload.dailySaleDiscount ?? payload.discount) : 0;
+    payload.flashSaleDiscount = payload.saleTags.includes('flash') ? clampSaleDiscount(payload.flashSaleDiscount ?? payload.discount) : 0;
+    payload.discount = Math.max(payload.dailySaleDiscount || 0, payload.flashSaleDiscount || 0, clampSaleDiscount(payload.discount));
+  } else {
+    delete payload.saleTags;
+    delete payload.dailySaleDiscount;
+    delete payload.flashSaleDiscount;
+  }
   if (payload.originalPrice === '') delete payload.originalPrice;
   return payload;
+}
+
+async function applySaleToProducts({ saleType, productIds, discount, replaceExisting = true }) {
+  const tag = saleType === 'flash' ? 'flash' : 'daily';
+  const discountField = tag === 'daily' ? 'dailySaleDiscount' : 'flashSaleDiscount';
+  const otherDiscountField = tag === 'daily' ? 'flashSaleDiscount' : 'dailySaleDiscount';
+  const ids = Array.isArray(productIds) ? productIds.map((id) => String(id || '').trim()).filter(Boolean) : [];
+  const safeDiscount = clampSaleDiscount(discount);
+
+  if (replaceExisting) {
+    await Product.updateMany(
+      { saleTags: tag, _id: { $nin: ids } },
+      { $pull: { saleTags: tag }, $set: { [discountField]: 0 } }
+    );
+  }
+
+  if (ids.length) {
+    await Product.updateMany(
+      { _id: { $in: ids } },
+      { $addToSet: { saleTags: tag }, $set: { [discountField]: safeDiscount } }
+    );
+  }
+
+  const affected = await Product.find({ _id: { $in: ids } });
+  for (const product of affected) {
+    product.discount = Math.max(Number(product.dailySaleDiscount || 0), Number(product.flashSaleDiscount || 0), Number(product.discount || 0));
+    await product.save();
+  }
+
+  if (replaceExisting) {
+    const removed = await Product.find({ saleTags: { $ne: tag }, [discountField]: { $gt: 0 } });
+    for (const product of removed) {
+      product[discountField] = 0;
+      product.discount = Math.max(Number(product[otherDiscountField] || 0), 0);
+      await product.save();
+    }
+  }
+
+  return Product.find({ saleTags: tag }).sort({ createdAt: -1 }).populate('seller');
 }
 
 async function ensureDefaultAdmin() {
@@ -163,33 +209,17 @@ router.patch('/sellers/:id/status', requireAdmin, async (req, res) => {
   res.json({ seller });
 });
 router.get('/products', requireAdmin, async (_req, res) => res.json({ products: await Product.find().sort({ createdAt: -1 }).populate('seller') }));
-
-router.patch('/products/sale-bulk', requireAdmin, async (req, res) => {
-  const { saleType, productIds, discount } = req.body || {};
-  if (!['daily', 'flash'].includes(saleType)) return res.status(400).json({ message: 'Sale type must be daily or flash' });
-  if (!Array.isArray(productIds) || productIds.length === 0) return res.status(400).json({ message: 'Select at least one product' });
-
-  const n = Number(discount || 0);
-  if (!Number.isFinite(n) || n < 0 || n > 100) return res.status(400).json({ message: 'Discount must be between 0 and 100' });
-
-  const products = await Product.find({ _id: { $in: productIds } });
-  for (const product of products) {
-    const tags = Array.isArray(product.saleTags) ? product.saleTags : [];
-    if (!tags.includes(saleType)) tags.push(saleType);
-    product.saleTags = tags;
-    if (saleType === 'daily') product.dailySaleDiscount = n;
-    if (saleType === 'flash') product.flashSaleDiscount = n;
-    product.discount = Math.max(Number(product.dailySaleDiscount || 0), Number(product.flashSaleDiscount || 0), Number(product.discount || 0));
-    if (!product.badge) product.badge = 'sale';
-    await product.save();
-  }
-
-  res.json({ message: `${saleType === 'daily' ? 'Daily Sale' : 'Flash Sale'} applied to ${products.length} product(s).`, updatedCount: products.length });
-});
-
 router.post('/products', requireAdmin, async (req, res) => res.status(201).json({ product: await Product.create(sanitizeSaleProductPayload(req.body)) }));
 router.put('/products/:id', requireAdmin, async (req, res) => res.json({ product: await Product.findByIdAndUpdate(req.params.id, sanitizeSaleProductPayload(req.body), { new: true }) }));
 router.delete('/products/:id', requireAdmin, async (req, res) => { await Product.findByIdAndDelete(req.params.id); res.json({ ok: true }); });
+
+router.post('/sales/apply', requireAdmin, async (req, res) => {
+  const { saleType = 'daily', discount = 0, productIds = [], replaceExisting = true } = req.body || {};
+  if (!['daily', 'flash'].includes(saleType)) return res.status(400).json({ message: 'Invalid sale type' });
+  if (!Array.isArray(productIds)) return res.status(400).json({ message: 'productIds must be an array' });
+  const products = await applySaleToProducts({ saleType, productIds, discount, replaceExisting });
+  res.json({ message: 'Sale products updated', products });
+});
 router.get('/orders', requireAdmin, async (_req, res) => {
   const orders = await Order.find()
     .populate('user')

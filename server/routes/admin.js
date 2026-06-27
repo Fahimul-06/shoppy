@@ -73,6 +73,23 @@ function formatCustomerSummary(user, orders) {
   };
 }
 
+
+function sanitizeSaleProductPayload(body = {}) {
+  const payload = { ...body };
+  const saleTags = Array.isArray(payload.saleTags) ? payload.saleTags.filter((tag) => ['daily', 'flash'].includes(tag)) : [];
+  payload.saleTags = [...new Set(saleTags)];
+  const clampDiscount = (value) => {
+    const n = Number(value || 0);
+    if (!Number.isFinite(n)) return 0;
+    return Math.max(0, Math.min(100, n));
+  };
+  payload.dailySaleDiscount = payload.saleTags.includes('daily') ? clampDiscount(payload.dailySaleDiscount ?? payload.discount) : 0;
+  payload.flashSaleDiscount = payload.saleTags.includes('flash') ? clampDiscount(payload.flashSaleDiscount ?? payload.discount) : 0;
+  payload.discount = Math.max(payload.dailySaleDiscount || 0, payload.flashSaleDiscount || 0, clampDiscount(payload.discount));
+  if (payload.originalPrice === '') delete payload.originalPrice;
+  return payload;
+}
+
 async function ensureDefaultAdmin() {
   const email = process.env.ADMIN_EMAIL || 'admin@gmail.com';
   const password = process.env.ADMIN_PASSWORD || 'Qwertyuiop09';
@@ -146,8 +163,8 @@ router.patch('/sellers/:id/status', requireAdmin, async (req, res) => {
   res.json({ seller });
 });
 router.get('/products', requireAdmin, async (_req, res) => res.json({ products: await Product.find().sort({ createdAt: -1 }).populate('seller') }));
-router.post('/products', requireAdmin, async (req, res) => res.status(201).json({ product: await Product.create(req.body) }));
-router.put('/products/:id', requireAdmin, async (req, res) => res.json({ product: await Product.findByIdAndUpdate(req.params.id, req.body, { new: true }) }));
+router.post('/products', requireAdmin, async (req, res) => res.status(201).json({ product: await Product.create(sanitizeSaleProductPayload(req.body)) }));
+router.put('/products/:id', requireAdmin, async (req, res) => res.json({ product: await Product.findByIdAndUpdate(req.params.id, sanitizeSaleProductPayload(req.body), { new: true }) }));
 router.delete('/products/:id', requireAdmin, async (req, res) => { await Product.findByIdAndDelete(req.params.id); res.json({ ok: true }); });
 router.get('/orders', requireAdmin, async (_req, res) => {
   const orders = await Order.find()

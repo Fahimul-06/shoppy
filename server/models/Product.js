@@ -16,6 +16,8 @@ const productSchema = new mongoose.Schema({
   badge: { type: String, enum: ['sale', 'new', 'hot', null], default: null },
   saleTags: { type: [String], enum: ['daily', 'flash'], default: [] },
   discount: Number,
+  dailySaleDiscount: { type: Number, default: 0, min: 0, max: 100 },
+  flashSaleDiscount: { type: Number, default: 0, min: 0, max: 100 },
   stock: { type: Number, default: 0 },
   description: String,
   features: [String],

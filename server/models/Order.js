@@ -16,8 +16,6 @@ const orderSchema = new mongoose.Schema({
   items: [orderItemSchema],
   subtotal: Number,
   discountAmount: { type: Number, default: 0 },
-  promoCode: { type: String, trim: true, uppercase: true, default: '' },
-  promo: { type: mongoose.Schema.Types.ObjectId, ref: 'PromoCode', default: null },
   deliveryFee: { type: Number, default: 0 },
   totalAmount: Number,
   paymentMethod: String,

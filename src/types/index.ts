@@ -22,6 +22,10 @@ export interface Product {
   reviewCount: number;
   badge?: 'sale' | 'new' | 'hot';
   discount?: number;
+  isDailySale?: boolean;
+  isFlashSale?: boolean;
+  saleStartAt?: string;
+  saleEndAt?: string;
   brand?: string;
   description?: string;
   specifications?: Record<string, string>;

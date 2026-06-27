@@ -3,6 +3,14 @@ import { Link } from 'react-router-dom';
 import { Flame, Tag } from 'lucide-react';
 import { useProducts } from '../hooks/useProducts';
 
+
+function isSaleActive(product: any) {
+  const now = Date.now();
+  const starts = product.saleStartAt ? new Date(product.saleStartAt).getTime() : 0;
+  const ends = product.saleEndAt ? new Date(product.saleEndAt).getTime() : Number.POSITIVE_INFINITY;
+  return starts <= now && now <= ends;
+}
+
 function getDiscountPercent(price: number, originalPrice?: number, discount?: number) {
   if (discount && discount > 0) return Math.round(discount);
   if (originalPrice && originalPrice > price) {
@@ -16,7 +24,7 @@ export default function DailySalesBox() {
   const saleProducts = products
     .filter((product) => {
       const discount = getDiscountPercent(product.price, product.originalPrice, product.discount);
-      return product.badge === 'sale' || discount > 0 || Boolean(product.originalPrice && product.originalPrice > product.price);
+      return isSaleActive(product) && (product.isDailySale || product.badge === 'sale' || discount > 0 || Boolean(product.originalPrice && product.originalPrice > product.price));
     })
     .slice(0, 10);
 

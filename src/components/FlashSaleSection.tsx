@@ -4,6 +4,14 @@ import { Zap, Clock, ChevronRight, ShoppingCart, Star } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { useProducts } from '../hooks/useProducts';
 
+
+function isSaleActive(product: any) {
+  const now = Date.now();
+  const starts = product.saleStartAt ? new Date(product.saleStartAt).getTime() : 0;
+  const ends = product.saleEndAt ? new Date(product.saleEndAt).getTime() : Number.POSITIVE_INFINITY;
+  return starts <= now && now <= ends;
+}
+
 function useCountdown() {
   const getTimeLeft = () => {
     const now = new Date();
@@ -40,7 +48,7 @@ export default function FlashSaleSection() {
   const { addItem } = useCart();
   const { products, loading } = useProducts();
   const saleProducts = products
-    .filter((p) => p.badge === 'sale')
+    .filter((p) => isSaleActive(p) && (p.isFlashSale || p.badge === 'sale'))
     .sort((a, b) => (b.discount ?? 0) - (a.discount ?? 0))
     .slice(0, 8);
   const { h, m, s } = useCountdown();

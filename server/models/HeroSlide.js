@@ -6,7 +6,7 @@ const heroSlideSchema = new mongoose.Schema({
   subtitle: String,
   link: String,
   placement: { type: String, enum: ['hero', 'header', 'event', 'voucher', 'campaign'], default: 'hero' },
-  relatedType: { type: String, enum: ['all', 'category', 'brand', 'seller', 'product', 'search'], default: 'all' },
+  relatedType: { type: String, enum: ['all', 'category', 'brand', 'seller', 'shop', 'product', 'search', 'bank_card', 'payment_type', 'weekday'], default: 'all' },
   relatedValue: String,
   products: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Product' }],
   sortOrder: { type: Number, default: 0 },

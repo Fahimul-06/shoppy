@@ -590,7 +590,7 @@ router.delete('/promos/:id', requireAdmin, async (req, res) => { await PromoCode
 
 const bannerPayload = (body = {}) => {
   const placement = ['hero', 'header', 'event', 'voucher', 'campaign'].includes(String(body.placement || '')) ? String(body.placement) : 'hero';
-  const relatedType = ['all', 'category', 'brand', 'seller', 'product', 'search'].includes(String(body.relatedType || '')) ? String(body.relatedType) : 'all';
+  const relatedType = ['all', 'category', 'brand', 'seller', 'shop', 'product', 'search', 'bank_card', 'payment_type', 'weekday'].includes(String(body.relatedType || '')) ? String(body.relatedType) : 'all';
   const products = Array.isArray(body.products) ? body.products.map((id) => String(id || '').trim()).filter(Boolean) : [];
   return {
     image: String(body.image || '').trim(),

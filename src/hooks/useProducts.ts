@@ -16,6 +16,7 @@ function normalizeProduct(product: Product): Product {
     flashSaleDiscount: product.flashSaleDiscount === undefined || product.flashSaleDiscount === null ? undefined : Number(product.flashSaleDiscount),
     soldCount: Number(product.soldCount ?? 0),
     newArrival: Boolean(product.newArrival || product.badge === 'new'),
+    freeDelivery: Boolean(product.freeDelivery),
     images: product.images?.length ? product.images : [product.image].filter(Boolean),
   };
 }

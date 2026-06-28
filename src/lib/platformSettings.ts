@@ -21,6 +21,13 @@ export type ProductFrameSettings = {
   freeDeliveryFrame: string;
 };
 
+export type DailySaleFreeDeliveryRule = {
+  enabled: boolean;
+  type: 'product_count' | 'amount';
+  productCount: number;
+  amount: number;
+};
+
 export type PlatformSettings = {
   id?: string;
   deliveryCharge: number;
@@ -34,6 +41,8 @@ export type PlatformSettings = {
   dailySaleBanner: SaleBannerSettings;
   flashSaleBanner: SaleBannerSettings;
   productFrames: ProductFrameSettings;
+  dailySaleFreeDeliveryRule: DailySaleFreeDeliveryRule;
+  categoryBanners: Record<string, string>;
 };
 
 export const defaultDailySaleBanner: SaleBannerSettings = {
@@ -56,6 +65,13 @@ export const defaultProductFrames: ProductFrameSettings = {
   freeDeliveryFrame: '',
 };
 
+export const defaultDailySaleFreeDeliveryRule: DailySaleFreeDeliveryRule = {
+  enabled: false,
+  type: 'amount',
+  productCount: 3,
+  amount: 1500,
+};
+
 export const defaultPlatformSettings: PlatformSettings = {
   deliveryCharge: 120,
   freeDeliveryMin: 2000,
@@ -73,6 +89,8 @@ export const defaultPlatformSettings: PlatformSettings = {
   dailySaleBanner: defaultDailySaleBanner,
   flashSaleBanner: defaultFlashSaleBanner,
   productFrames: defaultProductFrames,
+  dailySaleFreeDeliveryRule: defaultDailySaleFreeDeliveryRule,
+  categoryBanners: {},
 };
 
 
@@ -82,6 +100,27 @@ function normalizeProductFrames(frames?: Partial<ProductFrameSettings> | null): 
     flashSaleFrame: String(frames?.flashSaleFrame || '').trim(),
     freeDeliveryFrame: String(frames?.freeDeliveryFrame || '').trim(),
   };
+}
+
+function normalizeDailySaleFreeDeliveryRule(rule?: Partial<DailySaleFreeDeliveryRule> | null): DailySaleFreeDeliveryRule {
+  return {
+    enabled: rule?.enabled === true,
+    type: rule?.type === 'product_count' ? 'product_count' : 'amount',
+    productCount: Math.max(1, Math.floor(Number(rule?.productCount ?? defaultDailySaleFreeDeliveryRule.productCount))),
+    amount: Math.max(0, Number(rule?.amount ?? defaultDailySaleFreeDeliveryRule.amount)),
+  };
+}
+
+function normalizeCategoryBanners(banners?: Record<string, string> | Map<string, string> | null): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (!banners) return out;
+  const entries = banners instanceof Map ? Array.from(banners.entries()) : Object.entries(banners as Record<string, string>);
+  entries.forEach(([key, value]) => {
+    const slug = String(key || '').trim();
+    const image = String(value || '').trim();
+    if (slug && image) out[slug] = image;
+  });
+  return out;
 }
 
 function normalizeSaleBanner(banner: Partial<SaleBannerSettings> | undefined | null, defaults: SaleBannerSettings): SaleBannerSettings {
@@ -110,6 +149,8 @@ export function normalizePlatformSettings(settings?: Partial<PlatformSettings> |
     dailySaleBanner: normalizeSaleBanner(settings?.dailySaleBanner, defaultDailySaleBanner),
     flashSaleBanner: normalizeSaleBanner(settings?.flashSaleBanner, defaultFlashSaleBanner),
     productFrames: normalizeProductFrames(settings?.productFrames),
+    dailySaleFreeDeliveryRule: normalizeDailySaleFreeDeliveryRule(settings?.dailySaleFreeDeliveryRule),
+    categoryBanners: normalizeCategoryBanners(settings?.categoryBanners as any),
   };
 }
 
@@ -126,9 +167,24 @@ export function getSaleBannerStyle(banner: SaleBannerSettings): CSSProperties {
   };
 }
 
-export function calculateCharges(subtotalAfterDiscount: number, settings: PlatformSettings) {
+export function calculateCharges(subtotalAfterDiscount: number, settings: PlatformSettings, items: Array<{ product?: any; quantity?: number }> = []) {
   const amount = Math.max(0, Number(subtotalAfterDiscount || 0));
-  const deliveryCharge = amount >= Number(settings.freeDeliveryMin || 0) ? 0 : Number(settings.deliveryCharge || 0);
+  const normalizedItems = Array.isArray(items) ? items : [];
+  const hasManualFreeDeliveryProduct = normalizedItems.some((item) => Boolean(item?.product?.freeDelivery));
+  const dailyRule = settings.dailySaleFreeDeliveryRule || defaultDailySaleFreeDeliveryRule;
+  const dailyItems = normalizedItems.filter((item) => {
+    const product = item?.product || {};
+    const tags = Array.isArray(product.saleTags) ? product.saleTags : [];
+    return tags.includes('daily') || product.currentSaleType === 'daily';
+  });
+  const dailyQty = dailyItems.reduce((sum, item) => sum + Math.max(1, Number(item?.quantity || 1)), 0);
+  const dailyRuleMatched = dailyRule.enabled === true && (
+    dailyRule.type === 'product_count'
+      ? dailyQty >= Number(dailyRule.productCount || 0)
+      : amount >= Number(dailyRule.amount || 0)
+  );
+  const minFreeDeliveryMatched = amount >= Number(settings.freeDeliveryMin || 0);
+  const deliveryCharge = (hasManualFreeDeliveryProduct || dailyRuleMatched || minFreeDeliveryMatched) ? 0 : Number(settings.deliveryCharge || 0);
   const platformFee = settings.platformFeeType === 'percent'
     ? Math.round((amount * Number(settings.platformFee || 0)) / 100)
     : Number(settings.platformFee || 0);
@@ -220,9 +276,7 @@ export function getProductFrameImage(product: any, settings: PlatformSettings): 
   if ((currentSaleType === 'daily' || tags.includes('daily')) && settings.productFrames.dailySaleFrame) {
     return settings.productFrames.dailySaleFrame;
   }
-  const productPrice = Number(product?.currentSalePrice ?? product?.price ?? 0);
-  const freeDeliveryMin = Number(settings.freeDeliveryMin || 0);
-  if (freeDeliveryMin > 0 && productPrice >= freeDeliveryMin && settings.productFrames.freeDeliveryFrame) {
+  if (product?.freeDelivery === true && settings.productFrames.freeDeliveryFrame) {
     return settings.productFrames.freeDeliveryFrame;
   }
   return '';

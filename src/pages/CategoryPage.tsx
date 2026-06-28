@@ -1,9 +1,10 @@
-import React, { useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useParams, Link, useSearchParams } from 'react-router-dom';
 import { ChevronRight, SlidersHorizontal, ChevronDown, X } from 'lucide-react';
 import { categories } from '../data/categories';
 import ProductCard from '../components/ProductCard';
 import { useProducts } from '../hooks/useProducts';
+import { defaultPlatformSettings, fetchPublicPlatformSettings, type PlatformSettings } from '../lib/platformSettings';
 
 const cleanLabel = (value?: string | null) => (value || '').trim();
 const normalizeText = (value?: string | null) => cleanLabel(value)
@@ -69,7 +70,12 @@ export default function CategoryPage() {
   const [maxPrice, setMaxPrice] = useState(200000);
   const [minRating, setMinRating] = useState(0);
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [platformSettings, setPlatformSettings] = useState<PlatformSettings>(defaultPlatformSettings);
   const { products, loading } = useProducts();
+
+  useEffect(() => {
+    fetchPublicPlatformSettings().then(setPlatformSettings).catch(() => {});
+  }, []);
 
   const category = categories.find((c) => c.slug === slug);
   const isAll = slug === 'all';
@@ -97,6 +103,7 @@ export default function CategoryPage() {
 
   const categoryName = isAll ? 'All Products' : category?.name ?? slug?.replace(/-/g, ' ');
   const pageTitle = selectedChild || selectedSub || categoryName;
+  const categoryBannerImage = category ? (platformSettings.categoryBanners?.[category.slug] || category.image) : ''; 
 
   const FilterPanel = () => (
     <div className="space-y-6">
@@ -174,7 +181,7 @@ export default function CategoryPage() {
       {/* Category banner */}
       {category && (
         <div className="relative h-32 sm:h-44 overflow-hidden">
-          <img src={category.image} alt={category.name} className="w-full h-full object-cover" />
+          <img src={categoryBannerImage} alt={category.name} className="w-full h-full object-cover" />
           <div className="absolute inset-0 bg-gradient-to-r from-black/70 to-black/30 flex items-center px-6 sm:px-12">
             <div>
               <h1 className="text-white text-2xl sm:text-3xl font-bold">{pageTitle}</h1>

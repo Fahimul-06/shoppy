@@ -52,7 +52,7 @@ export default function CheckoutPage() {
   const checkoutTotalItems = checkoutItems.reduce((sum, item) => sum + item.quantity, 0);
   const checkoutTotalPrice = checkoutItems.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
   const discount = promoInfo?.discount || 0;
-  const charges = calculateCharges(checkoutTotalPrice - discount, platformSettings);
+  const charges = calculateCharges(checkoutTotalPrice - discount, platformSettings, checkoutItems);
   const shipping = charges.deliveryCharge;
   const platformFee = charges.platformFee;
   const vatAmount = charges.vatAmount;

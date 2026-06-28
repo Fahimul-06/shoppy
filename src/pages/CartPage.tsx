@@ -40,7 +40,7 @@ export default function CartPage() {
   const selectedTotalItems = selectedItems.reduce((sum, item) => sum + item.quantity, 0);
   const selectedTotalPrice = selectedItems.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
   const discount = promoInfo?.discount || 0;
-  const charges = calculateCharges(selectedTotalPrice - discount, platformSettings);
+  const charges = calculateCharges(selectedTotalPrice - discount, platformSettings, selectedItems);
   const shipping = charges.deliveryCharge;
   const platformFee = charges.platformFee;
   const vatAmount = charges.vatAmount;
@@ -255,7 +255,7 @@ export default function CartPage() {
                   </div>
                   {shipping === 0 && (
                     <p className="text-xs text-green-600 bg-green-50 px-2.5 py-1.5 rounded-lg">
-                      Free delivery on orders over ৳{Number(platformSettings.freeDeliveryMin || 0).toLocaleString()}
+                      Free delivery applied to this order
                     </p>
                   )}
                   {platformFee > 0 && (

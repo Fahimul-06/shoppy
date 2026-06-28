@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, Loader2, Search, ShoppingBag, Sparkles, Zap, Save, Clock, Image as ImageIcon } from 'lucide-react';
+import { CheckCircle2, Loader2, Search, ShoppingBag, Sparkles, Zap, Save, Clock, Image as ImageIcon, Truck } from 'lucide-react';
 import { api, getToken } from '../../lib/api';
 import { defaultPlatformSettings, normalizePlatformSettings, type PlatformSettings, type SaleBannerSettings, type ProductFrameSettings } from '../../lib/platformSettings';
 import ImageUploader from '../../components/forms/ImageUploader';
+import { categories } from '../../data/categories';
 
-type SaleType = 'daily' | 'flash' | 'newArrival';
+type SaleType = 'daily' | 'flash' | 'newArrival' | 'freeDelivery';
 type Product = {
   id: string;
   _id?: string;
@@ -23,6 +24,7 @@ type Product = {
   flashSaleDiscount?: number;
   newArrival?: boolean;
   badge?: string;
+  freeDelivery?: boolean;
 };
 
 const saleConfig = {
@@ -43,6 +45,15 @@ const saleConfig = {
     bg: 'bg-red-50',
     active: 'bg-red-600 text-white border-red-600',
     needsDiscount: true,
+  },
+  freeDelivery: {
+    label: 'Free Delivery Products',
+    short: 'Free Delivery',
+    icon: Truck,
+    border: 'border-sky-200',
+    bg: 'bg-sky-50',
+    active: 'bg-sky-600 text-white border-sky-600',
+    needsDiscount: false,
   },
   newArrival: {
     label: 'New Arrivals',
@@ -107,6 +118,20 @@ export default function AdminSalesTab() {
     }));
   };
 
+  const updateDailySaleFreeDeliveryRule = (patch: Partial<PlatformSettings['dailySaleFreeDeliveryRule']>) => {
+    setSettings((current) => ({
+      ...current,
+      dailySaleFreeDeliveryRule: { ...current.dailySaleFreeDeliveryRule, ...patch },
+    }));
+  };
+
+  const updateCategoryBanner = (slug: string, image: string) => {
+    setSettings((current) => ({
+      ...current,
+      categoryBanners: { ...(current.categoryBanners || {}), [slug]: image },
+    }));
+  };
+
   const load = async () => {
     setLoading(true);
     setError('');
@@ -149,7 +174,9 @@ export default function AdminSalesTab() {
   useEffect(() => {
     const current = saleType === 'newArrival'
       ? products.filter((p) => p.newArrival || p.badge === 'new')
-      : products.filter((p) => Array.isArray(p.saleTags) && p.saleTags.includes(saleType));
+      : saleType === 'freeDelivery'
+        ? products.filter((p) => p.freeDelivery)
+        : products.filter((p) => Array.isArray(p.saleTags) && p.saleTags.includes(saleType));
     setSelected(current.map((p) => p.id || p._id || '').filter(Boolean));
     setDiscount(saleType === 'daily' ? String(current[0]?.dailySaleDiscount || '') : saleType === 'flash' ? String(current[0]?.flashSaleDiscount || '') : '');
     setMessage('');
@@ -213,8 +240,8 @@ export default function AdminSalesTab() {
             <h2 className="text-xl font-black text-gray-900">Sale & New Arrival Manager</h2>
             <p className="text-sm text-gray-500 mt-1">Choose Daily Sale, Flash Sale, or New Arrivals. Select many products together, then submit.</p>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 min-w-[260px]">
-            {(['daily', 'flash', 'newArrival'] as SaleType[]).map((type) => {
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 min-w-[260px]">
+            {(['daily', 'flash', 'newArrival', 'freeDelivery'] as SaleType[]).map((type) => {
               const Icon = saleConfig[type].icon;
               return (
                 <button
@@ -359,13 +386,112 @@ export default function AdminSalesTab() {
         </div>
 
         <div className="bg-white rounded-2xl border p-5 lg:col-span-2">
+          <div className="flex items-center gap-2 mb-2"><Truck size={18} className="text-sky-500" /><h3 className="font-black text-gray-900">Daily Sale Free Delivery Rule</h3></div>
+          <p className="text-xs text-gray-500 mb-4">Control when Daily Sale orders get free delivery. This works in Cart, Checkout, and backend order creation.</p>
+          <div className="grid md:grid-cols-[180px_1fr_1fr] gap-3 items-end">
+            <label className="rounded-2xl border border-gray-100 bg-gray-50 p-3 flex items-center gap-2 h-full">
+              <input
+                type="checkbox"
+                checked={settings.dailySaleFreeDeliveryRule.enabled}
+                onChange={(e) => updateDailySaleFreeDeliveryRule({ enabled: e.target.checked })}
+              />
+              <span className="text-sm font-black text-gray-700">Enable rule</span>
+            </label>
+            <label className="block">
+              <span className="text-xs font-bold text-gray-600">Daily Sale type</span>
+              <select
+                className="mt-1 w-full border rounded-xl p-3 text-sm bg-white"
+                value={settings.dailySaleFreeDeliveryRule.type}
+                onChange={(e) => updateDailySaleFreeDeliveryRule({ type: e.target.value === 'product_count' ? 'product_count' : 'amount' })}
+              >
+                <option value="product_count">If order has selected number of Daily Sale products</option>
+                <option value="amount">If order amount reaches selected amount</option>
+              </select>
+            </label>
+            {settings.dailySaleFreeDeliveryRule.type === 'product_count' ? (
+              <label className="block">
+                <span className="text-xs font-bold text-gray-600">Free delivery after how many Daily Sale products?</span>
+                <input
+                  type="number"
+                  min="1"
+                  className="mt-1 w-full border rounded-xl p-3 text-sm font-bold"
+                  value={settings.dailySaleFreeDeliveryRule.productCount}
+                  onChange={(e) => updateDailySaleFreeDeliveryRule({ productCount: Math.max(1, Number(e.target.value || 1)) })}
+                />
+              </label>
+            ) : (
+              <label className="block">
+                <span className="text-xs font-bold text-gray-600">Free delivery after order amount</span>
+                <input
+                  type="number"
+                  min="0"
+                  className="mt-1 w-full border rounded-xl p-3 text-sm font-bold"
+                  value={settings.dailySaleFreeDeliveryRule.amount}
+                  onChange={(e) => updateDailySaleFreeDeliveryRule({ amount: Math.max(0, Number(e.target.value || 0)) })}
+                />
+              </label>
+            )}
+          </div>
+          <div className="mt-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-t pt-4">
+            <p className="text-xs text-gray-500">Example: choose product count = 3, or amount = 1500/2000 to make eligible Daily Sale orders free delivery.</p>
+            <button
+              type="button"
+              onClick={saveSettings}
+              disabled={settingsSaving}
+              className="shrink-0 inline-flex items-center justify-center gap-2 rounded-xl bg-sky-600 px-4 py-2.5 text-sm font-black text-white disabled:bg-sky-300"
+            >
+              {settingsSaving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+              Save Daily Sale Rule
+            </button>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-2xl border p-5 lg:col-span-2">
+          <div className="flex items-center gap-2 mb-2"><ImageIcon size={18} className="text-teal-500" /><h3 className="font-black text-gray-900">Category Banner Photos</h3></div>
+          <p className="text-xs text-gray-500 mb-4">Upload or edit the large banner image used at the top of each category page.</p>
+          <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-4 max-h-[520px] overflow-y-auto pr-1">
+            {categories.map((cat) => {
+              const image = settings.categoryBanners?.[cat.slug] || cat.image || '';
+              return (
+                <div key={cat.slug} className="rounded-2xl border border-gray-100 bg-gray-50 p-3">
+                  <div className="rounded-xl overflow-hidden border h-24 bg-white mb-3 relative">
+                    {image ? <img src={image} alt={cat.name} className="w-full h-full object-cover" /> : null}
+                    <div className="absolute inset-0 bg-black/35 flex items-center px-3 text-white text-sm font-black">{cat.name}</div>
+                  </div>
+                  <ImageUploader
+                    label={`${cat.name} banner`}
+                    helperText="This replaces the default category banner image."
+                    value={settings.categoryBanners?.[cat.slug] || ''}
+                    onChange={(url) => updateCategoryBanner(cat.slug, url)}
+                    token={getToken('admin')}
+                  />
+                </div>
+              );
+            })}
+          </div>
+          <div className="mt-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-t pt-4">
+            <p className="text-xs text-gray-500">Leave empty to use the default category photo.</p>
+            <button
+              type="button"
+              onClick={saveSettings}
+              disabled={settingsSaving}
+              className="shrink-0 inline-flex items-center justify-center gap-2 rounded-xl bg-teal-600 px-4 py-2.5 text-sm font-black text-white disabled:bg-teal-300"
+            >
+              {settingsSaving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+              Save Category Banners
+            </button>
+          </div>
+        </div>
+
+
+        <div className="bg-white rounded-2xl border p-5 lg:col-span-2">
           <div className="flex items-center gap-2 mb-2"><ImageIcon size={18} className="text-purple-500" /><h3 className="font-black text-gray-900">Product Photo Frames</h3></div>
           <p className="text-xs text-gray-500 mb-4">Upload transparent PNG frame images. They will appear over product photos for matching products.</p>
           <div className="grid md:grid-cols-3 gap-4">
             {([
               { key: 'dailySaleFrame' as const, label: 'Daily Sale product photo frame', helper: 'Shown on products selected for Daily Sale.' },
               { key: 'flashSaleFrame' as const, label: 'Flash Sale product photo frame', helper: 'Shown on products selected for Flash Sale.' },
-              { key: 'freeDeliveryFrame' as const, label: 'Free Delivery product photo frame', helper: 'Shown when product price is equal to or above the free delivery minimum.' },
+              { key: 'freeDeliveryFrame' as const, label: 'Free Delivery product photo frame', helper: 'Shown on products selected for Free Delivery.' },
             ]).map((item) => {
               const frameUrl = settings.productFrames?.[item.key] || '';
               return (
@@ -430,7 +556,7 @@ export default function AdminSalesTab() {
                 </div>
               ) : (
                 <div className="rounded-xl bg-white/80 border px-4 py-3 text-sm text-gray-600 font-semibold">
-                  New Arrivals does not need discount.
+                  This section does not need discount.
                 </div>
               )}
             </div>
@@ -471,6 +597,7 @@ export default function AdminSalesTab() {
                     <div className="hidden sm:block text-right text-[11px] font-bold text-orange-600">
                       {Array.isArray(product.saleTags) && product.saleTags.length > 0 && product.saleTags.map((tag) => tag === 'daily' ? `Daily ${product.dailySaleDiscount || 0}%` : `Flash ${product.flashSaleDiscount || 0}%`).join(' + ')}
                       {(product.newArrival || product.badge === 'new') && <div className="text-emerald-600">New Arrival</div>}
+                      {product.freeDelivery && <div className="text-sky-600">Free Delivery</div>}
                     </div>
                   </label>
                 );

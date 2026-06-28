@@ -32,6 +32,7 @@ export interface Product {
   reviewCount: number;
   badge?: 'sale' | 'new' | 'hot';
   saleTags?: Array<'daily' | 'flash'>;
+  freeDelivery?: boolean;
   discount?: number;
   dailySaleDiscount?: number;
   flashSaleDiscount?: number;

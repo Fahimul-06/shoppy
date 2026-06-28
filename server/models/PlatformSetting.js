@@ -28,6 +28,11 @@ const platformSettingSchema = new mongoose.Schema({
     colorTo: { type: String, default: '#f97316' },
     image: { type: String, default: '' },
   },
+  productFrames: {
+    dailySaleFrame: { type: String, default: '' },
+    flashSaleFrame: { type: String, default: '' },
+    freeDeliveryFrame: { type: String, default: '' },
+  },
 }, { timestamps: true });
 
 toJSON(platformSettingSchema);

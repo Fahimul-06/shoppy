@@ -110,6 +110,11 @@ function cleanPlatformSettingsPayload(body = {}) {
     colorTo: cleanColor(banner?.colorTo, defaults.colorTo),
     image: String(banner?.image || '').trim().slice(0, 500),
   });
+  const cleanProductFrames = (frames = {}) => ({
+    dailySaleFrame: String(frames?.dailySaleFrame || '').trim().slice(0, 500),
+    flashSaleFrame: String(frames?.flashSaleFrame || '').trim().slice(0, 500),
+    freeDeliveryFrame: String(frames?.freeDeliveryFrame || '').trim().slice(0, 500),
+  });
   const cleanFlashSaleSlots = (slots) => {
     const input = Array.isArray(slots) ? slots : [];
     return input.slice(0, 6).map((slot, index) => {
@@ -136,6 +141,7 @@ function cleanPlatformSettingsPayload(body = {}) {
     flashSaleSlots,
     dailySaleBanner: cleanBanner(body.dailySaleBanner, { colorFrom: '#f97316', colorTo: '#ef4444' }),
     flashSaleBanner: cleanBanner(body.flashSaleBanner, { colorFrom: '#dc2626', colorTo: '#f97316' }),
+    productFrames: cleanProductFrames(body.productFrames),
   };
 }
 
@@ -307,6 +313,7 @@ router.put('/platform-settings', requireAdmin, async (req, res) => {
     if (!canBanners) {
       payload.dailySaleBanner = existing.dailySaleBanner;
       payload.flashSaleBanner = existing.flashSaleBanner;
+      payload.productFrames = existing.productFrames;
     }
   }
   const settings = await PlatformSetting.findOneAndUpdate(

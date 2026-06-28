@@ -15,6 +15,7 @@ const defaults = {
   flashSaleSlots: [],
   dailySaleBanner: { mode: 'color', colorFrom: '#f97316', colorTo: '#ef4444', image: '' },
   flashSaleBanner: { mode: 'color', colorFrom: '#dc2626', colorTo: '#f97316', image: '' },
+  productFrames: { dailySaleFrame: '', flashSaleFrame: '', freeDeliveryFrame: '' },
 };
 
 export async function getPlatformSettings() {

@@ -1,95 +1,73 @@
 import express from 'express';
+import mongoose from 'mongoose';
 import HeroSlide from '../models/HeroSlide.js';
-import PromoCode from '../models/PromoCode.js';
 import Product from '../models/Product.js';
+
 const router = express.Router();
+const allowedPlacements = ['hero', 'header', 'event', 'voucher', 'campaign'];
+const esc = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-const productPopulate = 'name image price originalPrice category subcategory childCategory brand rating reviewCount seller';
-const sellerPopulate = { path: 'seller', select: 'name shopName shopLogo shopBanner shopAddress status' };
-
-function regexFrom(value) {
-  const safe = String(value || '').trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return safe ? new RegExp(`^${safe}$`, 'i') : null;
+function parsePlacements(value) {
+  const parts = String(value || '')
+    .split(',')
+    .map((x) => x.trim())
+    .filter((x) => allowedPlacements.includes(x));
+  return [...new Set(parts)];
 }
 
-function buildRelatedFilter(source = {}) {
-  const filter = { active: { $ne: false } };
-  const and = [];
-  const products = Array.isArray(source.products) ? source.products.map((p) => p?._id || p?.id || p).filter(Boolean) : [];
-  if (products.length) filter._id = { $in: products };
-  const categoryRegexes = (source.categories || []).map(regexFrom).filter(Boolean);
-  const brandRegexes = (source.brands || []).map(regexFrom).filter(Boolean);
-  if (categoryRegexes.length) and.push({ $or: categoryRegexes.flatMap((rx) => [{ category: rx }, { subcategory: rx }, { childCategory: rx }]) });
-  if (brandRegexes.length) and.push({ brand: { $in: brandRegexes } });
-  if (and.length) filter.$and = and;
-  return filter;
-}
+async function relatedProductQuery(slide, limit = 48) {
+  const base = { active: { $ne: false } };
+  const targetType = slide.targetType || 'all';
+  const targetValue = String(slide.targetValue || '').trim();
 
-async function findRelatedProductsFromBanner(banner, limit = 60) {
-  if (!banner) return [];
-  let source = banner;
-  if ((!banner.products?.length && !banner.categories?.length && !banner.brands?.length) && banner.promo) {
-    source = banner.promo;
+  if (targetType === 'products' && Array.isArray(slide.productIds) && slide.productIds.length) {
+    return Product.find({ ...base, _id: { $in: slide.productIds } })
+      .populate('seller', 'name shopName shopLogo shopBanner shopAddress status')
+      .sort({ createdAt: -1 })
+      .limit(limit);
   }
-  const filter = buildRelatedFilter(source);
-  return Product.find(filter).populate(sellerPopulate).sort({ createdAt: -1 }).limit(limit);
+
+  if (targetType === 'category' && targetValue) {
+    const rx = new RegExp(esc(targetValue).replace(/\s+/g, '[\\s-]+'), 'i');
+    return Product.find({ ...base, $or: [{ category: rx }, { subcategory: rx }, { childCategory: rx }] })
+      .populate('seller', 'name shopName shopLogo shopBanner shopAddress status')
+      .sort({ createdAt: -1 })
+      .limit(limit);
+  }
+
+  if (targetType === 'brand' && targetValue) {
+    return Product.find({ ...base, brand: new RegExp(`^${esc(targetValue)}$`, 'i') })
+      .populate('seller', 'name shopName shopLogo shopBanner shopAddress status')
+      .sort({ createdAt: -1 })
+      .limit(limit);
+  }
+
+  if (targetType === 'seller' && targetValue && mongoose.Types.ObjectId.isValid(targetValue)) {
+    return Product.find({ ...base, seller: targetValue })
+      .populate('seller', 'name shopName shopLogo shopBanner shopAddress status')
+      .sort({ createdAt: -1 })
+      .limit(limit);
+  }
+
+  return Product.find(base)
+    .populate('seller', 'name shopName shopLogo shopBanner shopAddress status')
+    .sort({ createdAt: -1 })
+    .limit(Math.min(limit, 24));
 }
 
 router.get('/', async (req, res) => {
-  const placement = ['hero', 'header'].includes(String(req.query.placement || '')) ? String(req.query.placement) : null;
+  const placements = parsePlacements(req.query.placement);
   const filter = { active: true };
-  if (placement) filter.placement = placement;
-  const slides = await HeroSlide.find(filter)
-    .populate('products', productPopulate)
-    .populate('promo')
-    .sort({ sortOrder: 1, createdAt: -1 });
-
-  let promoBanners = [];
-  if (placement === 'header' || !placement) {
-    const now = new Date();
-    const promos = await PromoCode.find({
-      active: { $ne: false },
-      image: { $exists: true, $ne: '' },
-      $or: [{ expiresAt: null }, { expiresAt: { $exists: false } }, { expiresAt: { $gte: now } }],
-    })
-      .populate('products', productPopulate)
-      .sort({ createdAt: -1 })
-      .limit(12);
-    promoBanners = promos.map((promo) => ({
-      id: `promo-${promo.id || promo._id}`,
-      sourceId: promo.id || promo._id?.toString?.(),
-      image: promo.image,
-      title: promo.description || `Voucher ${promo.code}`,
-      subtitle: `${promo.code} • ${promo.discountType === 'percentage' ? `${promo.discountValue}% OFF` : `৳${promo.discountValue} OFF`}`,
-      link: `/promotion/promo/${promo.id || promo._id}`,
-      placement: 'header',
-      bannerType: 'voucher',
-      promo,
-      products: promo.products || [],
-      active: true,
-    }));
-  }
-
-  const all = placement === 'header' ? [...slides, ...promoBanners] : slides;
-  res.json({ heroSlides: all, banners: all, headerBanners: all });
+  if (placements.length) filter.placement = { $in: placements };
+  const slides = await HeroSlide.find(filter).sort({ sortOrder: 1, createdAt: -1 });
+  res.json({ heroSlides: slides, banners: slides, headerBanners: slides });
 });
 
-router.get('/:kind/:id/products', async (req, res) => {
-  const kind = String(req.params.kind || '').toLowerCase();
-  const id = String(req.params.id || '').replace(/^promo-/, '');
-  const limit = Math.min(Number(req.query.limit || 60), 100);
-
-  if (kind === 'promo') {
-    const promo = await PromoCode.findById(id).populate('products', productPopulate).populate('sellers');
-    if (!promo) return res.status(404).json({ message: 'Voucher/coupon not found' });
-    const products = await Product.find(buildRelatedFilter(promo)).populate(sellerPopulate).sort({ createdAt: -1 }).limit(limit);
-    return res.json({ banner: { id: promo.id, title: promo.description || `Voucher ${promo.code}`, subtitle: promo.code, image: promo.image, bannerType: 'voucher', promo }, products });
-  }
-
-  const banner = await HeroSlide.findById(id).populate('products', productPopulate).populate('promo');
-  if (!banner || banner.active === false) return res.status(404).json({ message: 'Promotion not found' });
-  const products = await findRelatedProductsFromBanner(banner, limit);
-  res.json({ banner, products });
+router.get('/:id', async (req, res) => {
+  const slide = await HeroSlide.findById(req.params.id).populate('productIds', 'name image images price originalPrice category subcategory childCategory brand rating reviewCount seller saleTags dailySaleDiscount flashSaleDiscount');
+  if (!slide || slide.active === false) return res.status(404).json({ message: 'Display not found' });
+  const products = await relatedProductQuery(slide, Math.min(Number(req.query.limit || 48), 96));
+  res.json({ banner: slide, heroSlide: slide, products });
 });
 
 export default router;

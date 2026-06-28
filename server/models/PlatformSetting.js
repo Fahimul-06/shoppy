@@ -33,6 +33,13 @@ const platformSettingSchema = new mongoose.Schema({
     flashSaleFrame: { type: String, default: '' },
     freeDeliveryFrame: { type: String, default: '' },
   },
+  dailySaleFreeDeliveryRule: {
+    enabled: { type: Boolean, default: false },
+    type: { type: String, enum: ['product_count', 'amount'], default: 'amount' },
+    productCount: { type: Number, default: 3, min: 1 },
+    amount: { type: Number, default: 1500, min: 0 },
+  },
+  categoryBanners: { type: Map, of: String, default: {} },
 }, { timestamps: true });
 
 toJSON(platformSettingSchema);

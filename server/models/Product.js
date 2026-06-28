@@ -22,6 +22,7 @@ const productSchema = new mongoose.Schema({
   discount: Number,
   dailySaleDiscount: { type: Number, default: 0, min: 0, max: 100 },
   flashSaleDiscount: { type: Number, default: 0, min: 0, max: 100 },
+  freeDelivery: { type: Boolean, default: false, index: true },
   stock: { type: Number, default: 0 },
   description: String,
   features: [String],

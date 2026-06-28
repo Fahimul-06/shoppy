@@ -115,6 +115,21 @@ function cleanPlatformSettingsPayload(body = {}) {
     flashSaleFrame: String(frames?.flashSaleFrame || '').trim().slice(0, 500),
     freeDeliveryFrame: String(frames?.freeDeliveryFrame || '').trim().slice(0, 500),
   });
+  const cleanDailySaleFreeDeliveryRule = (rule = {}) => ({
+    enabled: rule?.enabled === true,
+    type: rule?.type === 'product_count' ? 'product_count' : 'amount',
+    productCount: Math.max(1, Math.floor(number(rule?.productCount, 3))),
+    amount: number(rule?.amount, 1500),
+  });
+  const cleanCategoryBanners = (banners = {}) => {
+    const out = {};
+    Object.entries(banners || {}).forEach(([key, value]) => {
+      const slug = String(key || '').trim().toLowerCase().replace(/[^a-z0-9-]/g, '');
+      const image = String(value || '').trim().slice(0, 500);
+      if (slug) out[slug] = image;
+    });
+    return out;
+  };
   const cleanFlashSaleSlots = (slots) => {
     const input = Array.isArray(slots) ? slots : [];
     return input.slice(0, 6).map((slot, index) => {
@@ -142,6 +157,8 @@ function cleanPlatformSettingsPayload(body = {}) {
     dailySaleBanner: cleanBanner(body.dailySaleBanner, { colorFrom: '#f97316', colorTo: '#ef4444' }),
     flashSaleBanner: cleanBanner(body.flashSaleBanner, { colorFrom: '#dc2626', colorTo: '#f97316' }),
     productFrames: cleanProductFrames(body.productFrames),
+    dailySaleFreeDeliveryRule: cleanDailySaleFreeDeliveryRule(body.dailySaleFreeDeliveryRule),
+    categoryBanners: cleanCategoryBanners(body.categoryBanners),
   };
 }
 
@@ -164,6 +181,7 @@ function sanitizeSaleProductPayload(body = {}) {
     delete payload.dailySaleDiscount;
     delete payload.flashSaleDiscount;
   }
+  if (payload.freeDelivery !== undefined) payload.freeDelivery = payload.freeDelivery === true;
   if (payload.originalPrice === '') delete payload.originalPrice;
   return payload;
 }
@@ -235,6 +253,30 @@ async function applySaleToProducts({ saleType, productIds, discount, replaceExis
   return result;
 }
 
+async function applyFreeDeliveryProducts({ productIds, replaceExisting = true }) {
+  const ids = Array.isArray(productIds)
+    ? productIds.map((id) => String(id || '').trim()).filter((id) => id && Product.db.base.Types.ObjectId.isValid(id))
+    : [];
+  const result = { selectedCount: ids.length, removedCount: 0, updatedCount: 0 };
+
+  if (replaceExisting) {
+    const removed = await Product.updateMany(
+      { freeDelivery: true, ...(ids.length ? { _id: { $nin: ids } } : {}) },
+      { $set: { freeDelivery: false } }
+    );
+    result.removedCount = removed.modifiedCount || 0;
+  }
+
+  if (ids.length) {
+    const updated = await Product.updateMany(
+      { _id: { $in: ids } },
+      { $set: { freeDelivery: true } }
+    );
+    result.updatedCount = updated.modifiedCount || updated.matchedCount || 0;
+  }
+
+  return result;
+}
 
 async function applyNewArrivals({ productIds, replaceExisting = true }) {
   const ids = Array.isArray(productIds)
@@ -314,6 +356,7 @@ router.put('/platform-settings', requireAdmin, async (req, res) => {
       payload.dailySaleBanner = existing.dailySaleBanner;
       payload.flashSaleBanner = existing.flashSaleBanner;
       payload.productFrames = existing.productFrames;
+      payload.categoryBanners = existing.categoryBanners;
     }
   }
   const settings = await PlatformSetting.findOneAndUpdate(
@@ -437,12 +480,17 @@ router.delete('/products/:id', requireAdminPermission('products'), async (req, r
 router.post('/sales/apply', requireAdminPermission('sales'), async (req, res, next) => {
   try {
     const { saleType = 'daily', discount = 0, productIds = [], replaceExisting = true } = req.body || {};
-    if (!['daily', 'flash', 'newArrival'].includes(saleType)) return res.status(400).json({ message: 'Invalid sale type' });
+    if (!['daily', 'flash', 'newArrival', 'freeDelivery'].includes(saleType)) return res.status(400).json({ message: 'Invalid sale type' });
     if (!Array.isArray(productIds)) return res.status(400).json({ message: 'productIds must be an array' });
 
     if (saleType === 'newArrival') {
       const result = await applyNewArrivals({ productIds, replaceExisting });
       return res.json({ message: 'New arrival products updated', saleType, discount: 0, ...result });
+    }
+
+    if (saleType === 'freeDelivery') {
+      const result = await applyFreeDeliveryProducts({ productIds, replaceExisting });
+      return res.json({ message: 'Free delivery products updated', saleType, discount: 0, ...result });
     }
 
     const result = await applySaleToProducts({ saleType, productIds, discount, replaceExisting });

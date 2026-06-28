@@ -74,7 +74,7 @@ router.post('/', requireUser, async (req, res) => {
   if (!shippingAddress?.address) return res.status(400).json({ message: 'Delivery address is required before placing order' });
 
   const settings = await getPlatformSettings();
-  const charges = calculateOrderCharges(subtotal - discountAmount, settings);
+  const charges = calculateOrderCharges(subtotal - discountAmount, settings, promoItems);
   const deliveryFee = charges.deliveryCharge;
   const platformFee = charges.platformFee;
   const vatAmount = charges.vatAmount;

@@ -6,7 +6,7 @@ import ProductRail from '../components/ProductRail';
 import { useProducts } from '../hooks/useProducts';
 import { categoryKey, get99TkProducts, getBestSellingProducts, getNewArrivalProducts } from '../utils/productCollections';
 import { getSaleDiscount, withSalePricing } from '../utils/salePricing';
-import { defaultPlatformSettings, fetchPublicPlatformSettings, type PlatformSettings } from '../lib/platformSettings';
+import { defaultPlatformSettings, fetchPublicPlatformSettings, getCurrentFlashSaleSlot, type PlatformSettings } from '../lib/platformSettings';
 
 function useCountdown(targetDate?: string | null) {
   const getTimeLeft = () => {
@@ -49,7 +49,8 @@ function TimeUnit({ value, label }: { value: number; label: string }) {
 
 export default function FlashSalePage() {
   const [platformSettings, setPlatformSettings] = useState<PlatformSettings>(defaultPlatformSettings);
-  const { hours, minutes, seconds, ended } = useCountdown(platformSettings.flashSaleEndsAt);
+  const currentFlashSlot = getCurrentFlashSaleSlot(platformSettings);
+  const { hours, minutes, seconds, ended } = useCountdown(currentFlashSlot?.endsAt || platformSettings.flashSaleEndsAt);
   const { products, loading } = useProducts();
   const [activeCat, setActiveCat] = useState('all');
 
@@ -116,7 +117,7 @@ export default function FlashSalePage() {
             </div>
             <div className="flex-shrink-0">
               <div className="flex items-center gap-1.5 text-red-200 text-sm font-medium mb-3">
-                <Clock size={14} />{ended ? 'Flash sale ended' : 'Ends in'}
+                <Clock size={14} />{ended ? 'Flash sale ended' : currentFlashSlot?.title ? `${currentFlashSlot.title} ends in` : 'Ends in'}
               </div>
               <div className="flex items-center gap-2 sm:gap-3">
                 <TimeUnit value={hours} label="Hours" />

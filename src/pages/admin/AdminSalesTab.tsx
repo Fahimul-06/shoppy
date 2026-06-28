@@ -82,6 +82,15 @@ export default function AdminSalesTab() {
     return Number.isNaN(d.getTime()) ? null : d.toISOString();
   };
 
+  const updateFlashSaleSlot = (index: number, patch: Partial<NonNullable<PlatformSettings['flashSaleSlots']>[number]>) => {
+    const slots = [...(settings.flashSaleSlots || defaultPlatformSettings.flashSaleSlots || [])];
+    while (slots.length < 6) {
+      slots.push({ title: `Slot ${slots.length + 1}`, startsAt: null, endsAt: null, active: false });
+    }
+    slots[index] = { ...slots[index], ...patch };
+    setSettings({ ...settings, flashSaleSlots: slots.slice(0, 6) });
+  };
+
   const load = async () => {
     setLoading(true);
     setError('');
@@ -98,10 +107,12 @@ export default function AdminSalesTab() {
     setSettingsSaving(true);
     setSettingsMessage('');
     try {
+      const firstSlot = (settings.flashSaleSlots || []).find((slot) => slot.startsAt || slot.endsAt);
       const response = await api.put<{ settings: PlatformSettings }>('/admin/platform-settings', {
         ...settings,
-        flashSaleStartsAt: settings.flashSaleStartsAt || null,
-        flashSaleEndsAt: settings.flashSaleEndsAt || null,
+        flashSaleStartsAt: firstSlot?.startsAt || null,
+        flashSaleEndsAt: firstSlot?.endsAt || null,
+        flashSaleSlots: (settings.flashSaleSlots || []).slice(0, 6),
       }, getToken('admin'));
       setSettings(normalizePlatformSettings(response.settings));
       setSettingsMessage('Flash sale time and checkout charges saved.');
@@ -206,18 +217,50 @@ export default function AdminSalesTab() {
 
       <div className="grid lg:grid-cols-2 gap-5">
         <div className="bg-white rounded-2xl border p-5">
-          <div className="flex items-center gap-2 mb-4"><Clock size={18} className="text-red-500" /><h3 className="font-black text-gray-900">Flash Sale Time</h3></div>
-          <div className="grid sm:grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs font-bold text-gray-600">Start time</label>
-              <input type="datetime-local" className="mt-1 w-full border rounded-xl p-3 text-sm" value={toDatetimeLocal(settings.flashSaleStartsAt)} onChange={(e)=>setSettings({...settings, flashSaleStartsAt: fromDatetimeLocal(e.target.value)})}/>
-            </div>
-            <div>
-              <label className="text-xs font-bold text-gray-600">End time</label>
-              <input type="datetime-local" className="mt-1 w-full border rounded-xl p-3 text-sm" value={toDatetimeLocal(settings.flashSaleEndsAt)} onChange={(e)=>setSettings({...settings, flashSaleEndsAt: fromDatetimeLocal(e.target.value)})}/>
-            </div>
+          <div className="flex items-center gap-2 mb-4"><Clock size={18} className="text-red-500" /><h3 className="font-black text-gray-900">Flash Sale Time Slots</h3></div>
+          <div className="space-y-3 max-h-[420px] overflow-y-auto pr-1">
+            {(settings.flashSaleSlots || defaultPlatformSettings.flashSaleSlots || []).slice(0, 6).map((slot, index) => (
+              <div key={index} className="rounded-2xl border border-gray-100 bg-gray-50 p-3">
+                <div className="flex items-center justify-between gap-3 mb-2">
+                  <input
+                    className="border rounded-xl px-3 py-2 text-sm font-bold flex-1"
+                    value={slot.title || `Slot ${index + 1}`}
+                    onChange={(e) => updateFlashSaleSlot(index, { title: e.target.value })}
+                    placeholder={`Slot ${index + 1}`}
+                  />
+                  <label className="flex items-center gap-2 text-xs font-bold text-gray-600 whitespace-nowrap">
+                    <input
+                      type="checkbox"
+                      checked={slot.active !== false}
+                      onChange={(e) => updateFlashSaleSlot(index, { active: e.target.checked })}
+                    />
+                    Active
+                  </label>
+                </div>
+                <div className="grid sm:grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-[11px] font-bold text-gray-600">Start time</label>
+                    <input
+                      type="datetime-local"
+                      className="mt-1 w-full border rounded-xl p-2.5 text-sm"
+                      value={toDatetimeLocal(slot.startsAt)}
+                      onChange={(e)=>updateFlashSaleSlot(index, { startsAt: fromDatetimeLocal(e.target.value) })}
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-bold text-gray-600">End time</label>
+                    <input
+                      type="datetime-local"
+                      className="mt-1 w-full border rounded-xl p-2.5 text-sm"
+                      value={toDatetimeLocal(slot.endsAt)}
+                      onChange={(e)=>updateFlashSaleSlot(index, { endsAt: fromDatetimeLocal(e.target.value) })}
+                    />
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
-          <p className="text-xs text-gray-500 mt-3">Customer Flash Sale page countdown uses this end time.</p>
+          <p className="text-xs text-gray-500 mt-3">Customers see the active slot countdown. If no slot is active right now, the next upcoming active slot is used.</p>
         </div>
 
         <div className="bg-white rounded-2xl border p-5">
@@ -247,7 +290,7 @@ export default function AdminSalesTab() {
               <input type="number" min="0" max="100" className="mt-1 w-full border rounded-xl p-3 text-sm" value={settings.vatPercent} onChange={(e)=>setSettings({...settings, vatPercent: Number(e.target.value || 0)})}/>
             </div>
             <div className="flex items-end">
-              <button onClick={saveSettings} disabled={settingsSaving} className="w-full bg-slate-900 disabled:bg-slate-400 text-white rounded-xl py-3 font-black flex items-center justify-center gap-2">{settingsSaving ? <Loader2 size={16} className="animate-spin"/> : <Save size={16}/>} Save Charges</button>
+              <button onClick={saveSettings} disabled={settingsSaving} className="w-full bg-slate-900 disabled:bg-slate-400 text-white rounded-xl py-3 font-black flex items-center justify-center gap-2">{settingsSaving ? <Loader2 size={16} className="animate-spin"/> : <Save size={16}/>} Save Settings</button>
             </div>
           </div>
           {settingsMessage && <p className={`text-xs mt-3 ${settingsMessage.includes('saved') ? 'text-green-700' : 'text-red-600'}`}>{settingsMessage}</p>}

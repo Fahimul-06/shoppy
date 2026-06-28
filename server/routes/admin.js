@@ -588,18 +588,26 @@ router.put('/promos/:id', requireAdmin, async (req, res) => {
 router.delete('/promos/:id', requireAdmin, async (req, res) => { await PromoCode.findByIdAndDelete(req.params.id); res.json({ ok: true }); });
 
 
+const compactStrings = (items) => Array.isArray(items) ? [...new Set(items.map((x) => String(x || '').trim()).filter(Boolean))] : [];
+const validObjectIds = (items) => Array.isArray(items) ? [...new Set(items.map((x) => String(x || '').trim()).filter((id) => id && Product.db.base.Types.ObjectId.isValid(id)))] : [];
+
 const bannerPayload = (body = {}) => ({
   image: String(body.image || '').trim(),
   title: String(body.title || '').trim(),
   subtitle: String(body.subtitle || '').trim(),
   link: String(body.link || '').trim(),
   placement: ['hero', 'header'].includes(String(body.placement || '')) ? String(body.placement) : 'hero',
+  bannerType: ['generic', 'event', 'voucher', 'campaign'].includes(String(body.bannerType || '')) ? String(body.bannerType) : 'generic',
+  categories: compactStrings(body.categories),
+  brands: compactStrings(body.brands),
+  products: validObjectIds(body.products),
+  promo: body.promo && Product.db.base.Types.ObjectId.isValid(String(body.promo)) ? String(body.promo) : null,
   sortOrder: Number(body.sortOrder || 0),
   active: body.active !== false,
 });
 
 router.get('/banners', requireAdmin, async (_req, res) => {
-  const banners = await HeroSlide.find().sort({ placement: 1, sortOrder: 1, createdAt: -1 });
+  const banners = await HeroSlide.find().populate('products', 'name image price brand category').populate('promo', 'code description image discountType discountValue').sort({ placement: 1, sortOrder: 1, createdAt: -1 });
   res.json({ banners, heroSlides: banners });
 });
 
@@ -607,13 +615,14 @@ router.post('/banners', requireAdmin, async (req, res) => {
   const payload = bannerPayload(req.body);
   if (!payload.image) return res.status(400).json({ message: 'Banner/photo image is required' });
   const banner = await HeroSlide.create(payload);
-  res.status(201).json({ banner });
+  const populatedBanner = await HeroSlide.findById(banner._id).populate('products', 'name image price brand category').populate('promo', 'code description image discountType discountValue');
+  res.status(201).json({ banner: populatedBanner });
 });
 
 router.put('/banners/:id', requireAdmin, async (req, res) => {
   const payload = bannerPayload(req.body);
   if (!payload.image) return res.status(400).json({ message: 'Banner/photo image is required' });
-  const banner = await HeroSlide.findByIdAndUpdate(req.params.id, payload, { new: true });
+  const banner = await HeroSlide.findByIdAndUpdate(req.params.id, payload, { new: true }).populate('products', 'name image price brand category').populate('promo', 'code description image discountType discountValue');
   res.json({ banner });
 });
 

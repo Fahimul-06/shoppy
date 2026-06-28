@@ -6,7 +6,7 @@ import ProductRail from '../components/ProductRail';
 import { useProducts } from '../hooks/useProducts';
 import { categoryKey, get99TkProducts, getBestSellingProducts, getNewArrivalProducts } from '../utils/productCollections';
 import { getSaleDiscount, withSalePricing } from '../utils/salePricing';
-import { defaultPlatformSettings, fetchPublicPlatformSettings, getCurrentFlashSaleSlot, type PlatformSettings } from '../lib/platformSettings';
+import { defaultPlatformSettings, fetchPublicPlatformSettings, getCurrentFlashSaleSlot, getSaleBannerStyle, type PlatformSettings } from '../lib/platformSettings';
 
 function useCountdown(targetDate?: string | null) {
   const getTimeLeft = () => {
@@ -91,7 +91,7 @@ export default function FlashSalePage() {
 
   return (
     <div className="bg-gray-50 min-h-screen">
-      <div className="relative bg-gradient-to-r from-red-600 to-orange-500 overflow-hidden">
+      <div className="relative overflow-hidden" style={getSaleBannerStyle(platformSettings.flashSaleBanner)}>
         <div className="absolute inset-0 opacity-10">
           <div className="absolute top-0 left-1/4 w-40 h-40 bg-yellow-300 rounded-full blur-3xl" />
           <div className="absolute bottom-0 right-1/4 w-56 h-56 bg-white rounded-full blur-3xl" />

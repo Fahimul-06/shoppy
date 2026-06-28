@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react';
 import { api } from './api';
 
 export type FlashSaleSlot = {
@@ -5,6 +6,13 @@ export type FlashSaleSlot = {
   startsAt?: string | null;
   endsAt?: string | null;
   active?: boolean;
+};
+
+export type SaleBannerSettings = {
+  mode: 'color' | 'image';
+  colorFrom: string;
+  colorTo: string;
+  image?: string;
 };
 
 export type PlatformSettings = {
@@ -17,6 +25,22 @@ export type PlatformSettings = {
   flashSaleStartsAt?: string | null;
   flashSaleEndsAt?: string | null;
   flashSaleSlots?: FlashSaleSlot[];
+  dailySaleBanner: SaleBannerSettings;
+  flashSaleBanner: SaleBannerSettings;
+};
+
+export const defaultDailySaleBanner: SaleBannerSettings = {
+  mode: 'color',
+  colorFrom: '#f97316',
+  colorTo: '#ef4444',
+  image: '',
+};
+
+export const defaultFlashSaleBanner: SaleBannerSettings = {
+  mode: 'color',
+  colorFrom: '#dc2626',
+  colorTo: '#f97316',
+  image: '',
 };
 
 export const defaultPlatformSettings: PlatformSettings = {
@@ -33,7 +57,22 @@ export const defaultPlatformSettings: PlatformSettings = {
     endsAt: null,
     active: index === 0,
   })),
+  dailySaleBanner: defaultDailySaleBanner,
+  flashSaleBanner: defaultFlashSaleBanner,
 };
+
+function normalizeSaleBanner(banner: Partial<SaleBannerSettings> | undefined | null, defaults: SaleBannerSettings): SaleBannerSettings {
+  const colorPattern = /^#[0-9a-fA-F]{6}$/;
+  const colorFrom = typeof banner?.colorFrom === 'string' && colorPattern.test(banner.colorFrom) ? banner.colorFrom : defaults.colorFrom;
+  const colorTo = typeof banner?.colorTo === 'string' && colorPattern.test(banner.colorTo) ? banner.colorTo : defaults.colorTo;
+  const image = String(banner?.image || '').trim();
+  return {
+    mode: banner?.mode === 'image' && image ? 'image' : 'color',
+    colorFrom,
+    colorTo,
+    image,
+  };
+}
 
 export function normalizePlatformSettings(settings?: Partial<PlatformSettings> | null): PlatformSettings {
   return {
@@ -45,6 +84,21 @@ export function normalizePlatformSettings(settings?: Partial<PlatformSettings> |
     platformFee: Number(settings?.platformFee ?? defaultPlatformSettings.platformFee),
     vatPercent: Number(settings?.vatPercent ?? defaultPlatformSettings.vatPercent),
     flashSaleSlots: normalizeFlashSaleSlots(settings?.flashSaleSlots, settings?.flashSaleStartsAt, settings?.flashSaleEndsAt),
+    dailySaleBanner: normalizeSaleBanner(settings?.dailySaleBanner, defaultDailySaleBanner),
+    flashSaleBanner: normalizeSaleBanner(settings?.flashSaleBanner, defaultFlashSaleBanner),
+  };
+}
+
+export function getSaleBannerStyle(banner: SaleBannerSettings): CSSProperties {
+  if (banner.mode === 'image' && banner.image) {
+    return {
+      backgroundImage: `linear-gradient(90deg, rgba(0,0,0,.58), rgba(0,0,0,.26)), url(${banner.image})`,
+      backgroundSize: 'cover',
+      backgroundPosition: 'center',
+    };
+  }
+  return {
+    backgroundImage: `linear-gradient(90deg, ${banner.colorFrom}, ${banner.colorTo})`,
   };
 }
 
@@ -63,7 +117,6 @@ export async function fetchPublicPlatformSettings(): Promise<PlatformSettings> {
   const { settings } = await api.get<{ settings: PlatformSettings }>('/settings/public');
   return normalizePlatformSettings(settings);
 }
-
 
 export function normalizeFlashSaleSlots(slots?: FlashSaleSlot[] | null, legacyStart?: string | null, legacyEnd?: string | null): FlashSaleSlot[] {
   const source = Array.isArray(slots) && slots.length

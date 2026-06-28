@@ -4,7 +4,7 @@ import { Zap, Clock, ChevronRight, ShoppingCart, Star } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { useProducts } from '../hooks/useProducts';
 import { getDisplayOriginalPrice, getSaleDiscount, getSalePrice, withSalePricing } from '../utils/salePricing';
-import { defaultPlatformSettings, fetchPublicPlatformSettings, getCurrentFlashSaleSlot, type PlatformSettings } from '../lib/platformSettings';
+import { defaultPlatformSettings, fetchPublicPlatformSettings, getCurrentFlashSaleSlot, getSaleBannerStyle, type PlatformSettings } from '../lib/platformSettings';
 
 function useCountdown(targetDate?: string | null) {
   const getTimeLeft = () => {
@@ -61,7 +61,7 @@ export default function FlashSaleSection() {
   return (
     <section className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
       {/* Section header */}
-      <div className="relative bg-gradient-to-r from-red-600 via-red-500 to-orange-500 rounded-2xl overflow-hidden mb-4">
+      <div className="relative rounded-2xl overflow-hidden mb-4" style={getSaleBannerStyle(platformSettings.flashSaleBanner)}>
         <div className="absolute inset-0 opacity-10 pointer-events-none">
           <div className="absolute top-0 right-1/3 w-48 h-48 bg-yellow-300 rounded-full blur-3xl" />
           <div className="absolute -bottom-8 left-1/4 w-56 h-56 bg-white rounded-full blur-3xl" />

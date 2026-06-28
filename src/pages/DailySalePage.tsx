@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ChevronRight, Flame, LayoutGrid, Tag } from 'lucide-react';
 import ProductCard from '../components/ProductCard';
@@ -6,6 +6,7 @@ import ProductRail from '../components/ProductRail';
 import { useProducts } from '../hooks/useProducts';
 import { categoryKey, get99TkProducts, getBestSellingProducts, getNewArrivalProducts } from '../utils/productCollections';
 import { getSaleDiscount, withSalePricing } from '../utils/salePricing';
+import { defaultPlatformSettings, fetchPublicPlatformSettings, getSaleBannerStyle, type PlatformSettings } from '../lib/platformSettings';
 
 function discountOf(product: any) {
   return getSaleDiscount(product, 'daily');
@@ -18,6 +19,11 @@ function categoryLabel(value: string) {
 export default function DailySalePage() {
   const { products, loading } = useProducts();
   const [activeCat, setActiveCat] = useState('all');
+  const [platformSettings, setPlatformSettings] = useState<PlatformSettings>(defaultPlatformSettings);
+
+  useEffect(() => {
+    fetchPublicPlatformSettings().then(setPlatformSettings).catch(() => {});
+  }, []);
 
   const dailyProducts = useMemo(() => products
     .filter((p) => Array.isArray(p.saleTags) && p.saleTags.includes('daily'))
@@ -50,8 +56,12 @@ export default function DailySalePage() {
 
   return (
     <div className="bg-gray-50 min-h-screen">
-      <div className="bg-gradient-to-r from-orange-500 via-orange-500 to-red-500">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-10 sm:py-14">
+      <div className="relative overflow-hidden" style={getSaleBannerStyle(platformSettings.dailySaleBanner)}>
+        <div className="absolute inset-0 opacity-10 pointer-events-none">
+          <div className="absolute top-0 left-1/4 w-40 h-40 bg-yellow-300 rounded-full blur-3xl" />
+          <div className="absolute bottom-0 right-1/4 w-56 h-56 bg-white rounded-full blur-3xl" />
+        </div>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-10 sm:py-14 relative">
           <div className="flex items-center gap-3 mb-3">
             <div className="w-11 h-11 bg-white/20 rounded-2xl flex items-center justify-center backdrop-blur-sm">
               <Flame size={22} className="text-white" />

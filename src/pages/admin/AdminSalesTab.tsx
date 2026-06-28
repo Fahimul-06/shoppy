@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, Loader2, Search, ShoppingBag, Sparkles, Zap, Save, Clock, Receipt } from 'lucide-react';
+import { CheckCircle2, Loader2, Search, ShoppingBag, Sparkles, Zap, Save, Clock, Receipt, Image as ImageIcon } from 'lucide-react';
 import { api, getToken } from '../../lib/api';
-import { defaultPlatformSettings, normalizePlatformSettings, type PlatformSettings } from '../../lib/platformSettings';
+import { defaultPlatformSettings, normalizePlatformSettings, type PlatformSettings, type SaleBannerSettings } from '../../lib/platformSettings';
+import ImageUploader from '../../components/forms/ImageUploader';
 
 type SaleType = 'daily' | 'flash' | 'newArrival';
 type Product = {
@@ -91,6 +92,14 @@ export default function AdminSalesTab() {
     setSettings({ ...settings, flashSaleSlots: slots.slice(0, 6) });
   };
 
+
+  const updateSaleBanner = (bannerType: 'dailySaleBanner' | 'flashSaleBanner', patch: Partial<SaleBannerSettings>) => {
+    setSettings((current) => ({
+      ...current,
+      [bannerType]: { ...current[bannerType], ...patch },
+    }));
+  };
+
   const load = async () => {
     setLoading(true);
     setError('');
@@ -115,7 +124,7 @@ export default function AdminSalesTab() {
         flashSaleSlots: (settings.flashSaleSlots || []).slice(0, 6),
       }, getToken('admin'));
       setSettings(normalizePlatformSettings(response.settings));
-      setSettingsMessage('Flash sale time and checkout charges saved.');
+      setSettingsMessage('Flash sale time, sale banners, and checkout charges saved.');
     } catch (e) {
       setSettingsMessage(e instanceof Error ? e.message : 'Failed to save settings');
     } finally {
@@ -261,6 +270,63 @@ export default function AdminSalesTab() {
             ))}
           </div>
           <p className="text-xs text-gray-500 mt-3">Customers see the active slot countdown. If no slot is active right now, the next upcoming active slot is used.</p>
+        </div>
+
+        <div className="bg-white rounded-2xl border p-5">
+          <div className="flex items-center gap-2 mb-4"><ImageIcon size={18} className="text-orange-500" /><h3 className="font-black text-gray-900">Sale Page Banners</h3></div>
+          <div className="space-y-5 max-h-[420px] overflow-y-auto pr-1">
+            {([
+              { key: 'dailySaleBanner' as const, label: 'Daily Sale Banner', accent: 'orange' },
+              { key: 'flashSaleBanner' as const, label: 'Flash Sale Banner', accent: 'red' },
+            ]).map((item) => {
+              const banner = settings[item.key];
+              return (
+                <div key={item.key} className="rounded-2xl border border-gray-100 bg-gray-50 p-3 space-y-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-sm font-black text-gray-900">{item.label}</p>
+                    <select
+                      className="border rounded-xl p-2 text-xs font-bold bg-white"
+                      value={banner.mode}
+                      onChange={(e) => updateSaleBanner(item.key, { mode: e.target.value === 'image' ? 'image' : 'color' })}
+                    >
+                      <option value="color">Use color</option>
+                      <option value="image">Use photo</option>
+                    </select>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <label className="block">
+                      <span className="text-[11px] font-bold text-gray-600">Start color</span>
+                      <div className="mt-1 flex items-center gap-2">
+                        <input type="color" className="h-10 w-12 border rounded-lg" value={banner.colorFrom} onChange={(e) => updateSaleBanner(item.key, { colorFrom: e.target.value })} />
+                        <input className="w-full border rounded-xl p-2 text-xs" value={banner.colorFrom} onChange={(e) => updateSaleBanner(item.key, { colorFrom: e.target.value })} />
+                      </div>
+                    </label>
+                    <label className="block">
+                      <span className="text-[11px] font-bold text-gray-600">End color</span>
+                      <div className="mt-1 flex items-center gap-2">
+                        <input type="color" className="h-10 w-12 border rounded-lg" value={banner.colorTo} onChange={(e) => updateSaleBanner(item.key, { colorTo: e.target.value })} />
+                        <input className="w-full border rounded-xl p-2 text-xs" value={banner.colorTo} onChange={(e) => updateSaleBanner(item.key, { colorTo: e.target.value })} />
+                      </div>
+                    </label>
+                  </div>
+
+                  <div className="rounded-xl overflow-hidden border h-20" style={{ backgroundImage: banner.mode === 'image' && banner.image ? `linear-gradient(90deg, rgba(0,0,0,.58), rgba(0,0,0,.26)), url(${banner.image})` : `linear-gradient(90deg, ${banner.colorFrom}, ${banner.colorTo})`, backgroundSize: 'cover', backgroundPosition: 'center' }}>
+                    <div className="h-full flex items-center px-4 text-white font-black">{item.label} Preview</div>
+                  </div>
+
+                  <ImageUploader
+                    label={`${item.label} photo`}
+                    helperText="Optional. Choose Use photo to show this image as the sale page banner background."
+                    value={banner.image || ''}
+                    onChange={(url) => updateSaleBanner(item.key, { image: url, mode: url ? 'image' : 'color' })}
+                    token={getToken('admin')}
+                  />
+                </div>
+              );
+            })}
+          </div>
+          <p className="text-xs text-gray-500 mt-3">Each sale banner can use only colors, or use an uploaded photo with a dark overlay so text stays readable.</p>
         </div>
 
         <div className="bg-white rounded-2xl border p-5">

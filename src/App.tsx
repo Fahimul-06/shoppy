@@ -22,6 +22,7 @@ import CouponsPage from './pages/CouponsPage';
 import ReturnsPage from './pages/ReturnsPage';
 import CancellationsPage from './pages/CancellationsPage';
 import NotificationsPage from './pages/NotificationsPage';
+import StaticInfoPage from './pages/StaticInfoPage';
 import SellerRegisterPage from './pages/seller/SellerRegisterPage';
 import SellerLoginPage from './pages/seller/SellerLoginPage';
 import SellerDashboardPage from './pages/seller/SellerDashboardPage';
@@ -66,6 +67,19 @@ export default function App() {
           <Route path="/returns" element={<StorePage><ReturnsPage /></StorePage>} />
           <Route path="/cancellations" element={<StorePage><CancellationsPage /></StorePage>} />
           <Route path="/notifications" element={<StorePage><NotificationsPage /></StorePage>} />
+
+          {/* Informational pages */}
+          <Route path="/customer-care" element={<StorePage><StaticInfoPage /></StorePage>} />
+          <Route path="/help-center" element={<StorePage><StaticInfoPage /></StorePage>} />
+          <Route path="/how-to-buy" element={<StorePage><StaticInfoPage /></StorePage>} />
+          <Route path="/returns-refunds" element={<StorePage><StaticInfoPage /></StorePage>} />
+          <Route path="/contact-us" element={<StorePage><StaticInfoPage /></StorePage>} />
+          <Route path="/order-tracking" element={<StorePage><StaticInfoPage /></StorePage>} />
+          <Route path="/about-shoppy" element={<StorePage><StaticInfoPage /></StorePage>} />
+          <Route path="/careers" element={<StorePage><StaticInfoPage /></StorePage>} />
+          <Route path="/sell-on-shoppy" element={<StorePage><StaticInfoPage /></StorePage>} />
+          <Route path="/blog" element={<StorePage><StaticInfoPage /></StorePage>} />
+          <Route path="/press-room" element={<StorePage><StaticInfoPage /></StorePage>} />
 
           {/* Seller routes */}
           <Route path="/seller/register" element={<SellerRegisterPage />} />

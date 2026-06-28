@@ -3,18 +3,19 @@ import { Link } from 'react-router-dom';
 import { MapPin, Phone, Mail, Facebook, Twitter, Instagram, Youtube, ShoppingCart } from 'lucide-react';
 
 const customerCare = [
-  { label: 'Help Center', to: '/account' },
-  { label: 'How to Buy', to: '/account' },
-  { label: 'Returns & Refunds', to: '/account' },
-  { label: 'Contact Us', to: '/account' },
-  { label: 'Order Tracking', to: '/account' },
+  { label: 'Customer Care', to: '/customer-care' },
+  { label: 'Help Center', to: '/help-center' },
+  { label: 'How to Buy', to: '/how-to-buy' },
+  { label: 'Returns & Refunds', to: '/returns-refunds' },
+  { label: 'Contact Us', to: '/contact-us' },
+  { label: 'Order Tracking', to: '/order-tracking' },
 ];
 const aboutLinks = [
-  { label: 'About Shoppy', to: '/account' },
-  { label: 'Careers', to: '/account' },
-  { label: 'Sell on Shoppy', to: '/seller/register' },
-  { label: 'Blog', to: '/account' },
-  { label: 'Press Room', to: '/account' },
+  { label: 'About Shoppy', to: '/about-shoppy' },
+  { label: 'Careers', to: '/careers' },
+  { label: 'Sell on Shoppy', to: '/sell-on-shoppy' },
+  { label: 'Blog', to: '/blog' },
+  { label: 'Press Room', to: '/press-room' },
 ];
 
 export default function Footer() {

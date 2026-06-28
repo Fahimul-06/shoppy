@@ -15,6 +15,12 @@ export type SaleBannerSettings = {
   image?: string;
 };
 
+export type ProductFrameSettings = {
+  dailySaleFrame: string;
+  flashSaleFrame: string;
+  freeDeliveryFrame: string;
+};
+
 export type PlatformSettings = {
   id?: string;
   deliveryCharge: number;
@@ -27,6 +33,7 @@ export type PlatformSettings = {
   flashSaleSlots?: FlashSaleSlot[];
   dailySaleBanner: SaleBannerSettings;
   flashSaleBanner: SaleBannerSettings;
+  productFrames: ProductFrameSettings;
 };
 
 export const defaultDailySaleBanner: SaleBannerSettings = {
@@ -41,6 +48,12 @@ export const defaultFlashSaleBanner: SaleBannerSettings = {
   colorFrom: '#dc2626',
   colorTo: '#f97316',
   image: '',
+};
+
+export const defaultProductFrames: ProductFrameSettings = {
+  dailySaleFrame: '',
+  flashSaleFrame: '',
+  freeDeliveryFrame: '',
 };
 
 export const defaultPlatformSettings: PlatformSettings = {
@@ -59,7 +72,17 @@ export const defaultPlatformSettings: PlatformSettings = {
   })),
   dailySaleBanner: defaultDailySaleBanner,
   flashSaleBanner: defaultFlashSaleBanner,
+  productFrames: defaultProductFrames,
 };
+
+
+function normalizeProductFrames(frames?: Partial<ProductFrameSettings> | null): ProductFrameSettings {
+  return {
+    dailySaleFrame: String(frames?.dailySaleFrame || '').trim(),
+    flashSaleFrame: String(frames?.flashSaleFrame || '').trim(),
+    freeDeliveryFrame: String(frames?.freeDeliveryFrame || '').trim(),
+  };
+}
 
 function normalizeSaleBanner(banner: Partial<SaleBannerSettings> | undefined | null, defaults: SaleBannerSettings): SaleBannerSettings {
   const colorPattern = /^#[0-9a-fA-F]{6}$/;
@@ -86,6 +109,7 @@ export function normalizePlatformSettings(settings?: Partial<PlatformSettings> |
     flashSaleSlots: normalizeFlashSaleSlots(settings?.flashSaleSlots, settings?.flashSaleStartsAt, settings?.flashSaleEndsAt),
     dailySaleBanner: normalizeSaleBanner(settings?.dailySaleBanner, defaultDailySaleBanner),
     flashSaleBanner: normalizeSaleBanner(settings?.flashSaleBanner, defaultFlashSaleBanner),
+    productFrames: normalizeProductFrames(settings?.productFrames),
   };
 }
 
@@ -184,4 +208,22 @@ export function getFlashSaleTiming(settings: PlatformSettings, now = new Date())
 
 export function getCurrentFlashSaleSlot(settings: PlatformSettings, now = new Date()): FlashSaleSlot | null {
   return getFlashSaleTiming(settings, now).slot;
+}
+
+
+export function getProductFrameImage(product: any, settings: PlatformSettings): string {
+  const tags = Array.isArray(product?.saleTags) ? product.saleTags : [];
+  const currentSaleType = product?.currentSaleType;
+  if ((currentSaleType === 'flash' || tags.includes('flash')) && settings.productFrames.flashSaleFrame) {
+    return settings.productFrames.flashSaleFrame;
+  }
+  if ((currentSaleType === 'daily' || tags.includes('daily')) && settings.productFrames.dailySaleFrame) {
+    return settings.productFrames.dailySaleFrame;
+  }
+  const productPrice = Number(product?.currentSalePrice ?? product?.price ?? 0);
+  const freeDeliveryMin = Number(settings.freeDeliveryMin || 0);
+  if (freeDeliveryMin > 0 && productPrice >= freeDeliveryMin && settings.productFrames.freeDeliveryFrame) {
+    return settings.productFrames.freeDeliveryFrame;
+  }
+  return '';
 }

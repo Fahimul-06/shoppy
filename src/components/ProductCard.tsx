@@ -6,6 +6,7 @@ import { Product } from '../types';
 import { fetchWishlistStatus, toggleWishlist } from '../lib/db';
 import { getToken } from '../lib/api';
 import { getDisplayOriginalPrice, getSaleDiscount, getSalePrice, withSalePricing } from '../utils/salePricing';
+import { defaultPlatformSettings, fetchPublicPlatformSettings, getProductFrameImage, type PlatformSettings } from '../lib/platformSettings';
 
 const badgeStyles: Record<string, string> = {
   sale: 'bg-red-500 text-white',
@@ -17,6 +18,22 @@ interface Props {
   product: Product;
 }
 
+let cachedPlatformSettings: PlatformSettings | null = null;
+let platformSettingsPromise: Promise<PlatformSettings> | null = null;
+
+function loadProductFrameSettings() {
+  if (cachedPlatformSettings) return Promise.resolve(cachedPlatformSettings);
+  if (!platformSettingsPromise) {
+    platformSettingsPromise = fetchPublicPlatformSettings()
+      .then((settings) => {
+        cachedPlatformSettings = settings;
+        return settings;
+      })
+      .catch(() => defaultPlatformSettings);
+  }
+  return platformSettingsPromise;
+}
+
 const getSeller = (product: Product) => (product.seller && typeof product.seller === 'object' ? product.seller : null);
 const shopLogo = (product: Product) => getSeller(product)?.shopLogo || '';
 const shopName = (product: Product) => getSeller(product)?.shopName || getSeller(product)?.name || '';
@@ -26,12 +43,20 @@ export default function ProductCard({ product }: Props) {
   const navigate = useNavigate();
   const [wishlisted, setWishlisted] = useState(false);
   const [wishlistLoading, setWishlistLoading] = useState(false);
+  const [platformSettings, setPlatformSettings] = useState<PlatformSettings>(cachedPlatformSettings || defaultPlatformSettings);
   const sellerLogo = shopLogo(product);
   const sellerShopName = shopName(product);
   const sellerId = getSeller(product)?.id || getSeller(product)?._id || '';
   const displayPrice = getSalePrice(product);
   const displayOriginalPrice = getDisplayOriginalPrice(product);
   const displayDiscount = getSaleDiscount(product);
+  const frameImage = getProductFrameImage(product, platformSettings);
+
+  useEffect(() => {
+    let alive = true;
+    loadProductFrameSettings().then((settings) => { if (alive) setPlatformSettings(settings); });
+    return () => { alive = false; };
+  }, []);
 
   useEffect(() => {
     const token = getToken('user');
@@ -64,13 +89,20 @@ export default function ProductCard({ product }: Props) {
           alt={product.name}
           className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
         />
+        {frameImage && (
+          <img
+            src={frameImage}
+            alt="Product frame"
+            className="absolute inset-0 z-20 w-full h-full object-fill pointer-events-none"
+          />
+        )}
         {product.badge && (
-          <span className={`absolute top-2 left-2 text-xs font-bold px-2 py-0.5 rounded-lg uppercase ${badgeStyles[product.badge]}`}>
+          <span className={`absolute top-2 left-2 z-30 text-xs font-bold px-2 py-0.5 rounded-lg uppercase ${badgeStyles[product.badge]}`}>
             {product.badge}
           </span>
         )}
         {displayDiscount > 0 && (
-          <span className="absolute top-2 right-2 bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-lg">
+          <span className="absolute top-2 right-2 z-30 bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-lg">
             -{displayDiscount}%
           </span>
         )}
@@ -78,7 +110,7 @@ export default function ProductCard({ product }: Props) {
           onClick={onWishlist}
           disabled={wishlistLoading}
           title={wishlisted ? 'Remove from wishlist' : 'Add to wishlist'}
-          className={`absolute bottom-2 right-2 w-8 h-8 bg-white rounded-full flex items-center justify-center shadow-md transition-all hover:bg-red-50 hover:text-red-500 ${wishlisted ? 'opacity-100 text-red-500' : 'opacity-0 group-hover:opacity-100'}`}
+          className={`absolute bottom-2 right-2 z-30 w-8 h-8 bg-white rounded-full flex items-center justify-center shadow-md transition-all hover:bg-red-50 hover:text-red-500 ${wishlisted ? 'opacity-100 text-red-500' : 'opacity-0 group-hover:opacity-100'}`}
         >
           {wishlistLoading ? <Loader2 size={14} className="animate-spin"/> : <Heart size={15} className={wishlisted ? 'fill-red-500' : ''} />}
         </button>

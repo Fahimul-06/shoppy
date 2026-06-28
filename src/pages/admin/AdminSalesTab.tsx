@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { CheckCircle2, Loader2, Search, ShoppingBag, Sparkles, Zap, Save, Clock, Image as ImageIcon } from 'lucide-react';
 import { api, getToken } from '../../lib/api';
-import { defaultPlatformSettings, normalizePlatformSettings, type PlatformSettings, type SaleBannerSettings } from '../../lib/platformSettings';
+import { defaultPlatformSettings, normalizePlatformSettings, type PlatformSettings, type SaleBannerSettings, type ProductFrameSettings } from '../../lib/platformSettings';
 import ImageUploader from '../../components/forms/ImageUploader';
 
 type SaleType = 'daily' | 'flash' | 'newArrival';
@@ -100,6 +100,13 @@ export default function AdminSalesTab() {
     }));
   };
 
+  const updateProductFrame = (frameType: keyof ProductFrameSettings, value: string) => {
+    setSettings((current) => ({
+      ...current,
+      productFrames: { ...current.productFrames, [frameType]: value },
+    }));
+  };
+
   const load = async () => {
     setLoading(true);
     setError('');
@@ -124,7 +131,7 @@ export default function AdminSalesTab() {
         flashSaleSlots: (settings.flashSaleSlots || []).slice(0, 6),
       }, getToken('admin'));
       setSettings(normalizePlatformSettings(response.settings));
-      setSettingsMessage('Flash sale time and sale banners saved.');
+      setSettingsMessage('Sale settings saved successfully.');
     } catch (e) {
       setSettingsMessage(e instanceof Error ? e.message : 'Failed to save settings');
     } finally {
@@ -347,6 +354,47 @@ export default function AdminSalesTab() {
             >
               {settingsSaving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
               Save Sale Page Banners
+            </button>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-2xl border p-5 lg:col-span-2">
+          <div className="flex items-center gap-2 mb-2"><ImageIcon size={18} className="text-purple-500" /><h3 className="font-black text-gray-900">Product Photo Frames</h3></div>
+          <p className="text-xs text-gray-500 mb-4">Upload transparent PNG frame images. They will appear over product photos for matching products.</p>
+          <div className="grid md:grid-cols-3 gap-4">
+            {([
+              { key: 'dailySaleFrame' as const, label: 'Daily Sale product photo frame', helper: 'Shown on products selected for Daily Sale.' },
+              { key: 'flashSaleFrame' as const, label: 'Flash Sale product photo frame', helper: 'Shown on products selected for Flash Sale.' },
+              { key: 'freeDeliveryFrame' as const, label: 'Free Delivery product photo frame', helper: 'Shown when product price is equal to or above the free delivery minimum.' },
+            ]).map((item) => {
+              const frameUrl = settings.productFrames?.[item.key] || '';
+              return (
+                <div key={item.key} className="rounded-2xl border border-gray-100 bg-gray-50 p-3">
+                  <div className="relative rounded-xl overflow-hidden border bg-white mb-3" style={{ paddingTop: '75%' }}>
+                    <div className="absolute inset-0 bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center text-xs font-bold text-gray-400">Product Photo</div>
+                    {frameUrl ? <img src={frameUrl} alt={item.label} className="absolute inset-0 w-full h-full object-fill pointer-events-none" /> : null}
+                  </div>
+                  <ImageUploader
+                    label={item.label}
+                    helperText={item.helper}
+                    value={frameUrl}
+                    onChange={(url) => updateProductFrame(item.key, url)}
+                    token={getToken('admin')}
+                  />
+                </div>
+              );
+            })}
+          </div>
+          <div className="mt-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-t pt-4">
+            <p className="text-xs text-gray-500">Recommended: transparent PNG frame with the same shape as product images.</p>
+            <button
+              type="button"
+              onClick={saveSettings}
+              disabled={settingsSaving}
+              className="shrink-0 inline-flex items-center justify-center gap-2 rounded-xl bg-purple-600 px-4 py-2.5 text-sm font-black text-white disabled:bg-purple-300"
+            >
+              {settingsSaving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+              Save Product Photo Frames
             </button>
           </div>
         </div>

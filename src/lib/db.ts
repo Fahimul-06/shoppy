@@ -58,6 +58,8 @@ export interface OrderPayload {
   discount_amount: number;
   promo_code?: string;
   delivery_fee: number;
+  platform_fee?: number;
+  vat_amount?: number;
   total_amount: number;
   payment_method: string;
   payment_type?: string;

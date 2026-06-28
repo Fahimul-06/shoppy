@@ -6,18 +6,25 @@ import ProductRail from '../components/ProductRail';
 import { useProducts } from '../hooks/useProducts';
 import { categoryKey, get99TkProducts, getBestSellingProducts, getNewArrivalProducts } from '../utils/productCollections';
 import { getSaleDiscount, withSalePricing } from '../utils/salePricing';
+import { defaultPlatformSettings, fetchPublicPlatformSettings, type PlatformSettings } from '../lib/platformSettings';
 
-function useCountdown(targetHours: number) {
+function useCountdown(targetDate?: string | null) {
   const getTimeLeft = () => {
     const now = new Date();
-    const target = new Date();
-    target.setHours(targetHours, 0, 0, 0);
-    if (target <= now) target.setDate(target.getDate() + 1);
+    let target = targetDate ? new Date(targetDate) : new Date();
+    if (!targetDate || Number.isNaN(target.getTime())) {
+      target = new Date();
+      target.setHours(23, 59, 59, 999);
+    }
+    if (target <= now) {
+      return { hours: 0, minutes: 0, seconds: 0, ended: true };
+    }
     const diff = target.getTime() - now.getTime();
     return {
-      hours: Math.floor((diff / (1000 * 60 * 60)) % 24),
+      hours: Math.floor(diff / (1000 * 60 * 60)),
       minutes: Math.floor((diff / (1000 * 60)) % 60),
       seconds: Math.floor((diff / 1000) % 60),
+      ended: false,
     };
   };
 
@@ -25,7 +32,7 @@ function useCountdown(targetHours: number) {
   useEffect(() => {
     const id = setInterval(() => setTimeLeft(getTimeLeft()), 1000);
     return () => clearInterval(id);
-  }, []);
+  }, [targetDate]);
   return timeLeft;
 }
 
@@ -41,9 +48,14 @@ function TimeUnit({ value, label }: { value: number; label: string }) {
 }
 
 export default function FlashSalePage() {
-  const { hours, minutes, seconds } = useCountdown(23);
+  const [platformSettings, setPlatformSettings] = useState<PlatformSettings>(defaultPlatformSettings);
+  const { hours, minutes, seconds, ended } = useCountdown(platformSettings.flashSaleEndsAt);
   const { products, loading } = useProducts();
   const [activeCat, setActiveCat] = useState('all');
+
+  useEffect(() => {
+    fetchPublicPlatformSettings().then(setPlatformSettings).catch(() => {});
+  }, []);
 
   const saleProducts = useMemo(() => products
     .filter((p) => Array.isArray(p.saleTags) && p.saleTags.includes('flash'))
@@ -104,7 +116,7 @@ export default function FlashSalePage() {
             </div>
             <div className="flex-shrink-0">
               <div className="flex items-center gap-1.5 text-red-200 text-sm font-medium mb-3">
-                <Clock size={14} />Ends in
+                <Clock size={14} />{ended ? 'Flash sale ended' : 'Ends in'}
               </div>
               <div className="flex items-center gap-2 sm:gap-3">
                 <TimeUnit value={hours} label="Hours" />

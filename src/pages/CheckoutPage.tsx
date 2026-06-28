@@ -4,6 +4,7 @@ import { Check, ChevronRight, MapPin, CreditCard, Package, Loader2, AlertCircle,
 import { useCart } from '../context/CartContext';
 import { placeOrder as saveOrder } from '../lib/db';
 import { api, getToken } from '../lib/api';
+import { calculateCharges, defaultPlatformSettings, fetchPublicPlatformSettings, type PlatformSettings } from '../lib/platformSettings';
 
 const steps = ['Delivery Address', 'Payment Method', 'Confirmation'];
 
@@ -32,6 +33,7 @@ export default function CheckoutPage() {
   const [promoCode, setPromoCode] = useState(() => localStorage.getItem('checkoutPromoCode') || '');
   const [promoInfo, setPromoInfo] = useState<{ code: string; discount: number; eligibleItemCount?: number } | null>(null);
   const [promoLoading, setPromoLoading] = useState(false);
+  const [platformSettings, setPlatformSettings] = useState<PlatformSettings>(defaultPlatformSettings);
   const [checkoutItemIds] = useState<string[] | null>(() => {
     try {
       const stored = localStorage.getItem('checkoutItemIds');
@@ -49,9 +51,12 @@ export default function CheckoutPage() {
   }, [state.items, checkoutItemIds]);
   const checkoutTotalItems = checkoutItems.reduce((sum, item) => sum + item.quantity, 0);
   const checkoutTotalPrice = checkoutItems.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
-  const shipping = checkoutTotalPrice > 2000 ? 0 : 120;
   const discount = promoInfo?.discount || 0;
-  const total = Math.max(0, checkoutTotalPrice - discount) + shipping;
+  const charges = calculateCharges(checkoutTotalPrice - discount, platformSettings);
+  const shipping = charges.deliveryCharge;
+  const platformFee = charges.platformFee;
+  const vatAmount = charges.vatAmount;
+  const total = charges.total;
 
   const readableAddress = (addr: DeliveryAddress) => [addr.address, addr.landmark, addr.area, addr.district, addr.division].filter(Boolean).join(', ');
   const paymentType = payment === 'cod' ? 'cod' : payment === 'card' ? 'card' : ['bkash', 'nagad'].includes(payment) ? 'mobile_banking' : 'prepaid';
@@ -68,6 +73,11 @@ export default function CheckoutPage() {
         else setAddress((prev) => ({ ...prev, name: user.fullName || prev.name || '', phone: user.phone || prev.phone || '' }));
       })
       .catch(() => {});
+  }, []);
+
+
+  useEffect(() => {
+    fetchPublicPlatformSettings().then(setPlatformSettings).catch(() => {});
   }, []);
 
   const applyPromo = async () => {
@@ -130,6 +140,8 @@ export default function CheckoutPage() {
         discount_amount: discount,
         promo_code: promoInfo?.code || '',
         delivery_fee: shipping,
+        platform_fee: platformFee,
+        vat_amount: vatAmount,
         total_amount: total,
         payment_method: payment,
         payment_type: paymentType,
@@ -386,9 +398,21 @@ export default function CheckoutPage() {
                   </div>
                 )}
                 <div className="flex justify-between text-gray-600">
-                  <span>Shipping</span>
-                  <span className={shipping === 0 ? 'text-green-600' : ''}>{shipping === 0 ? 'FREE' : `৳${shipping}`}</span>
+                  <span>Delivery charge</span>
+                  <span className={shipping === 0 ? 'text-green-600' : ''}>{shipping === 0 ? 'FREE' : `৳${shipping.toLocaleString()}`}</span>
                 </div>
+                {platformFee > 0 && (
+                  <div className="flex justify-between text-gray-600">
+                    <span>Platform fee</span>
+                    <span>৳{platformFee.toLocaleString()}</span>
+                  </div>
+                )}
+                {vatAmount > 0 && (
+                  <div className="flex justify-between text-gray-600">
+                    <span>VAT ({platformSettings.vatPercent}%)</span>
+                    <span>৳{vatAmount.toLocaleString()}</span>
+                  </div>
+                )}
                 <div className="flex justify-between font-bold text-gray-900 pt-2 border-t border-gray-100">
                   <span>Total</span>
                   <span>৳{total.toLocaleString()}</span>

@@ -6,6 +6,7 @@ import { api } from '../lib/api';
 import ProductRail from '../components/ProductRail';
 import { useProducts } from '../hooks/useProducts';
 import { getBestSellingProducts } from '../utils/productCollections';
+import { calculateCharges, defaultPlatformSettings, fetchPublicPlatformSettings, type PlatformSettings } from '../lib/platformSettings';
 
 export default function CartPage() {
   const { state, removeItem, updateQuantity, totalItems } = useCart();
@@ -14,6 +15,7 @@ export default function CartPage() {
   const [couponMessage, setCouponMessage] = useState('');
   const [promoInfo, setPromoInfo] = useState<{ code: string; discount: number; eligibleItemCount?: number } | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>(() => state.items.map((item) => item.product.id));
+  const [platformSettings, setPlatformSettings] = useState<PlatformSettings>(defaultPlatformSettings);
   const { products } = useProducts();
 
   useEffect(() => {
@@ -26,6 +28,11 @@ export default function CartPage() {
     });
   }, [state.items]);
 
+
+  useEffect(() => {
+    fetchPublicPlatformSettings().then(setPlatformSettings).catch(() => {});
+  }, []);
+
   const selectedItems = useMemo(
     () => state.items.filter((item) => selectedIds.includes(item.product.id)),
     [state.items, selectedIds]
@@ -33,8 +40,11 @@ export default function CartPage() {
   const selectedTotalItems = selectedItems.reduce((sum, item) => sum + item.quantity, 0);
   const selectedTotalPrice = selectedItems.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
   const discount = promoInfo?.discount || 0;
-  const shipping = selectedTotalPrice > 2000 ? 0 : 120;
-  const finalTotal = selectedTotalPrice - discount + shipping;
+  const charges = calculateCharges(selectedTotalPrice - discount, platformSettings);
+  const shipping = charges.deliveryCharge;
+  const platformFee = charges.platformFee;
+  const vatAmount = charges.vatAmount;
+  const finalTotal = charges.total;
   const allSelected = state.items.length > 0 && selectedIds.length === state.items.length;
   const bestSellingProducts = useMemo(() => getBestSellingProducts(products, 12), [products]);
 
@@ -238,15 +248,27 @@ export default function CartPage() {
                     </div>
                   )}
                   <div className="flex justify-between text-gray-600">
-                    <span>Shipping</span>
+                    <span>Delivery charge</span>
                     <span className={`font-medium ${shipping === 0 ? 'text-green-600' : 'text-gray-800'}`}>
-                      {shipping === 0 ? 'FREE' : `৳${shipping}`}
+                      {shipping === 0 ? 'FREE' : `৳${shipping.toLocaleString()}`}
                     </span>
                   </div>
                   {shipping === 0 && (
                     <p className="text-xs text-green-600 bg-green-50 px-2.5 py-1.5 rounded-lg">
-                      Free delivery on orders over ৳2,000
+                      Free delivery on orders over ৳{Number(platformSettings.freeDeliveryMin || 0).toLocaleString()}
                     </p>
+                  )}
+                  {platformFee > 0 && (
+                    <div className="flex justify-between text-gray-600">
+                      <span>Platform fee</span>
+                      <span className="font-medium text-gray-800">৳{platformFee.toLocaleString()}</span>
+                    </div>
+                  )}
+                  {vatAmount > 0 && (
+                    <div className="flex justify-between text-gray-600">
+                      <span>VAT ({platformSettings.vatPercent}%)</span>
+                      <span className="font-medium text-gray-800">৳{vatAmount.toLocaleString()}</span>
+                    </div>
                   )}
                   <div className="border-t border-gray-100 pt-3 flex justify-between">
                     <span className="font-bold text-gray-900">Total</span>

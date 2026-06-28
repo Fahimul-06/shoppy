@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, Loader2, Search, ShoppingBag, Sparkles, Zap } from 'lucide-react';
+import { CheckCircle2, Loader2, Search, ShoppingBag, Sparkles, Zap, Save, Clock, Receipt } from 'lucide-react';
 import { api, getToken } from '../../lib/api';
+import { defaultPlatformSettings, normalizePlatformSettings, type PlatformSettings } from '../../lib/platformSettings';
 
 type SaleType = 'daily' | 'flash' | 'newArrival';
 type Product = {
@@ -63,13 +64,52 @@ export default function AdminSalesTab() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const [settings, setSettings] = useState<PlatformSettings>(defaultPlatformSettings);
+  const [settingsSaving, setSettingsSaving] = useState(false);
+  const [settingsMessage, setSettingsMessage] = useState('');
+
+  const toDatetimeLocal = (value?: string | null) => {
+    if (!value) return '';
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return '';
+    const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
+    return local.toISOString().slice(0, 16);
+  };
+
+  const fromDatetimeLocal = (value: string) => {
+    if (!value) return null;
+    const d = new Date(value);
+    return Number.isNaN(d.getTime()) ? null : d.toISOString();
+  };
 
   const load = async () => {
     setLoading(true);
     setError('');
-    const r = await api.get<{ products: Product[] }>('/admin/products', getToken('admin'));
-    setProducts(r.products || []);
+    const [productResponse, settingsResponse] = await Promise.all([
+      api.get<{ products: Product[] }>('/admin/products', getToken('admin')),
+      api.get<{ settings: PlatformSettings }>('/admin/platform-settings', getToken('admin')),
+    ]);
+    setProducts(productResponse.products || []);
+    setSettings(normalizePlatformSettings(settingsResponse.settings));
     setLoading(false);
+  };
+
+  const saveSettings = async () => {
+    setSettingsSaving(true);
+    setSettingsMessage('');
+    try {
+      const response = await api.put<{ settings: PlatformSettings }>('/admin/platform-settings', {
+        ...settings,
+        flashSaleStartsAt: settings.flashSaleStartsAt || null,
+        flashSaleEndsAt: settings.flashSaleEndsAt || null,
+      }, getToken('admin'));
+      setSettings(normalizePlatformSettings(response.settings));
+      setSettingsMessage('Flash sale time and checkout charges saved.');
+    } catch (e) {
+      setSettingsMessage(e instanceof Error ? e.message : 'Failed to save settings');
+    } finally {
+      setSettingsSaving(false);
+    }
   };
 
   useEffect(() => {
@@ -160,6 +200,57 @@ export default function AdminSalesTab() {
               );
             })}
           </div>
+        </div>
+      </div>
+
+
+      <div className="grid lg:grid-cols-2 gap-5">
+        <div className="bg-white rounded-2xl border p-5">
+          <div className="flex items-center gap-2 mb-4"><Clock size={18} className="text-red-500" /><h3 className="font-black text-gray-900">Flash Sale Time</h3></div>
+          <div className="grid sm:grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-bold text-gray-600">Start time</label>
+              <input type="datetime-local" className="mt-1 w-full border rounded-xl p-3 text-sm" value={toDatetimeLocal(settings.flashSaleStartsAt)} onChange={(e)=>setSettings({...settings, flashSaleStartsAt: fromDatetimeLocal(e.target.value)})}/>
+            </div>
+            <div>
+              <label className="text-xs font-bold text-gray-600">End time</label>
+              <input type="datetime-local" className="mt-1 w-full border rounded-xl p-3 text-sm" value={toDatetimeLocal(settings.flashSaleEndsAt)} onChange={(e)=>setSettings({...settings, flashSaleEndsAt: fromDatetimeLocal(e.target.value)})}/>
+            </div>
+          </div>
+          <p className="text-xs text-gray-500 mt-3">Customer Flash Sale page countdown uses this end time.</p>
+        </div>
+
+        <div className="bg-white rounded-2xl border p-5">
+          <div className="flex items-center gap-2 mb-4"><Receipt size={18} className="text-blue-500" /><h3 className="font-black text-gray-900">Checkout Charges</h3></div>
+          <div className="grid sm:grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs font-bold text-gray-600">Delivery charge</label>
+              <input type="number" min="0" className="mt-1 w-full border rounded-xl p-3 text-sm" value={settings.deliveryCharge} onChange={(e)=>setSettings({...settings, deliveryCharge: Number(e.target.value || 0)})}/>
+            </div>
+            <div>
+              <label className="text-xs font-bold text-gray-600">Free delivery minimum</label>
+              <input type="number" min="0" className="mt-1 w-full border rounded-xl p-3 text-sm" value={settings.freeDeliveryMin} onChange={(e)=>setSettings({...settings, freeDeliveryMin: Number(e.target.value || 0)})}/>
+            </div>
+            <div>
+              <label className="text-xs font-bold text-gray-600">Platform fee type</label>
+              <select className="mt-1 w-full border rounded-xl p-3 text-sm" value={settings.platformFeeType} onChange={(e)=>setSettings({...settings, platformFeeType: e.target.value === 'percent' ? 'percent' : 'fixed'})}>
+                <option value="fixed">Fixed amount</option>
+                <option value="percent">Percentage</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-xs font-bold text-gray-600">Platform fee {settings.platformFeeType === 'percent' ? '%' : '৳'}</label>
+              <input type="number" min="0" className="mt-1 w-full border rounded-xl p-3 text-sm" value={settings.platformFee} onChange={(e)=>setSettings({...settings, platformFee: Number(e.target.value || 0)})}/>
+            </div>
+            <div>
+              <label className="text-xs font-bold text-gray-600">VAT %</label>
+              <input type="number" min="0" max="100" className="mt-1 w-full border rounded-xl p-3 text-sm" value={settings.vatPercent} onChange={(e)=>setSettings({...settings, vatPercent: Number(e.target.value || 0)})}/>
+            </div>
+            <div className="flex items-end">
+              <button onClick={saveSettings} disabled={settingsSaving} className="w-full bg-slate-900 disabled:bg-slate-400 text-white rounded-xl py-3 font-black flex items-center justify-center gap-2">{settingsSaving ? <Loader2 size={16} className="animate-spin"/> : <Save size={16}/>} Save Charges</button>
+            </div>
+          </div>
+          {settingsMessage && <p className={`text-xs mt-3 ${settingsMessage.includes('saved') ? 'text-green-700' : 'text-red-600'}`}>{settingsMessage}</p>}
         </div>
       </div>
 

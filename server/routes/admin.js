@@ -88,14 +88,30 @@ function cleanPlatformSettingsPayload(body = {}) {
     const date = new Date(value);
     return Number.isNaN(date.getTime()) ? null : date;
   };
+  const cleanFlashSaleSlots = (slots) => {
+    const input = Array.isArray(slots) ? slots : [];
+    return input.slice(0, 6).map((slot, index) => {
+      const startsAt = dateOrNull(slot?.startsAt);
+      const endsAt = dateOrNull(slot?.endsAt);
+      return {
+        title: String(slot?.title || `Slot ${index + 1}`).trim().slice(0, 40),
+        startsAt,
+        endsAt,
+        active: slot?.active !== false,
+      };
+    });
+  };
+  const flashSaleSlots = cleanFlashSaleSlots(body.flashSaleSlots);
+  const firstSlot = flashSaleSlots.find((slot) => slot.startsAt || slot.endsAt);
   return {
     deliveryCharge: number(body.deliveryCharge, 120),
     freeDeliveryMin: number(body.freeDeliveryMin, 2000),
     platformFeeType: body.platformFeeType === 'percent' ? 'percent' : 'fixed',
     platformFee: number(body.platformFee, 0),
     vatPercent: Math.min(100, number(body.vatPercent, 0)),
-    flashSaleStartsAt: dateOrNull(body.flashSaleStartsAt),
-    flashSaleEndsAt: dateOrNull(body.flashSaleEndsAt),
+    flashSaleStartsAt: firstSlot?.startsAt || dateOrNull(body.flashSaleStartsAt),
+    flashSaleEndsAt: firstSlot?.endsAt || dateOrNull(body.flashSaleEndsAt),
+    flashSaleSlots,
   };
 }
 

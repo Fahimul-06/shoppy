@@ -12,6 +12,7 @@ const defaults = {
   vatPercent: 0,
   flashSaleStartsAt: null,
   flashSaleEndsAt: null,
+  flashSaleSlots: [],
 };
 
 export async function getPlatformSettings() {

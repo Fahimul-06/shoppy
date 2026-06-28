@@ -10,6 +10,12 @@ const platformSettingSchema = new mongoose.Schema({
   vatPercent: { type: Number, default: 0, min: 0, max: 100 },
   flashSaleStartsAt: { type: Date, default: null },
   flashSaleEndsAt: { type: Date, default: null },
+  flashSaleSlots: [{
+    title: { type: String, default: '' },
+    startsAt: { type: Date, default: null },
+    endsAt: { type: Date, default: null },
+    active: { type: Boolean, default: true },
+  }],
 }, { timestamps: true });
 
 toJSON(platformSettingSchema);

@@ -206,6 +206,30 @@ router.get('/', async (req, res) => {
 });
 
 
+
+function numeric(value) {
+  const n = Number(value || 0);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function productSalePrice(product, preferredSale) {
+  const tags = Array.isArray(product.saleTags) ? product.saleTags : [];
+  const price = numeric(product.price);
+  const dailyDiscount = tags.includes('daily') ? numeric(product.dailySaleDiscount || product.discount) : 0;
+  const flashDiscount = tags.includes('flash') ? numeric(product.flashSaleDiscount || product.discount) : 0;
+  const discount = preferredSale === 'daily'
+    ? dailyDiscount
+    : preferredSale === 'flash'
+      ? flashDiscount
+      : Math.max(dailyDiscount, flashDiscount, numeric(product.discount));
+  if (!discount || discount <= 0) return price;
+  return Math.max(0, Math.round(price - (price * discount / 100)));
+}
+
+function is99TkProduct(product) {
+  return numeric(product.price) === 99 || productSalePrice(product, 'daily') === 99 || productSalePrice(product, 'flash') === 99;
+}
+
 router.get('/collections/:type', async (req, res) => {
   const limit = Math.min(Number(req.query.limit || 20), 60);
   const type = String(req.params.type || '').toLowerCase();
@@ -217,10 +241,14 @@ router.get('/collections/:type', async (req, res) => {
       .sort({ createdAt: -1 })
       .limit(limit);
   } else if (type === '99tk' || type === '99') {
-    products = await Product.find({ active: { $ne: false }, price: 99 })
+    const candidates = await Product.find({ active: { $ne: false } })
       .populate('seller', 'name shopName shopLogo shopBanner shopAddress status')
       .sort({ createdAt: -1 })
-      .limit(limit);
+      .limit(500);
+    products = candidates
+      .filter(is99TkProduct)
+      .sort((a, b) => productSalePrice(a) - productSalePrice(b) || new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
+      .slice(0, limit);
   } else if (type === 'best-selling' || type === 'best') {
     const productsWithCounts = await attachSoldCounts(await Product.find({ active: { $ne: false } })
       .populate('seller', 'name shopName shopLogo shopBanner shopAddress status')

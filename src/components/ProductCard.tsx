@@ -90,14 +90,16 @@ export default function ProductCard({ product }: Props) {
           className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
         />
         {frameImage && (
-          <img
-            src={frameImage}
-            alt="Product frame"
-            className="absolute inset-0 z-20 w-full h-full object-fill pointer-events-none"
-          />
+          <span className="absolute top-2 left-2 z-30 w-14 h-14 sm:w-16 sm:h-16 rounded-xl overflow-hidden pointer-events-none drop-shadow-md bg-white/10">
+            <img
+              src={frameImage}
+              alt="Product frame"
+              className="w-full h-full object-contain"
+            />
+          </span>
         )}
         {product.badge && (
-          <span className={`absolute top-2 left-2 z-30 text-xs font-bold px-2 py-0.5 rounded-lg uppercase ${badgeStyles[product.badge]}`}>
+          <span className={`absolute ${frameImage ? 'top-[4.75rem]' : 'top-2'} left-2 z-30 text-xs font-bold px-2 py-0.5 rounded-lg uppercase ${badgeStyles[product.badge]}`}>
             {product.badge}
           </span>
         )}

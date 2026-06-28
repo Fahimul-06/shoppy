@@ -269,7 +269,18 @@ export default function AdminSalesTab() {
               </div>
             ))}
           </div>
-          <p className="text-xs text-gray-500 mt-3">Customers see the active slot countdown. If no slot is active right now, the next upcoming active slot is used.</p>
+          <div className="mt-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-t pt-4">
+            <p className="text-xs text-gray-500">Customers see the active slot countdown. If no slot is active right now, the next upcoming active slot is used.</p>
+            <button
+              type="button"
+              onClick={saveSettings}
+              disabled={settingsSaving}
+              className="shrink-0 inline-flex items-center justify-center gap-2 rounded-xl bg-red-600 px-4 py-2.5 text-sm font-black text-white disabled:bg-red-300"
+            >
+              {settingsSaving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+              Save Flash Sale Time Slots
+            </button>
+          </div>
         </div>
 
         <div className="bg-white rounded-2xl border p-5">
@@ -326,10 +337,27 @@ export default function AdminSalesTab() {
               );
             })}
           </div>
-          <p className="text-xs text-gray-500 mt-3">Each sale banner can use only colors, or use an uploaded photo with a dark overlay so text stays readable.</p>
+          <div className="mt-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-t pt-4">
+            <p className="text-xs text-gray-500">Each sale banner can use only colors, or use an uploaded photo with a dark overlay so text stays readable.</p>
+            <button
+              type="button"
+              onClick={saveSettings}
+              disabled={settingsSaving}
+              className="shrink-0 inline-flex items-center justify-center gap-2 rounded-xl bg-orange-600 px-4 py-2.5 text-sm font-black text-white disabled:bg-orange-300"
+            >
+              {settingsSaving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+              Save Sale Page Banners
+            </button>
+          </div>
         </div>
 
       </div>
+
+      {settingsMessage && (
+        <div className={`rounded-2xl border p-4 text-sm font-bold ${settingsMessage.toLowerCase().includes('failed') ? 'border-red-200 bg-red-50 text-red-700' : 'border-green-200 bg-green-50 text-green-700'}`}>
+          {settingsMessage}
+        </div>
+      )}
 
       <div className="grid lg:grid-cols-[1fr_340px] gap-5">
         <div className="bg-white rounded-2xl border overflow-hidden">

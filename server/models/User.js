@@ -21,6 +21,11 @@ const userSchema = new mongoose.Schema({
   profilePhoto: { type: String, trim: true },
   passwordHash: { type: String, required: true },
   role: { type: String, enum: ['user', 'customer', 'admin'], default: 'user' },
+  adminType: { type: String, enum: ['owner', 'employee'], default: 'owner' },
+  adminPosition: { type: String, trim: true },
+  adminPermissions: [{ type: String, trim: true }],
+  adminStatus: { type: String, enum: ['active', 'inactive'], default: 'active' },
+  createdByAdmin: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   addresses: [addressSchema],
 }, { timestamps: true });
 toJSON(userSchema);

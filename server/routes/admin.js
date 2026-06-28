@@ -13,10 +13,22 @@ import CustomerNotification from '../models/CustomerNotification.js';
 import HeroSlide from '../models/HeroSlide.js';
 import PlatformSetting from '../models/PlatformSetting.js';
 import { isPromoActive } from '../utils/promo.js';
-import { requireAdmin, signToken } from '../middleware/auth.js';
+import { requireAdmin, requireOwnerAdmin, requireAdminPermission, signToken } from '../middleware/auth.js';
 import { getPlatformSettings } from './settings.js';
 const router = express.Router();
-const adminUser = (u) => ({ id: u.id, fullName: u.fullName, email: u.email, phone: u.phone, role: u.role });
+const ADMIN_PERMISSION_KEYS = ['dashboard','sellers','customers','products','sales','banners','orders','returns','cancellations','messages','customerCare','promos','notifications'];
+const normalizePermissions = (permissions = []) => [...new Set((Array.isArray(permissions) ? permissions : []).map((p) => String(p || '').trim()).filter((p) => ADMIN_PERMISSION_KEYS.includes(p)))];
+const adminUser = (u) => ({
+  id: u.id,
+  fullName: u.fullName,
+  email: u.email,
+  phone: u.phone,
+  role: u.role,
+  adminType: u.adminType || 'owner',
+  adminPosition: u.adminPosition || '',
+  adminPermissions: u.adminType === 'employee' ? normalizePermissions(u.adminPermissions) : ADMIN_PERMISSION_KEYS,
+  adminStatus: u.adminStatus || 'active',
+});
 
 const safeNumber = (value) => Number(value || 0);
 
@@ -247,16 +259,17 @@ async function ensureDefaultAdmin() {
   const email = process.env.ADMIN_EMAIL || 'admin@gmail.com';
   const password = process.env.ADMIN_PASSWORD || 'Qwertyuiop09';
   let admin = await User.findOne({ email: email.toLowerCase() });
-  if (!admin) admin = await User.create({ fullName: 'Admin', email, passwordHash: await bcrypt.hash(password, 10), role: 'admin' });
-  if (admin.role !== 'admin') { admin.role = 'admin'; await admin.save(); }
+  if (!admin) admin = await User.create({ fullName: 'Admin', email, passwordHash: await bcrypt.hash(password, 10), role: 'admin', adminType: 'owner', adminStatus: 'active' });
+  if (admin.role !== 'admin' || admin.adminType === 'employee') { admin.role = 'admin'; admin.adminType = 'owner'; admin.adminStatus = 'active'; await admin.save(); }
   return admin;
 }
 
 router.post('/login', async (req, res) => {
   await ensureDefaultAdmin();
-  const { email, password } = req.body;
-  const user = await User.findOne({ email: String(email || '').toLowerCase(), role: 'admin' });
-  if (!user || !(await bcrypt.compare(password || '', user.passwordHash))) return res.status(401).json({ message: 'Invalid admin credentials' });
+  const { email, phone, password } = req.body;
+  const identifier = String(email || phone || '').trim().toLowerCase();
+  const user = await User.findOne({ role: 'admin', $or: [{ email: identifier }, { phone: identifier }] });
+  if (!user || user.adminStatus === 'inactive' || !(await bcrypt.compare(password || '', user.passwordHash))) return res.status(401).json({ message: 'Invalid admin credentials' });
   res.json({ token: signToken({ id: user.id, role: 'admin' }), user: adminUser(user) });
 });
 router.get('/me', requireAdmin, (req, res) => res.json({ user: adminUser(req.user) }));
@@ -275,6 +288,27 @@ router.get('/platform-settings', requireAdmin, async (_req, res) => {
 
 router.put('/platform-settings', requireAdmin, async (req, res) => {
   const payload = cleanPlatformSettingsPayload(req.body || {});
+  const existing = await getPlatformSettings();
+  if (req.user.adminType === 'employee') {
+    const employeePermissions = Array.isArray(req.user.adminPermissions) ? req.user.adminPermissions : [];
+    const canSales = employeePermissions.includes('sales');
+    const canBanners = employeePermissions.includes('banners') || canSales;
+    if (!canSales && !canBanners) return res.status(403).json({ message: 'You do not have permission to update sale settings' });
+    payload.deliveryCharge = existing.deliveryCharge;
+    payload.freeDeliveryMin = existing.freeDeliveryMin;
+    payload.platformFeeType = existing.platformFeeType;
+    payload.platformFee = existing.platformFee;
+    payload.vatPercent = existing.vatPercent;
+    if (!canSales) {
+      payload.flashSaleStartsAt = existing.flashSaleStartsAt;
+      payload.flashSaleEndsAt = existing.flashSaleEndsAt;
+      payload.flashSaleSlots = existing.flashSaleSlots || [];
+    }
+    if (!canBanners) {
+      payload.dailySaleBanner = existing.dailySaleBanner;
+      payload.flashSaleBanner = existing.flashSaleBanner;
+    }
+  }
   const settings = await PlatformSetting.findOneAndUpdate(
     { key: 'default' },
     { $set: payload, $setOnInsert: { key: 'default' } },
@@ -292,12 +326,69 @@ router.get('/notification-counts', requireAdmin, async (_req, res) => {
   res.json({ counts: { orders, returns, cancellations } });
 });
 
-router.get('/sellers', requireAdmin, async (_req, res) => {
+
+router.get('/employee-permissions', requireOwnerAdmin, (_req, res) => {
+  res.json({ permissions: ADMIN_PERMISSION_KEYS });
+});
+
+router.get('/employees', requireOwnerAdmin, async (_req, res) => {
+  const employees = await User.find({ role: 'admin', adminType: 'employee' }).sort({ createdAt: -1 });
+  res.json({ employees: employees.map(adminUser) });
+});
+
+router.post('/employees', requireOwnerAdmin, async (req, res) => {
+  const fullName = String(req.body?.fullName || req.body?.name || '').trim();
+  const phone = String(req.body?.phone || '').trim();
+  const adminPosition = String(req.body?.position || req.body?.adminPosition || '').trim();
+  const password = String(req.body?.password || '');
+  const adminPermissions = normalizePermissions(req.body?.permissions || req.body?.adminPermissions || []);
+  if (!fullName || !phone || !adminPosition || !password) return res.status(400).json({ message: 'Name, phone, position, and password are required' });
+  if (password.length < 6) return res.status(400).json({ message: 'Password must be at least 6 characters' });
+  const exists = await User.findOne({ role: 'admin', phone });
+  if (exists) return res.status(409).json({ message: 'An admin or employee with this phone already exists' });
+  const digits = phone.replace(/\D/g, '') || Date.now();
+  let email = `${digits}@employee.shoppy.local`;
+  let counter = 1;
+  while (await User.exists({ email })) email = `${digits}.${counter++}@employee.shoppy.local`;
+  const employee = await User.create({
+    fullName,
+    phone,
+    email,
+    adminPosition,
+    adminPermissions,
+    adminType: 'employee',
+    adminStatus: 'active',
+    role: 'admin',
+    createdByAdmin: req.user._id,
+    passwordHash: await bcrypt.hash(password, 10),
+  });
+  res.status(201).json({ employee: adminUser(employee), loginPhone: phone });
+});
+
+router.put('/employees/:id', requireOwnerAdmin, async (req, res) => {
+  const employee = await User.findOne({ _id: req.params.id, role: 'admin', adminType: 'employee' });
+  if (!employee) return res.status(404).json({ message: 'Employee not found' });
+  if (req.body?.fullName !== undefined || req.body?.name !== undefined) employee.fullName = String(req.body.fullName || req.body.name || '').trim();
+  if (req.body?.phone !== undefined) employee.phone = String(req.body.phone || '').trim();
+  if (req.body?.position !== undefined || req.body?.adminPosition !== undefined) employee.adminPosition = String(req.body.position || req.body.adminPosition || '').trim();
+  if (req.body?.permissions !== undefined || req.body?.adminPermissions !== undefined) employee.adminPermissions = normalizePermissions(req.body.permissions || req.body.adminPermissions || []);
+  if (req.body?.adminStatus === 'active' || req.body?.adminStatus === 'inactive') employee.adminStatus = req.body.adminStatus;
+  if (req.body?.password) employee.passwordHash = await bcrypt.hash(String(req.body.password), 10);
+  await employee.save();
+  res.json({ employee: adminUser(employee) });
+});
+
+router.delete('/employees/:id', requireOwnerAdmin, async (req, res) => {
+  await User.deleteOne({ _id: req.params.id, role: 'admin', adminType: 'employee' });
+  res.json({ ok: true });
+});
+
+router.get('/sellers', requireAdminPermission('sellers'), async (_req, res) => {
   const sellers = await Seller.find().sort({ createdAt: -1 });
   res.json({ sellers });
 });
 
-router.get('/sellers/:id/detail', requireAdmin, async (req, res) => {
+router.get('/sellers/:id/detail', requireAdminPermission('sellers'), async (req, res) => {
   const seller = await Seller.findById(req.params.id);
   if (!seller) return res.status(404).json({ message: 'Seller not found' });
 
@@ -308,7 +399,7 @@ router.get('/sellers/:id/detail', requireAdmin, async (req, res) => {
   res.json({ seller, stats, products, orders, returns, cancellations });
 });
 
-router.get('/customers', requireAdmin, async (_req, res) => {
+router.get('/customers', requireAdminPermission('customers'), async (_req, res) => {
   const users = await User.find({ role: { $in: ['user', 'customer'] } }).sort({ createdAt: -1 });
   const customers = await Promise.all(users.map(async (user) => {
     const orders = await Order.find({ user: user._id }).sort({ createdAt: -1 });
@@ -317,7 +408,7 @@ router.get('/customers', requireAdmin, async (_req, res) => {
   res.json({ customers });
 });
 
-router.get('/customers/:id/detail', requireAdmin, async (req, res) => {
+router.get('/customers/:id/detail', requireAdminPermission('customers'), async (req, res) => {
   const customer = await User.findOne({ _id: req.params.id, role: { $in: ['user', 'customer'] } });
   if (!customer) return res.status(404).json({ message: 'Customer not found' });
   const [orders, returns, cancellations] = await Promise.all([
@@ -327,16 +418,16 @@ router.get('/customers/:id/detail', requireAdmin, async (req, res) => {
   ]);
   res.json({ customer: formatCustomerSummary(customer, orders), orders, returns, cancellations });
 });
-router.patch('/sellers/:id/status', requireAdmin, async (req, res) => {
+router.patch('/sellers/:id/status', requireAdminPermission('sellers'), async (req, res) => {
   const seller = await Seller.findByIdAndUpdate(req.params.id, { status: req.body.status }, { new: true });
   res.json({ seller });
 });
-router.get('/products', requireAdmin, async (_req, res) => res.json({ products: await Product.find().sort({ createdAt: -1 }).populate('seller') }));
-router.post('/products', requireAdmin, async (req, res) => res.status(201).json({ product: await Product.create(sanitizeSaleProductPayload(req.body)) }));
-router.put('/products/:id', requireAdmin, async (req, res) => res.json({ product: await Product.findByIdAndUpdate(req.params.id, sanitizeSaleProductPayload(req.body), { new: true }) }));
-router.delete('/products/:id', requireAdmin, async (req, res) => { await Product.findByIdAndDelete(req.params.id); res.json({ ok: true }); });
+router.get('/products', requireAdminPermission('products'), async (_req, res) => res.json({ products: await Product.find().sort({ createdAt: -1 }).populate('seller') }));
+router.post('/products', requireAdminPermission('products'), async (req, res) => res.status(201).json({ product: await Product.create(sanitizeSaleProductPayload(req.body)) }));
+router.put('/products/:id', requireAdminPermission('products'), async (req, res) => res.json({ product: await Product.findByIdAndUpdate(req.params.id, sanitizeSaleProductPayload(req.body), { new: true }) }));
+router.delete('/products/:id', requireAdminPermission('products'), async (req, res) => { await Product.findByIdAndDelete(req.params.id); res.json({ ok: true }); });
 
-router.post('/sales/apply', requireAdmin, async (req, res, next) => {
+router.post('/sales/apply', requireAdminPermission('sales'), async (req, res, next) => {
   try {
     const { saleType = 'daily', discount = 0, productIds = [], replaceExisting = true } = req.body || {};
     if (!['daily', 'flash', 'newArrival'].includes(saleType)) return res.status(400).json({ message: 'Invalid sale type' });
@@ -353,14 +444,14 @@ router.post('/sales/apply', requireAdmin, async (req, res, next) => {
     next(error);
   }
 });
-router.get('/orders', requireAdmin, async (_req, res) => {
+router.get('/orders', requireAdminPermission('orders'), async (_req, res) => {
   const orders = await Order.find()
     .populate('user')
     .populate('items.product')
     .sort({ createdAt: -1 });
   res.json({ orders });
 });
-router.patch('/orders/:id', requireAdmin, async (req, res) => {
+router.patch('/orders/:id', requireAdminPermission('orders'), async (req, res) => {
   const existing = await Order.findById(req.params.id).populate('user');
   if (!existing) return res.status(404).json({ message: 'Order not found' });
   const previousStatus = existing.status;
@@ -391,7 +482,7 @@ router.patch('/orders/:id', requireAdmin, async (req, res) => {
   res.json({ order });
 });
 
-router.get('/cancellations', requireAdmin, async (_req, res) => {
+router.get('/cancellations', requireAdminPermission('cancellations'), async (_req, res) => {
   const cancellations = await CancellationRequest.find()
     .populate('user')
     .populate('seller')
@@ -401,7 +492,7 @@ router.get('/cancellations', requireAdmin, async (_req, res) => {
   res.json({ cancellations });
 });
 
-router.get('/returns', requireAdmin, async (_req, res) => {
+router.get('/returns', requireAdminPermission('returns'), async (_req, res) => {
   const returns = await ReturnRequest.find()
     .populate('user')
     .populate('seller')
@@ -411,7 +502,7 @@ router.get('/returns', requireAdmin, async (_req, res) => {
   res.json({ returns });
 });
 
-router.patch('/returns/:id', requireAdmin, async (req, res) => {
+router.patch('/returns/:id', requireAdminPermission('returns'), async (req, res) => {
   const { status, adminNote } = req.body || {};
   const allowed = ['requested', 'approved', 'denied', 'received', 'refunded', 'cancelled'];
   if (!allowed.includes(status)) return res.status(400).json({ message: 'Invalid return status' });
@@ -465,7 +556,7 @@ router.get('/messages', requireAdmin, async (_req, res) => {
   res.json({ conversations: Array.from(groups.values()) });
 });
 
-router.get('/messages/:orderId/:orderItemId', requireAdmin, async (req, res) => {
+router.get('/messages/:orderId/:orderItemId', requireAdminPermission('messages'), async (req, res) => {
   const { orderId, orderItemId } = req.params;
   const messages = await ChatMessage.find({ order: orderId, orderItem: orderItemId })
     .populate({ path: 'seller', select: 'name shopName shopLogo email phone' })
@@ -477,7 +568,7 @@ router.get('/messages/:orderId/:orderItemId', requireAdmin, async (req, res) => 
 });
 
 
-router.get('/customer-care', requireAdmin, async (_req, res) => {
+router.get('/customer-care', requireAdminPermission('customerCare'), async (_req, res) => {
   const messages = await CustomerCareMessage.find()
     .populate({ path: 'customer', select: 'fullName name email phone profilePhoto' })
     .sort({ createdAt: -1 });
@@ -503,7 +594,7 @@ router.get('/customer-care', requireAdmin, async (_req, res) => {
   res.json({ conversations: Array.from(groups.values()) });
 });
 
-router.get('/customer-care/:customerId', requireAdmin, async (req, res) => {
+router.get('/customer-care/:customerId', requireAdminPermission('customerCare'), async (req, res) => {
   const customerId = req.params.customerId;
   const customer = await User.findById(customerId).select('fullName name email phone profilePhoto role');
   if (!customer) return res.status(404).json({ message: 'Customer not found' });
@@ -515,7 +606,7 @@ router.get('/customer-care/:customerId', requireAdmin, async (req, res) => {
   res.json({ customer, messages });
 });
 
-router.post('/customer-care/:customerId', requireAdmin, async (req, res) => {
+router.post('/customer-care/:customerId', requireAdminPermission('customerCare'), async (req, res) => {
   const customerId = req.params.customerId;
   const text = String(req.body?.message || '').trim();
   if (!text) return res.status(400).json({ message: 'Message is required' });
@@ -587,12 +678,12 @@ const promoPopulate = [
   { path: 'product', select: 'name image price category subcategory childCategory brand seller' },
 ];
 
-router.get('/promos', requireAdmin, async (_req, res) => {
+router.get('/promos', requireAdminPermission('promos'), async (_req, res) => {
   const promos = await PromoCode.find().populate(promoPopulate).sort({ createdAt: -1 });
   res.json({ promos });
 });
 
-router.post('/promos', requireAdmin, async (req, res) => {
+router.post('/promos', requireAdminPermission('promos'), async (req, res) => {
   const payload = normalizePromoPayload(req.body);
   if (!payload.code) return res.status(400).json({ message: 'Promo code is required' });
   if (!payload.discountValue || payload.discountValue <= 0) return res.status(400).json({ message: 'Discount value must be greater than 0' });
@@ -603,7 +694,7 @@ router.post('/promos', requireAdmin, async (req, res) => {
   res.status(201).json({ promo: populatedPromo });
 });
 
-router.put('/promos/:id', requireAdmin, async (req, res) => {
+router.put('/promos/:id', requireAdminPermission('promos'), async (req, res) => {
   const payload = normalizePromoPayload(req.body);
   const before = await PromoCode.findById(req.params.id);
   const promo = await PromoCode.findByIdAndUpdate(req.params.id, payload, { new: true }).populate(promoPopulate);
@@ -613,7 +704,7 @@ router.put('/promos/:id', requireAdmin, async (req, res) => {
   res.json({ promo });
 });
 
-router.delete('/promos/:id', requireAdmin, async (req, res) => { await PromoCode.findByIdAndDelete(req.params.id); res.json({ ok: true }); });
+router.delete('/promos/:id', requireAdminPermission('promos'), async (req, res) => { await PromoCode.findByIdAndDelete(req.params.id); res.json({ ok: true }); });
 
 
 const bannerPayload = (body = {}) => {
@@ -634,32 +725,32 @@ const bannerPayload = (body = {}) => {
   };
 };
 
-router.get('/banners', requireAdmin, async (_req, res) => {
+router.get('/banners', requireAdminPermission('banners'), async (_req, res) => {
   const banners = await HeroSlide.find().sort({ placement: 1, sortOrder: 1, createdAt: -1 });
   res.json({ banners, heroSlides: banners });
 });
 
-router.post('/banners', requireAdmin, async (req, res) => {
+router.post('/banners', requireAdminPermission('banners'), async (req, res) => {
   const payload = bannerPayload(req.body);
   if (!payload.image) return res.status(400).json({ message: 'Banner/photo image is required' });
   const banner = await HeroSlide.create(payload);
   res.status(201).json({ banner });
 });
 
-router.put('/banners/:id', requireAdmin, async (req, res) => {
+router.put('/banners/:id', requireAdminPermission('banners'), async (req, res) => {
   const payload = bannerPayload(req.body);
   if (!payload.image) return res.status(400).json({ message: 'Banner/photo image is required' });
   const banner = await HeroSlide.findByIdAndUpdate(req.params.id, payload, { new: true });
   res.json({ banner });
 });
 
-router.delete('/banners/:id', requireAdmin, async (req, res) => {
+router.delete('/banners/:id', requireAdminPermission('banners'), async (req, res) => {
   await HeroSlide.findByIdAndDelete(req.params.id);
   res.json({ ok: true });
 });
 
 
-router.get('/customer-notifications', requireAdmin, async (_req, res) => {
+router.get('/customer-notifications', requireAdminPermission('notifications'), async (_req, res) => {
   const notifications = await CustomerNotification.find({ user: null, audience: 'customers' })
     .populate('promo', 'code discountType discountValue')
     .sort({ createdAt: -1 })
@@ -667,7 +758,7 @@ router.get('/customer-notifications', requireAdmin, async (_req, res) => {
   res.json({ notifications });
 });
 
-router.post('/customer-notifications', requireAdmin, async (req, res) => {
+router.post('/customer-notifications', requireAdminPermission('notifications'), async (req, res) => {
   const { type = 'event', title, message, link, image } = req.body || {};
   const allowed = ['promo', 'sale', 'event', 'system'];
   if (!allowed.includes(type)) return res.status(400).json({ message: 'Invalid notification type' });
@@ -685,13 +776,13 @@ router.post('/customer-notifications', requireAdmin, async (req, res) => {
   res.status(201).json({ notification });
 });
 
-router.patch('/customer-notifications/:id', requireAdmin, async (req, res) => {
+router.patch('/customer-notifications/:id', requireAdminPermission('notifications'), async (req, res) => {
   const notification = await CustomerNotification.findByIdAndUpdate(req.params.id, req.body, { new: true });
   if (!notification) return res.status(404).json({ message: 'Notification not found' });
   res.json({ notification });
 });
 
-router.delete('/customer-notifications/:id', requireAdmin, async (req, res) => {
+router.delete('/customer-notifications/:id', requireAdminPermission('notifications'), async (req, res) => {
   await CustomerNotification.findByIdAndDelete(req.params.id);
   res.json({ ok: true });
 });

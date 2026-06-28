@@ -4,7 +4,7 @@ import { api, getToken } from '../../lib/api';
 import ImageUploader from '../../components/forms/ImageUploader';
 
 type Placement = 'hero' | 'event' | 'voucher' | 'campaign';
-type RelatedType = 'all' | 'category' | 'brand' | 'seller' | 'product' | 'search';
+type RelatedType = 'all' | 'category' | 'brand' | 'seller' | 'shop' | 'product' | 'search' | 'bank_card' | 'payment_type' | 'weekday';
 
 type Banner = {
   id: string;
@@ -20,7 +20,8 @@ type Banner = {
   active?: boolean;
 };
 
-type ProductOption = { id?: string; _id?: string; name: string; price?: number; category?: string; brand?: string };
+type ProductOption = { id?: string; _id?: string; name: string; price?: number; category?: string; subcategory?: string; childCategory?: string; brand?: string };
+type SellerOption = { id?: string; _id?: string; name?: string; shopName?: string; email?: string };
 
 const emptyForm = {
   image: '',
@@ -47,6 +48,7 @@ export default function AdminBannersTab() {
   const token = getToken('admin');
   const [banners, setBanners] = useState<Banner[]>([]);
   const [products, setProducts] = useState<ProductOption[]>([]);
+  const [sellers, setSellers] = useState<SellerOption[]>([]);
   const [form, setForm] = useState(emptyForm);
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState('');
@@ -54,15 +56,59 @@ export default function AdminBannersTab() {
   const [productSearch, setProductSearch] = useState('');
 
   const load = async () => {
-    const [bannerRes, productRes] = await Promise.all([
+    const [bannerRes, productRes, sellerRes] = await Promise.all([
       api.get<{ banners: Banner[] }>('/admin/banners', token),
       api.get<{ products: ProductOption[] }>('/admin/products', token),
+      api.get<{ sellers: SellerOption[] }>('/admin/sellers', token),
     ]);
     setBanners(bannerRes.banners || []);
     setProducts(productRes.products || []);
+    setSellers(sellerRes.sellers || []);
   };
 
   useEffect(() => { load().catch((e) => setError(e instanceof Error ? e.message : 'Failed to load banners')); }, []);
+
+
+  const categoryValues = useMemo(() => Array.from(new Set(products.map((p) => p.category).filter(Boolean))).sort().map((v) => ({ value: String(v), label: String(v) })), [products]);
+  const brandValues = useMemo(() => Array.from(new Set(products.map((p) => p.brand).filter(Boolean))).sort().map((v) => ({ value: String(v), label: String(v) })), [products]);
+  const shopValues = useMemo(() => sellers.map((seller) => {
+    const id = seller.id || seller._id || '';
+    const name = seller.shopName || seller.name || seller.email || 'Seller shop';
+    return { value: id, label: name };
+  }).filter((item) => item.value), [sellers]);
+  const paymentTypeValues = [
+    { value: 'prepaid', label: 'Prepaid / Online payment' },
+    { value: 'cod', label: 'Cash on Delivery' },
+    { value: 'mobile_banking', label: 'Mobile Banking' },
+    { value: 'card', label: 'Card Payment' },
+  ];
+  const bankCardValues = [
+    'BRAC Bank', 'City Bank', 'DBBL', 'Eastern Bank', 'IFIC Bank', 'Prime Bank', 'Standard Chartered', 'UCB', 'Visa', 'Mastercard', 'American Express', 'Debit', 'Credit'
+  ].map((value) => ({ value, label: value }));
+  const weekdayValues = [
+    { value: 'weekend', label: 'Weekend deal: Friday + Saturday' },
+    { value: 'friday', label: 'Friday' },
+    { value: 'saturday', label: 'Saturday' },
+  ];
+
+  const relatedValueOptions = useMemo(() => {
+    if (form.relatedType === 'category') return categoryValues;
+    if (form.relatedType === 'brand') return brandValues;
+    if (form.relatedType === 'seller' || form.relatedType === 'shop') return shopValues;
+    if (form.relatedType === 'payment_type') return paymentTypeValues;
+    if (form.relatedType === 'bank_card') return bankCardValues;
+    if (form.relatedType === 'weekday') return weekdayValues;
+    return [];
+  }, [form.relatedType, categoryValues, brandValues, shopValues]);
+
+  const relatedValuePlaceholder = () => {
+    if (form.relatedType === 'search') return 'Example: Eid sale, phone, fashion';
+    if (form.relatedType === 'bank_card') return 'Select bank or card type';
+    if (form.relatedType === 'payment_type') return 'Select payment type';
+    if (form.relatedType === 'weekday') return 'Select weekday/weekend';
+    if (form.relatedType === 'shop' || form.relatedType === 'seller') return 'Select shop';
+    return 'Select related value';
+  };
 
   const save = async () => {
     setLoading(true); setError(''); setMsg('');
@@ -144,6 +190,10 @@ export default function AdminBannersTab() {
                     <option value="all">Show latest products</option>
                     <option value="category">Category</option>
                     <option value="brand">Brand</option>
+                    <option value="shop">Shops / sellers</option>
+                    <option value="payment_type">Payment type</option>
+                    <option value="bank_card">Bank cards</option>
+                    <option value="weekday">Weekday / weekend deal</option>
                     <option value="search">Search keyword</option>
                     <option value="product">Selected products</option>
                   </select>
@@ -151,7 +201,14 @@ export default function AdminBannersTab() {
                 {form.relatedType !== 'product' && form.relatedType !== 'all' && (
                   <label className="block">
                     <span className="text-xs font-bold text-gray-600">Related value</span>
-                    <input className="mt-1 w-full border rounded-xl p-3 text-sm bg-white" placeholder="Example: Fashion, Samsung, Eid sale" value={form.relatedValue} onChange={(e) => setForm({ ...form, relatedValue: e.target.value })} />
+                    {relatedValueOptions.length > 0 ? (
+                      <select className="mt-1 w-full border rounded-xl p-3 text-sm bg-white" value={form.relatedValue} onChange={(e) => setForm({ ...form, relatedValue: e.target.value })}>
+                        <option value="">{relatedValuePlaceholder()}</option>
+                        {relatedValueOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                      </select>
+                    ) : (
+                      <input className="mt-1 w-full border rounded-xl p-3 text-sm bg-white" placeholder={relatedValuePlaceholder()} value={form.relatedValue} onChange={(e) => setForm({ ...form, relatedValue: e.target.value })} />
+                    )}
                   </label>
                 )}
               </div>

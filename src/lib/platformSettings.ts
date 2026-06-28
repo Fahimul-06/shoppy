@@ -134,21 +134,54 @@ export function normalizeFlashSaleSlots(slots?: FlashSaleSlot[] | null, legacySt
   });
 }
 
-export function getCurrentFlashSaleSlot(settings: PlatformSettings, now = new Date()): FlashSaleSlot | null {
+export type FlashSaleTiming = {
+  slot: FlashSaleSlot | null;
+  status: 'active' | 'upcoming' | 'ended';
+  targetAt: string | null;
+};
+
+export function getFlashSaleTiming(settings: PlatformSettings, now = new Date()): FlashSaleTiming {
   const slots = normalizeFlashSaleSlots(settings.flashSaleSlots, settings.flashSaleStartsAt, settings.flashSaleEndsAt)
     .filter((slot) => slot.active !== false && slot.startsAt && slot.endsAt)
     .map((slot) => ({ ...slot, start: new Date(String(slot.startsAt)), end: new Date(String(slot.endsAt)) }))
-    .filter((slot) => !Number.isNaN(slot.start.getTime()) && !Number.isNaN(slot.end.getTime()) && slot.end > now);
+    .filter((slot) => !Number.isNaN(slot.start.getTime()) && !Number.isNaN(slot.end.getTime()) && slot.end > slot.start);
 
   const activeNow = slots
     .filter((slot) => slot.start <= now && slot.end > now)
     .sort((a, b) => a.end.getTime() - b.end.getTime())[0];
-  if (activeNow) return { title: activeNow.title, startsAt: activeNow.startsAt, endsAt: activeNow.endsAt, active: activeNow.active };
+
+  if (activeNow) {
+    return {
+      slot: { title: activeNow.title, startsAt: activeNow.startsAt, endsAt: activeNow.endsAt, active: activeNow.active },
+      status: 'active',
+      targetAt: activeNow.endsAt || null,
+    };
+  }
 
   const next = slots
     .filter((slot) => slot.start > now)
     .sort((a, b) => a.start.getTime() - b.start.getTime())[0];
-  if (next) return { title: next.title, startsAt: next.startsAt, endsAt: next.endsAt, active: next.active };
 
-  return null;
+  if (next) {
+    return {
+      slot: { title: next.title, startsAt: next.startsAt, endsAt: next.endsAt, active: next.active },
+      status: 'upcoming',
+      targetAt: next.startsAt || null,
+    };
+  }
+
+  const legacyEnd = settings.flashSaleEndsAt ? new Date(settings.flashSaleEndsAt) : null;
+  if (legacyEnd && !Number.isNaN(legacyEnd.getTime()) && legacyEnd > now) {
+    return {
+      slot: { title: 'Flash Sale', startsAt: settings.flashSaleStartsAt || null, endsAt: settings.flashSaleEndsAt, active: true },
+      status: 'active',
+      targetAt: settings.flashSaleEndsAt || null,
+    };
+  }
+
+  return { slot: null, status: 'ended', targetAt: null };
+}
+
+export function getCurrentFlashSaleSlot(settings: PlatformSettings, now = new Date()): FlashSaleSlot | null {
+  return getFlashSaleTiming(settings, now).slot;
 }

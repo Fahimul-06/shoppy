@@ -4,7 +4,7 @@ import { Zap, Clock, ChevronRight, ShoppingCart, Star } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { useProducts } from '../hooks/useProducts';
 import { getDisplayOriginalPrice, getSaleDiscount, getSalePrice, withSalePricing } from '../utils/salePricing';
-import { defaultPlatformSettings, fetchPublicPlatformSettings, getCurrentFlashSaleSlot, getSaleBannerStyle, type PlatformSettings } from '../lib/platformSettings';
+import { defaultPlatformSettings, fetchPublicPlatformSettings, getFlashSaleTiming, getSaleBannerStyle, type PlatformSettings } from '../lib/platformSettings';
 
 function useCountdown(targetDate?: string | null) {
   const getTimeLeft = () => {
@@ -26,6 +26,7 @@ function useCountdown(targetDate?: string | null) {
   };
   const [t, setT] = useState(getTimeLeft);
   useEffect(() => {
+    setT(getTimeLeft());
     const id = setInterval(() => setT(getTimeLeft()), 1000);
     return () => clearInterval(id);
   }, [targetDate]);
@@ -47,7 +48,8 @@ export default function FlashSaleSection() {
   const { addItem } = useCart();
   const { products, loading } = useProducts();
   const [platformSettings, setPlatformSettings] = useState<PlatformSettings>(defaultPlatformSettings);
-  const currentFlashSlot = getCurrentFlashSaleSlot(platformSettings);
+  const flashSaleTiming = getFlashSaleTiming(platformSettings);
+  const currentFlashSlot = flashSaleTiming.slot;
 
   useEffect(() => {
     fetchPublicPlatformSettings().then(setPlatformSettings).catch(() => {});
@@ -56,7 +58,7 @@ export default function FlashSaleSection() {
     .filter((p) => Array.isArray(p.saleTags) && p.saleTags.includes('flash'))
     .sort((a, b) => getSaleDiscount(b, 'flash') - getSaleDiscount(a, 'flash'))
     .slice(0, 8);
-  const { h, m, s, ended } = useCountdown(currentFlashSlot?.endsAt || platformSettings.flashSaleEndsAt);
+  const { h, m, s, ended } = useCountdown(flashSaleTiming.targetAt);
 
   return (
     <section className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
@@ -82,7 +84,7 @@ export default function FlashSaleSection() {
           {/* Countdown */}
           <div className="flex items-center gap-2">
             <div className="hidden sm:flex items-center gap-1.5 text-red-100 text-xs font-semibold mr-1">
-              <Clock size={13} /> {ended ? 'Ended' : currentFlashSlot?.title ? `${currentFlashSlot.title} ends in` : 'Ends in'}
+              <Clock size={13} /> {flashSaleTiming.status === 'upcoming' && currentFlashSlot?.title ? `${currentFlashSlot.title} starts in` : flashSaleTiming.status === 'upcoming' ? 'Starts in' : ended || flashSaleTiming.status === 'ended' ? 'Ended' : currentFlashSlot?.title ? `${currentFlashSlot.title} ends in` : 'Ends in'}
             </div>
             <TimeUnit v={h} label="Hrs" />
             <span className="text-white font-bold text-lg mb-4">:</span>

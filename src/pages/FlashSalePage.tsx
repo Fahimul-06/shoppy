@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Zap, ChevronRight, Clock, LayoutGrid } from 'lucide-react';
-import { categories } from '../data/categories';
 import ProductCard from '../components/ProductCard';
-import SalePageExtraSections from '../components/SalePageExtraSections';
+import ProductRail from '../components/ProductRail';
 import { useProducts } from '../hooks/useProducts';
+import { categoryKey, get99TkProducts, getBestSellingProducts, getNewArrivalProducts } from '../utils/productCollections';
 import { getSaleDiscount, withSalePricing } from '../utils/salePricing';
 
 function useCountdown(targetHours: number) {
@@ -43,30 +43,37 @@ function TimeUnit({ value, label }: { value: number; label: string }) {
 export default function FlashSalePage() {
   const { hours, minutes, seconds } = useCountdown(23);
   const { products, loading } = useProducts();
-  const saleProducts = products
-    .filter((p) => Array.isArray(p.saleTags) && p.saleTags.includes('flash'))
-    .sort((a, b) => getSaleDiscount(b, 'flash') - getSaleDiscount(a, 'flash'));
-
   const [activeCat, setActiveCat] = useState('all');
 
-  // Only show categories that have at least 1 sale product
-  const presentCats = categories.filter((c) =>
-    saleProducts.some((p) => p.category === c.slug)
-  );
+  const saleProducts = useMemo(() => products
+    .filter((p) => Array.isArray(p.saleTags) && p.saleTags.includes('flash'))
+    .sort((a, b) => getSaleDiscount(b, 'flash') - getSaleDiscount(a, 'flash')), [products]);
+
+  const categoryGroups = useMemo(() => {
+    const map = new Map<string, { key: string; label: string; count: number }>();
+    for (const p of saleProducts) {
+      const key = categoryKey(p.category || 'other') || 'other';
+      const label = p.category || 'Other';
+      const existing = map.get(key);
+      if (existing) existing.count += 1;
+      else map.set(key, { key, label, count: 1 });
+    }
+    return Array.from(map.values()).sort((a, b) => a.label.localeCompare(b.label));
+  }, [saleProducts]);
 
   const filtered = activeCat === 'all'
     ? saleProducts
-    : saleProducts.filter((p) => p.category === activeCat);
+    : saleProducts.filter((p) => categoryKey(p.category) === activeCat);
 
-  const countForCat = (slug: string) =>
-    saleProducts.filter((p) => p.category === slug).length;
+  const newArrivals = getNewArrivalProducts(products, 12);
+  const products99 = get99TkProducts(products, 12);
+  const bestSelling = getBestSellingProducts(products, 12);
 
   const maxDiscount = saleProducts.length ? Math.max(...saleProducts.map((p) => getSaleDiscount(p, 'flash'))) : 0;
   const minDiscount = saleProducts.length ? Math.min(...saleProducts.map((p) => getSaleDiscount(p, 'flash'))) : 0;
 
   return (
     <div className="bg-gray-50 min-h-screen">
-      {/* Hero */}
       <div className="relative bg-gradient-to-r from-red-600 to-orange-500 overflow-hidden">
         <div className="absolute inset-0 opacity-10">
           <div className="absolute top-0 left-1/4 w-40 h-40 bg-yellow-300 rounded-full blur-3xl" />
@@ -83,7 +90,7 @@ export default function FlashSalePage() {
               </div>
               <h1 className="text-3xl sm:text-4xl font-bold text-white mb-2">Flash Sale</h1>
               <p className="text-red-100 text-base mb-4 max-w-md">
-                Massive discounts up to {maxDiscount}% off on top products. Don't miss out!
+                Massive discounts up to {maxDiscount}% off, plus new arrivals, ৳99 products, and best sellers.
               </p>
               <div className="flex items-center gap-2 text-sm">
                 <Link to="/" className="text-red-200 hover:text-white transition-colors">Home</Link>
@@ -91,7 +98,6 @@ export default function FlashSalePage() {
                 <span className="text-white font-medium">Flash Sale</span>
               </div>
             </div>
-            {/* Countdown */}
             <div className="flex-shrink-0">
               <div className="flex items-center gap-1.5 text-red-200 text-sm font-medium mb-3">
                 <Clock size={14} />Ends in
@@ -108,9 +114,8 @@ export default function FlashSalePage() {
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
-        {/* Stats bar */}
-        <div className="grid grid-cols-3 gap-3 mb-6">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">
+        <div className="grid grid-cols-3 gap-3">
           {[
             { label: 'Products on Sale', value: saleProducts.length },
             { label: 'Max Discount', value: `${maxDiscount}%` },
@@ -123,97 +128,45 @@ export default function FlashSalePage() {
           ))}
         </div>
 
-        {/* Category filter row */}
         <div className="bg-white rounded-2xl border border-gray-100 p-4 mb-6 shadow-sm">
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Filter by Category</p>
-          <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none">
-            {/* All chip */}
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Flash Sale Categories</p>
+          <div className="flex gap-2 overflow-x-auto pb-1">
             <button
               onClick={() => setActiveCat('all')}
-              className={`flex items-center gap-2 flex-shrink-0 px-4 py-2 rounded-xl border text-sm font-medium transition-all ${
-                activeCat === 'all'
-                  ? 'bg-red-500 border-red-500 text-white shadow-sm'
-                  : 'bg-gray-50 border-gray-200 text-gray-600 hover:border-red-300 hover:text-red-600'
-              }`}
+              className={`px-4 py-2 rounded-full text-sm font-semibold whitespace-nowrap transition-colors ${activeCat === 'all' ? 'bg-red-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
             >
-              <LayoutGrid size={15} />
-              All
-              <span className={`text-xs font-bold px-1.5 py-0.5 rounded-full ${
-                activeCat === 'all' ? 'bg-white/25 text-white' : 'bg-red-100 text-red-600'
-              }`}>
-                {saleProducts.length}
-              </span>
+              All ({saleProducts.length})
             </button>
-
-            {/* Category chips */}
-            {presentCats.map((cat) => {
-              const count = countForCat(cat.slug);
-              const active = activeCat === cat.slug;
-              return (
-                <button
-                  key={cat.id}
-                  onClick={() => setActiveCat(active ? 'all' : cat.slug)}
-                  className={`flex items-center gap-2.5 flex-shrink-0 px-3 py-2 rounded-xl border text-sm font-medium transition-all ${
-                    active
-                      ? 'bg-red-500 border-red-500 text-white shadow-sm'
-                      : 'bg-gray-50 border-gray-200 text-gray-600 hover:border-red-300 hover:bg-red-50 hover:text-red-600'
-                  }`}
-                >
-                  <div className={`w-6 h-6 rounded-lg overflow-hidden flex-shrink-0 border ${active ? 'border-white/30' : 'border-gray-200'}`}>
-                    <img src={cat.image} alt={cat.name} className="w-full h-full object-cover" />
-                  </div>
-                  <span className="whitespace-nowrap">{cat.name}</span>
-                  <span className={`text-xs font-bold px-1.5 py-0.5 rounded-full ${
-                    active ? 'bg-white/25 text-white' : 'bg-red-100 text-red-600'
-                  }`}>
-                    {count}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Results header */}
-        <div className="flex items-center justify-between mb-5">
-          <div className="flex items-center gap-3">
-            <div className="w-1 h-6 bg-red-500 rounded-full" />
-            <h2 className="text-xl font-bold text-gray-900">
-              {activeCat === 'all'
-                ? 'All Sale Products'
-                : (presentCats.find((c) => c.slug === activeCat)?.name ?? 'Sale Products')}
-            </h2>
-            <span className="bg-red-100 text-red-600 text-xs font-bold px-2.5 py-1 rounded-full">
-              {filtered.length} deals
-            </span>
-          </div>
-          <div className="flex items-center gap-3">
-            {activeCat !== 'all' && (
+            {categoryGroups.map((cat) => (
               <button
-                onClick={() => setActiveCat('all')}
-                className="text-sm text-red-600 hover:text-red-700 font-medium hover:underline"
+                key={cat.key}
+                onClick={() => setActiveCat(cat.key)}
+                className={`px-4 py-2 rounded-full text-sm font-semibold whitespace-nowrap transition-colors ${activeCat === cat.key ? 'bg-red-500 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
               >
-                Clear filter
+                {cat.label} ({cat.count})
               </button>
-            )}
-            <span className="text-sm text-gray-500 hidden sm:block">Sorted by highest discount</span>
+            ))}
           </div>
         </div>
 
-        {/* Products grid */}
         {loading ? (
-          <div className="bg-white rounded-2xl border border-gray-100 p-16 text-center text-gray-400">Loading products...</div>
+          <div className="bg-white rounded-2xl border p-16 text-center text-gray-400">Loading flash sale products...</div>
         ) : filtered.length === 0 ? (
-          <div className="bg-white rounded-2xl border border-gray-100 p-16 text-center text-gray-400">No flash sale products selected yet.</div>
+          <div className="bg-white rounded-2xl border border-gray-100 p-16 text-center">
+            <LayoutGrid size={40} className="mx-auto text-gray-300 mb-3" />
+            <p className="text-gray-500 font-medium">No flash sale products found in this category.</p>
+          </div>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4">
-            {filtered.map((p) => (
-              <ProductCard key={p.id} product={withSalePricing(p, 'flash')} />
+            {filtered.map((product) => (
+              <ProductCard key={product.id} product={withSalePricing(product, 'flash')} />
             ))}
           </div>
         )}
 
-        <SalePageExtraSections products={products} />
+        <ProductRail title="New Arrivals" subtitle="Admin-selected newest products" products={newArrivals} viewAllLink="/new-arrivals" />
+        <ProductRail title="৳99 Products" subtitle="Products automatically shown here when price is ৳99" products={products99} />
+        <ProductRail title="Best Selling Products" subtitle="Auto-detected from customer orders and sales history" products={bestSelling} />
       </div>
     </div>
   );

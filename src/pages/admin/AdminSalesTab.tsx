@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, Loader2, Search, ShoppingBag, Zap } from 'lucide-react';
+import { CheckCircle2, Loader2, Search, ShoppingBag, Sparkles, Zap } from 'lucide-react';
 import { api, getToken } from '../../lib/api';
 
-type SaleType = 'daily' | 'flash';
+type SaleType = 'daily' | 'flash' | 'newArrival';
 type Product = {
   id: string;
   _id?: string;
@@ -19,22 +19,37 @@ type Product = {
   saleTags?: string[];
   dailySaleDiscount?: number;
   flashSaleDiscount?: number;
+  newArrival?: boolean;
+  badge?: string;
 };
 
 const saleConfig = {
   daily: {
     label: 'Daily Sale',
+    short: 'Daily',
     icon: ShoppingBag,
     border: 'border-orange-200',
     bg: 'bg-orange-50',
     active: 'bg-orange-600 text-white border-orange-600',
+    needsDiscount: true,
   },
   flash: {
     label: 'Flash Sale',
+    short: 'Flash',
     icon: Zap,
     border: 'border-red-200',
     bg: 'bg-red-50',
     active: 'bg-red-600 text-white border-red-600',
+    needsDiscount: true,
+  },
+  newArrival: {
+    label: 'New Arrivals',
+    short: 'New',
+    icon: Sparkles,
+    border: 'border-emerald-200',
+    bg: 'bg-emerald-50',
+    active: 'bg-emerald-600 text-white border-emerald-600',
+    needsDiscount: false,
   },
 } as const;
 
@@ -65,9 +80,11 @@ export default function AdminSalesTab() {
   }, []);
 
   useEffect(() => {
-    const current = products.filter((p) => Array.isArray(p.saleTags) && p.saleTags.includes(saleType));
+    const current = saleType === 'newArrival'
+      ? products.filter((p) => p.newArrival || p.badge === 'new')
+      : products.filter((p) => Array.isArray(p.saleTags) && p.saleTags.includes(saleType));
     setSelected(current.map((p) => p.id || p._id || '').filter(Boolean));
-    setDiscount(String(saleType === 'daily' ? (current[0]?.dailySaleDiscount || '') : (current[0]?.flashSaleDiscount || '')));
+    setDiscount(saleType === 'daily' ? String(current[0]?.dailySaleDiscount || '') : saleType === 'flash' ? String(current[0]?.flashSaleDiscount || '') : '');
     setMessage('');
     setError('');
   }, [saleType, products]);
@@ -106,7 +123,7 @@ export default function AdminSalesTab() {
     try {
       await api.postWithTimeout('/admin/sales/apply', {
         saleType,
-        discount: Number(discount || 0),
+        discount: saleConfig[saleType].needsDiscount ? Number(discount || 0) : 0,
         productIds: selected,
         replaceExisting: true,
       }, getToken('admin'), 120000);
@@ -126,11 +143,11 @@ export default function AdminSalesTab() {
       <div className="bg-white rounded-2xl border p-5">
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
           <div>
-            <h2 className="text-xl font-black text-gray-900">Daily Sale / Flash Sale</h2>
-            <p className="text-sm text-gray-500 mt-1">Select sale type, set one discount, choose multiple products, then submit.</p>
+            <h2 className="text-xl font-black text-gray-900">Sale & New Arrival Manager</h2>
+            <p className="text-sm text-gray-500 mt-1">Choose Daily Sale, Flash Sale, or New Arrivals. Select many products together, then submit.</p>
           </div>
-          <div className="grid grid-cols-2 gap-2 min-w-[260px]">
-            {(['daily', 'flash'] as SaleType[]).map((type) => {
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 min-w-[260px]">
+            {(['daily', 'flash', 'newArrival'] as SaleType[]).map((type) => {
               const Icon = saleConfig[type].icon;
               return (
                 <button
@@ -154,18 +171,24 @@ export default function AdminSalesTab() {
                 <div className="flex items-center gap-2 text-lg font-black text-gray-900"><CurrentIcon size={20} /> Manage {saleConfig[saleType].label}</div>
                 <p className="text-sm text-gray-600 mt-1">Current selected products will replace the existing {saleConfig[saleType].label.toLowerCase()} list.</p>
               </div>
-              <div className="w-full md:w-56">
-                <label className="text-xs font-bold text-gray-600">Discount percentage</label>
-                <input
-                  type="number"
-                  min="0"
-                  max="100"
-                  className="mt-1 w-full border rounded-xl p-3 text-sm font-bold"
-                  placeholder="Example: 15"
-                  value={discount}
-                  onChange={(e) => setDiscount(e.target.value)}
-                />
-              </div>
+              {saleConfig[saleType].needsDiscount ? (
+                <div className="w-full md:w-56">
+                  <label className="text-xs font-bold text-gray-600">Discount percentage</label>
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    className="mt-1 w-full border rounded-xl p-3 text-sm font-bold"
+                    placeholder="Example: 15"
+                    value={discount}
+                    onChange={(e) => setDiscount(e.target.value)}
+                  />
+                </div>
+              ) : (
+                <div className="rounded-xl bg-white/80 border px-4 py-3 text-sm text-gray-600 font-semibold">
+                  New Arrivals does not need discount.
+                </div>
+              )}
             </div>
           </div>
 
@@ -201,11 +224,10 @@ export default function AdminSalesTab() {
                       <p className="text-xs text-gray-500 truncate">{[product.brand, product.category, product.subcategory, product.childCategory].filter(Boolean).join(' • ') || 'No category'}</p>
                       <p className="text-xs text-gray-500">Stock: {product.stock ?? 0} · ৳{Number(product.price || 0).toLocaleString()}</p>
                     </div>
-                    {Array.isArray(product.saleTags) && product.saleTags.length > 0 && (
-                      <div className="hidden sm:block text-right text-[11px] font-bold text-orange-600">
-                        {product.saleTags.map((tag) => tag === 'daily' ? `Daily ${product.dailySaleDiscount || 0}%` : `Flash ${product.flashSaleDiscount || 0}%`).join(' + ')}
-                      </div>
-                    )}
+                    <div className="hidden sm:block text-right text-[11px] font-bold text-orange-600">
+                      {Array.isArray(product.saleTags) && product.saleTags.length > 0 && product.saleTags.map((tag) => tag === 'daily' ? `Daily ${product.dailySaleDiscount || 0}%` : `Flash ${product.flashSaleDiscount || 0}%`).join(' + ')}
+                      {(product.newArrival || product.badge === 'new') && <div className="text-emerald-600">New Arrival</div>}
+                    </div>
                   </label>
                 );
               })}

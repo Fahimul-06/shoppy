@@ -4,23 +4,24 @@ import { Sparkles, ChevronRight, LayoutGrid } from 'lucide-react';
 import { categories } from '../data/categories';
 import ProductCard from '../components/ProductCard';
 import { useProducts } from '../hooks/useProducts';
+import { categoryKey, getNewArrivalProducts } from '../utils/productCollections';
 
 export default function NewArrivalsPage() {
   const { products, loading } = useProducts();
-  const newProducts = products.filter((p) => p.badge === 'new');
+  const newProducts = getNewArrivalProducts(products, 500);
   const [activeCat, setActiveCat] = useState('all');
 
   // Only show categories that have at least 1 new-badge product
   const presentCats = categories.filter((c) =>
-    newProducts.some((p) => p.category === c.slug)
+    newProducts.some((p) => categoryKey(p.category) === categoryKey(c.slug) || categoryKey(p.category) === categoryKey(c.name))
   );
 
   const filtered = activeCat === 'all'
     ? newProducts
-    : newProducts.filter((p) => p.category === activeCat);
+    : newProducts.filter((p) => categoryKey(p.category) === categoryKey(activeCat) || categoryKey(p.category) === categoryKey(categories.find((c) => c.slug === activeCat)?.name));
 
   const countForCat = (slug: string) =>
-    newProducts.filter((p) => p.category === slug).length;
+    newProducts.filter((p) => categoryKey(p.category) === categoryKey(slug) || categoryKey(p.category) === categoryKey(categories.find((c) => c.slug === slug)?.name)).length;
 
   return (
     <div className="bg-gray-50 min-h-screen">
@@ -147,7 +148,7 @@ export default function NewArrivalsPage() {
             <h2 className="text-xl font-bold text-gray-900">You Might Also Like</h2>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4">
-            {products.filter((p) => p.badge === 'hot').map((p) => (
+            {products.filter((p) => p.badge === 'hot').slice(0, 10).map((p) => (
               <ProductCard key={p.id} product={p} />
             ))}
           </div>

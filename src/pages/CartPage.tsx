@@ -3,18 +3,18 @@ import { Link } from 'react-router-dom';
 import { Trash2, Plus, Minus, ShoppingBag, Tag, ChevronRight, ArrowLeft } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import { api } from '../lib/api';
+import ProductRail from '../components/ProductRail';
 import { useProducts } from '../hooks/useProducts';
-import ProductCard from '../components/ProductCard';
-import { withSalePricing } from '../utils/salePricing';
+import { getBestSellingProducts } from '../utils/productCollections';
 
 export default function CartPage() {
   const { state, removeItem, updateQuantity, totalItems } = useCart();
-  const { products } = useProducts();
   const [coupon, setCoupon] = useState('');
   const [couponLoading, setCouponLoading] = useState(false);
   const [couponMessage, setCouponMessage] = useState('');
   const [promoInfo, setPromoInfo] = useState<{ code: string; discount: number; eligibleItemCount?: number } | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>(() => state.items.map((item) => item.product.id));
+  const { products } = useProducts();
 
   useEffect(() => {
     setSelectedIds((current) => {
@@ -36,17 +36,7 @@ export default function CartPage() {
   const shipping = selectedTotalPrice > 2000 ? 0 : 120;
   const finalTotal = selectedTotalPrice - discount + shipping;
   const allSelected = state.items.length > 0 && selectedIds.length === state.items.length;
-  const cartProductIds = useMemo(() => new Set(state.items.map((item) => item.product.baseProductId || item.product.id)), [state.items]);
-  const topSellingProducts = useMemo(() => {
-    return products
-      .filter((product) => product.active !== false && !cartProductIds.has(product.baseProductId || product.id))
-      .sort((a, b) => {
-        const bScore = Number(b.soldCount || 0) * 10 + Number(b.reviewCount || 0) + Number(b.rating || 0) * 20;
-        const aScore = Number(a.soldCount || 0) * 10 + Number(a.reviewCount || 0) + Number(a.rating || 0) * 20;
-        return bScore - aScore;
-      })
-      .slice(0, 10);
-  }, [cartProductIds, products]);
+  const bestSellingProducts = useMemo(() => getBestSellingProducts(products, 12), [products]);
 
   const applyCoupon = async () => {
     const code = coupon.trim().toUpperCase();
@@ -286,24 +276,13 @@ export default function CartPage() {
           </div>
         )}
 
-        {topSellingProducts.length > 0 && (
-          <section className="mt-10">
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <h2 className="text-xl font-black text-gray-900">Top Selling Products</h2>
-                <p className="text-xs text-gray-500 mt-1">Popular products customers are buying now</p>
-              </div>
-              <Link to="/category/all" className="text-sm font-bold text-orange-600 hover:text-orange-700 flex items-center gap-1">
-                View more <ChevronRight size={14} />
-              </Link>
-            </div>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
-              {topSellingProducts.map((product) => (
-                <ProductCard key={`top-selling-${product.id}`} product={withSalePricing(product)} />
-              ))}
-            </div>
-          </section>
-        )}
+        <div className="mt-8">
+          <ProductRail
+            title="Best Selling Products"
+            subtitle="Popular items customers are buying now"
+            products={bestSellingProducts}
+          />
+        </div>
       </div>
     </div>
   );

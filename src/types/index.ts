@@ -30,12 +30,14 @@ export interface Product {
   childCategory?: string;
   rating: number;
   reviewCount: number;
-  soldCount?: number;
   badge?: 'sale' | 'new' | 'hot';
   saleTags?: Array<'daily' | 'flash'>;
   discount?: number;
   dailySaleDiscount?: number;
   flashSaleDiscount?: number;
+  newArrival?: boolean;
+  soldCount?: number;
+  createdAt?: string;
   currentSaleType?: 'daily' | 'flash';
   currentSaleDiscount?: number;
   currentSalePrice?: number;

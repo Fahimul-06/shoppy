@@ -70,7 +70,11 @@ export default function FlashSalePage() {
   const bestSelling = getBestSellingProducts(products, 12);
 
   const maxDiscount = saleProducts.length ? Math.max(...saleProducts.map((p) => getSaleDiscount(p, 'flash'))) : 0;
-  const minDiscount = saleProducts.length ? Math.min(...saleProducts.map((p) => getSaleDiscount(p, 'flash'))) : 0;
+  const filterByActiveCategory = (list: any[]) => activeCat === 'all' ? list : list.filter((p) => categoryKey(p.category) === activeCat);
+  const filteredNewArrivals = filterByActiveCategory(newArrivals);
+  const filtered99Products = filterByActiveCategory(products99);
+  const filteredBestSelling = filterByActiveCategory(bestSelling);
+  const activeCategoryLabel = activeCat === 'all' ? 'All Categories' : (categoryGroups.find((cat) => cat.key === activeCat)?.label || 'Selected Category');
 
   return (
     <div className="bg-gray-50 min-h-screen">
@@ -115,21 +119,8 @@ export default function FlashSalePage() {
       </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">
-        <div className="grid grid-cols-3 gap-3">
-          {[
-            { label: 'Products on Sale', value: saleProducts.length },
-            { label: 'Max Discount', value: `${maxDiscount}%` },
-            { label: 'Min Discount', value: `${minDiscount}%` },
-          ].map((stat) => (
-            <div key={stat.label} className="bg-white rounded-2xl border border-gray-100 p-4 text-center shadow-sm">
-              <p className="text-2xl font-bold text-red-500">{stat.value}</p>
-              <p className="text-xs text-gray-500 mt-0.5">{stat.label}</p>
-            </div>
-          ))}
-        </div>
-
         <div className="bg-white rounded-2xl border border-gray-100 p-4 mb-6 shadow-sm">
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Flash Sale Categories</p>
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Flash Sale by Category</p>
           <div className="flex gap-2 overflow-x-auto pb-1">
             <button
               onClick={() => setActiveCat('all')}
@@ -164,9 +155,9 @@ export default function FlashSalePage() {
           </div>
         )}
 
-        <ProductRail title="New Arrivals" subtitle="Admin-selected newest products" products={newArrivals} viewAllLink="/new-arrivals" />
-        <ProductRail title="৳99 Products" subtitle="Products automatically shown here when price is ৳99" products={products99} />
-        <ProductRail title="Best Selling Products" subtitle="Auto-detected from customer orders and sales history" products={bestSelling} />
+        <ProductRail title={`New Arrivals · ${activeCategoryLabel}`} subtitle="Admin-selected newest products filtered by the selected category" products={filteredNewArrivals} viewAllLink="/new-arrivals" />
+        <ProductRail title={`৳99 Products · ${activeCategoryLabel}`} subtitle="Products priced at ৳99 filtered by the selected category" products={filtered99Products} />
+        <ProductRail title={`Best Selling Products · ${activeCategoryLabel}`} subtitle="Auto-detected best sellers filtered by the selected category" products={filteredBestSelling} />
       </div>
     </div>
   );

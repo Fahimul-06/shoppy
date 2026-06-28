@@ -42,7 +42,11 @@ export default function DailySalePage() {
   const newArrivals = getNewArrivalProducts(products, 12);
   const products99 = get99TkProducts(products, 12);
   const bestSelling = getBestSellingProducts(products, 12);
-  const maxDiscount = dailyProducts.length ? Math.max(...dailyProducts.map(discountOf)) : 0;
+  const filterByActiveCategory = (list: any[]) => activeCat === 'all' ? list : list.filter((p) => categoryKey(p.category) === activeCat);
+  const filteredNewArrivals = filterByActiveCategory(newArrivals);
+  const filtered99Products = filterByActiveCategory(products99);
+  const filteredBestSelling = filterByActiveCategory(bestSelling);
+  const activeCategoryLabel = activeCat === 'all' ? 'All Categories' : (categoryGroups.find((cat) => cat.key === activeCat)?.label || 'Selected Category');
 
   return (
     <div className="bg-gray-50 min-h-screen">
@@ -65,21 +69,6 @@ export default function DailySalePage() {
       </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-          <div className="bg-white rounded-2xl border p-4 text-center shadow-sm">
-            <p className="text-2xl font-black text-orange-600">{dailyProducts.length}</p>
-            <p className="text-xs text-gray-500 mt-1">Daily sale products</p>
-          </div>
-          <div className="bg-white rounded-2xl border p-4 text-center shadow-sm">
-            <p className="text-2xl font-black text-red-500">{maxDiscount}%</p>
-            <p className="text-xs text-gray-500 mt-1">Max discount</p>
-          </div>
-          <div className="bg-white rounded-2xl border p-4 text-center shadow-sm col-span-2 sm:col-span-1">
-            <p className="text-2xl font-black text-gray-900">{categoryGroups.length}</p>
-            <p className="text-xs text-gray-500 mt-1">Categories</p>
-          </div>
-        </div>
-
         <div className="bg-white rounded-2xl border border-gray-100 p-4 shadow-sm">
           <div className="flex items-center gap-3 mb-4">
             <div className="w-1 h-6 bg-orange-500 rounded-full" />
@@ -108,9 +97,9 @@ export default function DailySalePage() {
           )}
         </div>
 
-        <ProductRail title="New Arrivals" subtitle="Admin-selected newest products" products={newArrivals} viewAllLink="/new-arrivals" />
-        <ProductRail title="৳99 Products" subtitle="Products automatically shown here when price is ৳99" products={products99} />
-        <ProductRail title="Best Selling Products" subtitle="Auto-detected from customer orders and sales history" products={bestSelling} />
+        <ProductRail title={`New Arrivals · ${activeCategoryLabel}`} subtitle="Admin-selected newest products filtered by the selected category" products={filteredNewArrivals} viewAllLink="/new-arrivals" />
+        <ProductRail title={`৳99 Products · ${activeCategoryLabel}`} subtitle="Products priced at ৳99 filtered by the selected category" products={filtered99Products} />
+        <ProductRail title={`Best Selling Products · ${activeCategoryLabel}`} subtitle="Auto-detected best sellers filtered by the selected category" products={filteredBestSelling} />
       </div>
     </div>
   );

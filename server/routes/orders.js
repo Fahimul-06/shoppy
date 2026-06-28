@@ -92,6 +92,10 @@ router.post('/', requireUser, async (req, res) => {
     await PromoCode.updateOne({ _id: promo._id }, { $inc: { usedCount: 1 } });
   }
 
+  await Promise.all(orderItems.map((item) =>
+    Product.updateOne({ _id: item.product }, { $inc: { soldCount: Number(item.quantity || 0) } })
+  ));
+
   res.status(201).json({ order });
 });
 

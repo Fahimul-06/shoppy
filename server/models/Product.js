@@ -17,6 +17,8 @@ const productSchema = new mongoose.Schema({
   reviewCount: { type: Number, default: 0 },
   badge: { type: String, enum: ['sale', 'new', 'hot', null], default: null },
   saleTags: { type: [String], enum: ['daily', 'flash'], default: [] },
+  newArrival: { type: Boolean, default: false, index: true },
+  soldCount: { type: Number, default: 0, min: 0 },
   discount: Number,
   dailySaleDiscount: { type: Number, default: 0, min: 0, max: 100 },
   flashSaleDiscount: { type: Number, default: 0, min: 0, max: 100 },

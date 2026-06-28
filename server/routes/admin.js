@@ -165,6 +165,32 @@ async function applySaleToProducts({ saleType, productIds, discount, replaceExis
   return result;
 }
 
+
+async function applyNewArrivals({ productIds, replaceExisting = true }) {
+  const ids = Array.isArray(productIds)
+    ? productIds.map((id) => String(id || '').trim()).filter((id) => id && Product.db.base.Types.ObjectId.isValid(id))
+    : [];
+  const result = { selectedCount: ids.length, removedCount: 0, updatedCount: 0 };
+
+  if (replaceExisting) {
+    const removed = await Product.updateMany(
+      { newArrival: true, ...(ids.length ? { _id: { $nin: ids } } : {}) },
+      { $set: { newArrival: false }, $unset: { badge: '' } }
+    );
+    result.removedCount = removed.modifiedCount || 0;
+  }
+
+  if (ids.length) {
+    const updated = await Product.updateMany(
+      { _id: { $in: ids } },
+      { $set: { newArrival: true, badge: 'new' } }
+    );
+    result.updatedCount = updated.modifiedCount || updated.matchedCount || 0;
+  }
+
+  return result;
+}
+
 async function ensureDefaultAdmin() {
   const email = process.env.ADMIN_EMAIL || 'admin@gmail.com';
   const password = process.env.ADMIN_PASSWORD || 'Qwertyuiop09';
@@ -245,8 +271,14 @@ router.delete('/products/:id', requireAdmin, async (req, res) => { await Product
 router.post('/sales/apply', requireAdmin, async (req, res, next) => {
   try {
     const { saleType = 'daily', discount = 0, productIds = [], replaceExisting = true } = req.body || {};
-    if (!['daily', 'flash'].includes(saleType)) return res.status(400).json({ message: 'Invalid sale type' });
+    if (!['daily', 'flash', 'newArrival'].includes(saleType)) return res.status(400).json({ message: 'Invalid sale type' });
     if (!Array.isArray(productIds)) return res.status(400).json({ message: 'productIds must be an array' });
+
+    if (saleType === 'newArrival') {
+      const result = await applyNewArrivals({ productIds, replaceExisting });
+      return res.json({ message: 'New arrival products updated', saleType, discount: 0, ...result });
+    }
+
     const result = await applySaleToProducts({ saleType, productIds, discount, replaceExisting });
     res.json({ message: 'Sale products updated', saleType, discount: clampSaleDiscount(discount), ...result });
   } catch (error) {

@@ -2,6 +2,7 @@ import express from 'express';
 import multer from 'multer';
 import Product from '../models/Product.js';
 import ProductReview from '../models/ProductReview.js';
+import Order from '../models/Order.js';
 
 const router = express.Router();
 const esc = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -119,6 +120,28 @@ function categoryRegexes(category) {
   return aliases.map((alias) => new RegExp(`^${esc(alias).replace(/\\ /g, '[\\s-]+')}$`, 'i'));
 }
 
+
+async function attachSoldCounts(products) {
+  const productDocs = Array.isArray(products) ? products : [];
+  const ids = productDocs
+    .map((p) => p?._id)
+    .filter(Boolean);
+  if (!ids.length) return productDocs;
+
+  const counts = await Order.aggregate([
+    { $unwind: '$items' },
+    { $match: { 'items.product': { $in: ids }, 'items.cancellationStatus': { $ne: 'cancelled' } } },
+    { $group: { _id: '$items.product', soldCount: { $sum: { $ifNull: ['$items.quantity', 0] } } } },
+  ]);
+  const countMap = new Map(counts.map((row) => [String(row._id), Number(row.soldCount || 0)]));
+
+  return productDocs.map((p) => {
+    const obj = typeof p.toObject === 'function' ? p.toObject() : { ...p };
+    obj.soldCount = Math.max(Number(obj.soldCount || 0), countMap.get(String(obj._id || obj.id)) || 0);
+    return obj;
+  });
+}
+
 function buildPublicProductFilter(query) {
   const { category, subcategory, childCategory, badge, saleTag, search, includeInactive } = query;
   const filter = includeInactive === 'true' ? {} : { active: { $ne: false } };
@@ -144,7 +167,10 @@ function buildPublicProductFilter(query) {
     ];
   }
   if (badge) filter.badge = badge;
-  if (saleTag) filter.saleTags = String(saleTag).trim();
+  if (saleTag) {
+    if (String(saleTag).trim() === 'new') filter.newArrival = true;
+    else filter.saleTags = String(saleTag).trim();
+  }
   if (search) {
     const terms = compact(String(search).split(/\s+/)).slice(0, 8);
     const regexes = terms.length ? terms.map((term) => new RegExp(esc(term), 'i')) : [new RegExp(esc(search), 'i')];
@@ -175,6 +201,40 @@ router.get('/', async (req, res) => {
     });
   }
 
+  products = await attachSoldCounts(products);
+  res.json({ products });
+});
+
+
+router.get('/collections/:type', async (req, res) => {
+  const limit = Math.min(Number(req.query.limit || 20), 60);
+  const type = String(req.params.type || '').toLowerCase();
+  let products = [];
+
+  if (type === 'new-arrivals' || type === 'new') {
+    products = await Product.find({ active: { $ne: false }, $or: [{ newArrival: true }, { badge: 'new' }] })
+      .populate('seller', 'name shopName shopLogo shopBanner shopAddress status')
+      .sort({ createdAt: -1 })
+      .limit(limit);
+  } else if (type === '99tk' || type === '99') {
+    products = await Product.find({ active: { $ne: false }, price: 99 })
+      .populate('seller', 'name shopName shopLogo shopBanner shopAddress status')
+      .sort({ createdAt: -1 })
+      .limit(limit);
+  } else if (type === 'best-selling' || type === 'best') {
+    const productsWithCounts = await attachSoldCounts(await Product.find({ active: { $ne: false } })
+      .populate('seller', 'name shopName shopLogo shopBanner shopAddress status')
+      .sort({ createdAt: -1 })
+      .limit(300));
+    products = productsWithCounts
+      .sort((a, b) => Number(b.soldCount || 0) - Number(a.soldCount || 0) || Number(b.reviewCount || 0) - Number(a.reviewCount || 0) || Number(b.rating || 0) - Number(a.rating || 0))
+      .slice(0, limit);
+    return res.json({ products });
+  } else {
+    return res.status(404).json({ message: 'Unknown collection type' });
+  }
+
+  products = await attachSoldCounts(products);
   res.json({ products });
 });
 

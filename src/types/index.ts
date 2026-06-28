@@ -68,10 +68,11 @@ export interface HeroSlide {
   title: string;
   subtitle: string;
   link?: string;
-  placement?: 'hero' | 'header' | 'event' | 'voucher' | 'campaign';
-  targetType?: 'all' | 'category' | 'brand' | 'seller' | 'products' | 'customLink';
-  targetValue?: string;
-  productIds?: string[];
+  placement?: 'hero' | 'header';
+  bannerType?: 'generic' | 'event' | 'voucher' | 'campaign';
+  categories?: string[];
+  brands?: string[];
+  products?: Product[];
 }
 
 export interface Review {

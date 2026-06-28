@@ -11,6 +11,7 @@ import { products } from '../data/products';
 import { subSubMap } from '../data/categoryOptions';
 import { searchProductsByImage } from '../lib/db';
 import { api, getToken } from '../lib/api';
+import HeaderDisplayBanner from './HeaderDisplayBanner';
 
 const categoryUrl = (categorySlug: string, sub?: string, child?: string) => {
   const params = new URLSearchParams();
@@ -250,6 +251,12 @@ export default function Header() {
 
   return (
     <header className={`sticky top-0 z-50 bg-white transition-shadow duration-200 ${scrolled ? 'shadow-md' : 'shadow-sm'}`}>
+      {/* Promo bar */}
+      <div className="bg-orange-500 text-white text-center text-xs py-1.5 px-4 hidden sm:block">
+        Free delivery on orders over ৳2000 &nbsp;|&nbsp; Use code <strong>SHOPPY10</strong> for 10% off!
+      </div>
+      <HeaderDisplayBanner />
+
       {/* Main row */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6">
         <div className="flex items-center h-16 gap-3">

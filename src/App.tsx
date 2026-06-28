@@ -6,7 +6,6 @@ import Footer from './components/Footer';
 import BottomNav from './components/BottomNav';
 import CartDrawer from './components/CartDrawer';
 import CustomerCareChat from './components/CustomerCareChat';
-import MarketingStrip from './components/MarketingStrip';
 import HomePage from './pages/HomePage';
 import ProductPage from './pages/ProductPage';
 import CategoryPage from './pages/CategoryPage';
@@ -24,7 +23,7 @@ import ReturnsPage from './pages/ReturnsPage';
 import CancellationsPage from './pages/CancellationsPage';
 import NotificationsPage from './pages/NotificationsPage';
 import SellerShopPage from './pages/SellerShopPage';
-import DisplayProductsPage from './pages/DisplayProductsPage';
+import PromotionProductsPage from './pages/PromotionProductsPage';
 import SellerRegisterPage from './pages/seller/SellerRegisterPage';
 import SellerLoginPage from './pages/seller/SellerLoginPage';
 import SellerDashboardPage from './pages/seller/SellerDashboardPage';
@@ -35,7 +34,6 @@ function StoreLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-gray-50 pb-16 lg:pb-0 flex flex-col">
       <Header />
-      <MarketingStrip />
       <main className="flex-1">{children}</main>
       <Footer />
       <BottomNav />
@@ -57,7 +55,6 @@ export default function App() {
           <Route path="/" element={<StorePage><HomePage /></StorePage>} />
           <Route path="/product/:id" element={<StorePage><ProductPage /></StorePage>} />
           <Route path="/shop/:id" element={<StorePage><SellerShopPage /></StorePage>} />
-          <Route path="/display/:id" element={<StorePage><DisplayProductsPage /></StorePage>} />
           <Route path="/category/:slug" element={<StorePage><CategoryPage /></StorePage>} />
           <Route path="/cart" element={<StorePage><CartPage /></StorePage>} />
           <Route path="/checkout" element={<StorePage><CheckoutPage /></StorePage>} />
@@ -72,6 +69,7 @@ export default function App() {
           <Route path="/returns" element={<StorePage><ReturnsPage /></StorePage>} />
           <Route path="/cancellations" element={<StorePage><CancellationsPage /></StorePage>} />
           <Route path="/notifications" element={<StorePage><NotificationsPage /></StorePage>} />
+          <Route path="/promotion/:kind/:id" element={<StorePage><PromotionProductsPage /></StorePage>} />
 
           {/* Seller routes */}
           <Route path="/seller/register" element={<SellerRegisterPage />} />

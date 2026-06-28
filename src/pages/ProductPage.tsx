@@ -1,12 +1,51 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { Star, ShoppingCart, Heart, Share2, Shield, Truck, RotateCcw, ChevronRight, Minus, Plus, Check, Store } from 'lucide-react';
+import { Star, ShoppingCart, Heart, Share2, Shield, Truck, RotateCcw, ChevronRight, Minus, Plus, Check, Store, TicketPercent, Gift } from 'lucide-react';
 import { useCart } from '../context/CartContext';
 import ProductCard from '../components/ProductCard';
 import type { Product } from '../types';
 import { fetchProductById, fetchProductReviews, fetchRelatedProducts } from '../lib/db';
+import { api } from '../lib/api';
+import { defaultPlatformSettings, fetchPublicPlatformSettings, getProductFrameImage, type PlatformSettings } from '../lib/platformSettings';
 import { useProducts } from '../hooks/useProducts';
 import { getDisplayOriginalPrice, getSaleDiscount, getSalePrice, withSalePricing } from '../utils/salePricing';
+
+type ProductPromo = {
+  id?: string;
+  code: string;
+  description?: string;
+  image?: string;
+  discountType?: 'percentage' | 'fixed';
+  discountValue?: number;
+  minOrderAmount?: number;
+  maxDiscountAmount?: number;
+  expiresAt?: string;
+};
+
+const COLLECTED_PROMOS_KEY = 'shoppyCollectedPromos';
+
+function discountText(promo: ProductPromo) {
+  return promo.discountType === 'fixed'
+    ? `৳${Number(promo.discountValue || 0).toLocaleString()} OFF`
+    : `${Number(promo.discountValue || 0)}% OFF`;
+}
+
+function readCollectedPromos(): string[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = window.localStorage.getItem(COLLECTED_PROMOS_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed.map((code) => String(code).toUpperCase()).filter(Boolean) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveCollectedPromos(codes: string[]) {
+  if (typeof window === 'undefined') return;
+  window.localStorage.setItem(COLLECTED_PROMOS_KEY, JSON.stringify(Array.from(new Set(codes.map((code) => String(code).toUpperCase()).filter(Boolean)))));
+}
+
 
 export default function ProductPage() {
   const { id } = useParams<{ id: string }>();
@@ -25,6 +64,10 @@ export default function ProductPage() {
   const [reviews, setReviews] = useState<any[]>([]);
   const [reviewDistribution, setReviewDistribution] = useState<Record<string, number>>({});
   const [reviewsLoading, setReviewsLoading] = useState(false);
+  const [platformSettings, setPlatformSettings] = useState<PlatformSettings>(defaultPlatformSettings);
+  const [productPromos, setProductPromos] = useState<ProductPromo[]>([]);
+  const [promosLoading, setPromosLoading] = useState(false);
+  const [collectedPromos, setCollectedPromos] = useState<string[]>(() => readCollectedPromos());
 
   useEffect(() => {
     let alive = true;
@@ -72,6 +115,37 @@ export default function ProductPage() {
   }, [product?.id]);
 
   useEffect(() => {
+    let alive = true;
+    fetchPublicPlatformSettings()
+      .then((settings) => { if (alive) setPlatformSettings(settings); })
+      .catch(() => { if (alive) setPlatformSettings(defaultPlatformSettings); });
+    return () => { alive = false; };
+  }, []);
+
+  useEffect(() => {
+    let alive = true;
+    if (!product?.id) {
+      setProductPromos([]);
+      return;
+    }
+    setPromosLoading(true);
+    api.get<{ promos?: ProductPromo[]; coupons?: ProductPromo[]; vouchers?: ProductPromo[] }>(`/promos/product/${encodeURIComponent(product.id)}`)
+      .then((res) => {
+        if (!alive) return;
+        const rows = Array.isArray(res.promos) ? res.promos : (Array.isArray(res.coupons) ? res.coupons : (Array.isArray(res.vouchers) ? res.vouchers : []));
+        const unique = new Map<string, ProductPromo>();
+        rows.forEach((promo) => {
+          const code = String(promo?.code || '').trim().toUpperCase();
+          if (code) unique.set(code, { ...promo, code });
+        });
+        setProductPromos(Array.from(unique.values()).slice(0, 6));
+      })
+      .catch(() => { if (alive) setProductPromos([]); })
+      .finally(() => { if (alive) setPromosLoading(false); });
+    return () => { alive = false; };
+  }, [product?.id]);
+
+  useEffect(() => {
     setSelectedColor('');
     setSelectedSize('');
     setActiveImage(0);
@@ -93,6 +167,7 @@ export default function ProductPage() {
   }
 
   const images = product.images?.length ? product.images : [product.image];
+  const frameImage = getProductFrameImage(product, platformSettings);
   const displayPrice = getSalePrice(product);
   const displayOriginalPrice = getDisplayOriginalPrice(product);
   const displayDiscount = getSaleDiscount(product);
@@ -141,6 +216,15 @@ export default function ProductPage() {
     setTimeout(() => setAdded(false), 2000);
   };
 
+  const collectPromo = async (code: string) => {
+    const normalized = String(code || '').trim().toUpperCase();
+    if (!normalized) return;
+    const next = Array.from(new Set([...collectedPromos, normalized]));
+    setCollectedPromos(next);
+    saveCollectedPromos(next);
+    try { await navigator.clipboard?.writeText(normalized); } catch {}
+  };
+
   return (
     <div className="bg-gray-50 min-h-screen">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4">
@@ -158,12 +242,17 @@ export default function ProductPage() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-10">
           {/* Image Gallery */}
           <div className="space-y-3">
-            <div className="bg-white rounded-2xl overflow-hidden border border-gray-100 aspect-square">
+            <div className="relative bg-white rounded-2xl overflow-hidden border border-gray-100 aspect-square">
               <img
                 src={images[activeImage]}
                 alt={product.name}
                 className="w-full h-full object-cover"
               />
+              {frameImage && (
+                <span className="absolute top-3 left-3 z-20 w-20 h-20 sm:w-24 sm:h-24 rounded-2xl overflow-hidden pointer-events-none drop-shadow-lg bg-white/10">
+                  <img src={frameImage} alt="Product frame" className="w-full h-full object-contain" />
+                </span>
+              )}
             </div>
             {images.length > 1 && (
               <div className="flex gap-2">
@@ -180,6 +269,59 @@ export default function ProductPage() {
                 ))}
               </div>
             )}
+
+            <div className="bg-white rounded-2xl border border-orange-100 p-3 shadow-sm">
+              <div className="flex items-center justify-between gap-2 mb-2">
+                <div className="flex items-center gap-2">
+                  <span className="w-8 h-8 rounded-full bg-orange-50 text-orange-500 flex items-center justify-center"><TicketPercent size={16} /></span>
+                  <div>
+                    <p className="text-sm font-black text-gray-900">Available vouchers/promos</p>
+                    <p className="text-xs text-gray-500">Collect now and use the code at checkout.</p>
+                  </div>
+                </div>
+                {productPromos.length > 0 && <span className="text-xs font-bold text-orange-600">{productPromos.length} available</span>}
+              </div>
+
+              {promosLoading ? (
+                <div className="grid grid-cols-2 gap-2">
+                  {[1, 2].map((item) => <div key={item} className="h-16 rounded-xl bg-orange-50 animate-pulse" />)}
+                </div>
+              ) : productPromos.length === 0 ? (
+                <div className="rounded-xl bg-gray-50 border border-dashed border-gray-200 p-3 text-xs text-gray-500">
+                  No product voucher is available right now.
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {productPromos.map((promo) => {
+                    const code = String(promo.code || '').toUpperCase();
+                    const collected = collectedPromos.includes(code);
+                    return (
+                      <div key={promo.id || code} className="relative overflow-hidden rounded-xl border border-orange-100 bg-gradient-to-br from-orange-50 to-white p-2.5">
+                        <div className="flex items-start gap-2">
+                          {promo.image ? (
+                            <img src={promo.image} alt={code} className="w-10 h-10 rounded-lg object-cover bg-white border" />
+                          ) : (
+                            <span className="w-10 h-10 rounded-lg bg-orange-500 text-white flex items-center justify-center shrink-0"><Gift size={17} /></span>
+                          )}
+                          <div className="min-w-0 flex-1">
+                            <p className="text-[11px] font-black text-orange-600 uppercase leading-tight">{discountText(promo)}</p>
+                            <p className="text-sm font-black text-gray-900 truncate tracking-wide">{code}</p>
+                            {promo.minOrderAmount ? <p className="text-[11px] text-gray-500">Min ৳{Number(promo.minOrderAmount).toLocaleString()}</p> : null}
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => collectPromo(code)}
+                          className={`mt-2 w-full rounded-lg py-1.5 text-xs font-black transition ${collected ? 'bg-green-50 text-green-600 border border-green-100' : 'bg-orange-500 text-white hover:bg-orange-600'}`}
+                        >
+                          {collected ? 'Collected' : 'Collect'}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Product Info */}

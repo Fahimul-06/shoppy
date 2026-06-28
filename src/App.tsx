@@ -6,7 +6,6 @@ import Footer from './components/Footer';
 import BottomNav from './components/BottomNav';
 import CartDrawer from './components/CartDrawer';
 import CustomerCareChat from './components/CustomerCareChat';
-import HeaderDisplayBanner from './components/HeaderDisplayBanner';
 import HomePage from './pages/HomePage';
 import ProductPage from './pages/ProductPage';
 import CategoryPage from './pages/CategoryPage';
@@ -35,7 +34,6 @@ function StoreLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-gray-50 pb-16 lg:pb-0 flex flex-col">
       <Header />
-      <HeaderDisplayBanner />
       <main className="flex-1">{children}</main>
       <Footer />
       <BottomNav />

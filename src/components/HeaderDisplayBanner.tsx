@@ -34,7 +34,7 @@ export default function HeaderDisplayBanner() {
 
   return (
     <section className="bg-white border-b border-gray-100">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-2">
+      <div className="w-full px-2 sm:px-4 lg:px-6 py-2">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
           {banners.slice(0, 3).map((banner) => {
             const to = banner.link || `/display/${banner.id}`;
@@ -42,7 +42,7 @@ export default function HeaderDisplayBanner() {
               <Link
                 key={banner.id}
                 to={to}
-                className="relative block overflow-hidden rounded-xl h-16 sm:h-20 bg-gray-100 border border-orange-100 shadow-sm group"
+                className="relative block overflow-hidden rounded-xl h-14 sm:h-16 lg:h-20 bg-gray-100 border border-orange-100 shadow-sm group"
               >
                 <img src={banner.image} alt={banner.title || labelFor(banner.placement)} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
                 <div className="absolute inset-0 bg-gradient-to-r from-black/50 via-black/15 to-transparent flex items-center px-4">

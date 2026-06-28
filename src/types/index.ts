@@ -67,6 +67,12 @@ export interface HeroSlide {
   image: string;
   title: string;
   subtitle: string;
+  link?: string;
+  placement?: 'hero' | 'header';
+  bannerType?: 'generic' | 'event' | 'voucher' | 'campaign';
+  categories?: string[];
+  brands?: string[];
+  products?: Product[];
 }
 
 export interface Review {

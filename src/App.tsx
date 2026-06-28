@@ -23,6 +23,7 @@ import ReturnsPage from './pages/ReturnsPage';
 import CancellationsPage from './pages/CancellationsPage';
 import NotificationsPage from './pages/NotificationsPage';
 import SellerShopPage from './pages/SellerShopPage';
+import PromotionProductsPage from './pages/PromotionProductsPage';
 import SellerRegisterPage from './pages/seller/SellerRegisterPage';
 import SellerLoginPage from './pages/seller/SellerLoginPage';
 import SellerDashboardPage from './pages/seller/SellerDashboardPage';
@@ -68,6 +69,7 @@ export default function App() {
           <Route path="/returns" element={<StorePage><ReturnsPage /></StorePage>} />
           <Route path="/cancellations" element={<StorePage><CancellationsPage /></StorePage>} />
           <Route path="/notifications" element={<StorePage><NotificationsPage /></StorePage>} />
+          <Route path="/promotion/:kind/:id" element={<StorePage><PromotionProductsPage /></StorePage>} />
 
           {/* Seller routes */}
           <Route path="/seller/register" element={<SellerRegisterPage />} />

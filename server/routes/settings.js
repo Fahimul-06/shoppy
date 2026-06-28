@@ -13,6 +13,8 @@ const defaults = {
   flashSaleStartsAt: null,
   flashSaleEndsAt: null,
   flashSaleSlots: [],
+  dailySaleBanner: { mode: 'color', colorFrom: '#f97316', colorTo: '#ef4444', image: '' },
+  flashSaleBanner: { mode: 'color', colorFrom: '#dc2626', colorTo: '#f97316', image: '' },
 };
 
 export async function getPlatformSettings() {

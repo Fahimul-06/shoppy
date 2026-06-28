@@ -16,6 +16,18 @@ const platformSettingSchema = new mongoose.Schema({
     endsAt: { type: Date, default: null },
     active: { type: Boolean, default: true },
   }],
+  dailySaleBanner: {
+    mode: { type: String, enum: ['color', 'image'], default: 'color' },
+    colorFrom: { type: String, default: '#f97316' },
+    colorTo: { type: String, default: '#ef4444' },
+    image: { type: String, default: '' },
+  },
+  flashSaleBanner: {
+    mode: { type: String, enum: ['color', 'image'], default: 'color' },
+    colorFrom: { type: String, default: '#dc2626' },
+    colorTo: { type: String, default: '#f97316' },
+    image: { type: String, default: '' },
+  },
 }, { timestamps: true });
 
 toJSON(platformSettingSchema);

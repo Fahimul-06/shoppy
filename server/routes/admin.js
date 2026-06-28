@@ -88,6 +88,16 @@ function cleanPlatformSettingsPayload(body = {}) {
     const date = new Date(value);
     return Number.isNaN(date.getTime()) ? null : date;
   };
+  const cleanColor = (value, fallback) => {
+    const raw = String(value || '').trim();
+    return /^#[0-9a-fA-F]{6}$/.test(raw) ? raw : fallback;
+  };
+  const cleanBanner = (banner, defaults) => ({
+    mode: banner?.mode === 'image' ? 'image' : 'color',
+    colorFrom: cleanColor(banner?.colorFrom, defaults.colorFrom),
+    colorTo: cleanColor(banner?.colorTo, defaults.colorTo),
+    image: String(banner?.image || '').trim().slice(0, 500),
+  });
   const cleanFlashSaleSlots = (slots) => {
     const input = Array.isArray(slots) ? slots : [];
     return input.slice(0, 6).map((slot, index) => {
@@ -112,6 +122,8 @@ function cleanPlatformSettingsPayload(body = {}) {
     flashSaleStartsAt: firstSlot?.startsAt || dateOrNull(body.flashSaleStartsAt),
     flashSaleEndsAt: firstSlot?.endsAt || dateOrNull(body.flashSaleEndsAt),
     flashSaleSlots,
+    dailySaleBanner: cleanBanner(body.dailySaleBanner, { colorFrom: '#f97316', colorTo: '#ef4444' }),
+    flashSaleBanner: cleanBanner(body.flashSaleBanner, { colorFrom: '#dc2626', colorTo: '#f97316' }),
   };
 }
 

@@ -11,8 +11,10 @@ import ChatMessage from '../models/ChatMessage.js';
 import CustomerCareMessage from '../models/CustomerCareMessage.js';
 import CustomerNotification from '../models/CustomerNotification.js';
 import HeroSlide from '../models/HeroSlide.js';
+import PlatformSetting from '../models/PlatformSetting.js';
 import { isPromoActive } from '../utils/promo.js';
 import { requireAdmin, signToken } from '../middleware/auth.js';
+import { getPlatformSettings } from './settings.js';
 const router = express.Router();
 const adminUser = (u) => ({ id: u.id, fullName: u.fullName, email: u.email, phone: u.phone, role: u.role });
 
@@ -74,6 +76,28 @@ function formatCustomerSummary(user, orders) {
   };
 }
 
+
+
+function cleanPlatformSettingsPayload(body = {}) {
+  const number = (value, fallback = 0) => {
+    const n = Number(value);
+    return Number.isFinite(n) ? Math.max(0, n) : fallback;
+  };
+  const dateOrNull = (value) => {
+    if (!value) return null;
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? null : date;
+  };
+  return {
+    deliveryCharge: number(body.deliveryCharge, 120),
+    freeDeliveryMin: number(body.freeDeliveryMin, 2000),
+    platformFeeType: body.platformFeeType === 'percent' ? 'percent' : 'fixed',
+    platformFee: number(body.platformFee, 0),
+    vatPercent: Math.min(100, number(body.vatPercent, 0)),
+    flashSaleStartsAt: dateOrNull(body.flashSaleStartsAt),
+    flashSaleEndsAt: dateOrNull(body.flashSaleEndsAt),
+  };
+}
 
 function clampSaleDiscount(value) {
   const n = Number(value || 0);
@@ -213,6 +237,22 @@ router.get('/stats', requireAdmin, async (_req, res) => {
     Seller.countDocuments(), Seller.countDocuments({ status: 'pending' }), Product.countDocuments(), Order.countDocuments(), PromoCode.countDocuments({ active: true }), Order.find({ paymentStatus: 'paid' }),
   ]);
   res.json({ stats: { totalSellers, pendingSellers, totalProducts, totalOrders, activePromos, revenue: paidOrders.reduce((s, o) => s + Number(o.totalAmount || 0), 0) } });
+});
+
+
+router.get('/platform-settings', requireAdmin, async (_req, res) => {
+  const settings = await getPlatformSettings();
+  res.json({ settings });
+});
+
+router.put('/platform-settings', requireAdmin, async (req, res) => {
+  const payload = cleanPlatformSettingsPayload(req.body || {});
+  const settings = await PlatformSetting.findOneAndUpdate(
+    { key: 'default' },
+    { $set: payload, $setOnInsert: { key: 'default' } },
+    { new: true, upsert: true, setDefaultsOnInsert: true, runValidators: true }
+  );
+  res.json({ settings });
 });
 
 router.get('/notification-counts', requireAdmin, async (_req, res) => {

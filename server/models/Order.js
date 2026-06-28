@@ -21,6 +21,8 @@ const orderSchema = new mongoose.Schema({
   promoCode: { type: String, uppercase: true, trim: true, default: '' },
   promo: { type: mongoose.Schema.Types.ObjectId, ref: 'PromoCode', default: null },
   deliveryFee: { type: Number, default: 0 },
+  platformFee: { type: Number, default: 0 },
+  vatAmount: { type: Number, default: 0 },
   totalAmount: Number,
   paymentMethod: String,
   paymentDetails: { type: Object, default: {} },

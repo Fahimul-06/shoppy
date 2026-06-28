@@ -1,0 +1,42 @@
+import express from 'express';
+import PlatformSetting from '../models/PlatformSetting.js';
+
+const router = express.Router();
+
+const defaults = {
+  key: 'default',
+  deliveryCharge: 120,
+  freeDeliveryMin: 2000,
+  platformFeeType: 'fixed',
+  platformFee: 0,
+  vatPercent: 0,
+  flashSaleStartsAt: null,
+  flashSaleEndsAt: null,
+};
+
+export async function getPlatformSettings() {
+  const settings = await PlatformSetting.findOneAndUpdate(
+    { key: 'default' },
+    { $setOnInsert: defaults },
+    { new: true, upsert: true, setDefaultsOnInsert: true }
+  );
+  return settings;
+}
+
+export function calculateOrderCharges(subtotalAfterDiscount, settings) {
+  const amount = Math.max(0, Number(subtotalAfterDiscount || 0));
+  const deliveryCharge = amount >= Number(settings.freeDeliveryMin || 0) ? 0 : Number(settings.deliveryCharge || 0);
+  const platformFee = settings.platformFeeType === 'percent'
+    ? Math.round((amount * Number(settings.platformFee || 0)) / 100)
+    : Number(settings.platformFee || 0);
+  const vatAmount = Math.round(((amount + deliveryCharge + platformFee) * Number(settings.vatPercent || 0)) / 100);
+  const total = Math.max(0, amount + deliveryCharge + platformFee + vatAmount);
+  return { deliveryCharge, platformFee, vatAmount, total };
+}
+
+router.get('/public', async (_req, res) => {
+  const settings = await getPlatformSettings();
+  res.json({ settings });
+});
+
+export default router;

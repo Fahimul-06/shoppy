@@ -9,10 +9,11 @@ import ChatMessage from '../models/ChatMessage.js';
 import ProductReview from '../models/ProductReview.js';
 import { requireUser } from '../middleware/auth.js';
 import { calculatePromoDiscount, isPromoActive, promoMatchesUsageConditions } from '../utils/promo.js';
+import { calculateOrderCharges, getPlatformSettings } from './settings.js';
 const router = express.Router();
 
 router.post('/', requireUser, async (req, res) => {
-  const { delivery_fee, payment_method, payment_type, bank_name, card_type, shipping_address, items } = req.body;
+  const { payment_method, payment_type, bank_name, card_type, shipping_address, items } = req.body;
   const promoCode = String(req.body?.promo_code || req.body?.promoCode || '').trim().toUpperCase();
   if (!Array.isArray(items) || items.length === 0) return res.status(400).json({ message: 'Order items are required' });
 
@@ -72,8 +73,12 @@ router.post('/', requireUser, async (req, res) => {
   if (!shippingAddress?.phone) shippingAddress.phone = req.user.phone || '';
   if (!shippingAddress?.address) return res.status(400).json({ message: 'Delivery address is required before placing order' });
 
-  const deliveryFee = Number(delivery_fee || 0);
-  const totalAmount = Math.max(0, subtotal - discountAmount) + deliveryFee;
+  const settings = await getPlatformSettings();
+  const charges = calculateOrderCharges(subtotal - discountAmount, settings);
+  const deliveryFee = charges.deliveryCharge;
+  const platformFee = charges.platformFee;
+  const vatAmount = charges.vatAmount;
+  const totalAmount = charges.total;
   const order = await Order.create({
     user: req.user.id,
     items: orderItems,
@@ -82,6 +87,8 @@ router.post('/', requireUser, async (req, res) => {
     promoCode: promoCode || '',
     promo: promo?._id || null,
     deliveryFee,
+    platformFee,
+    vatAmount,
     totalAmount,
     paymentMethod: payment_method,
     paymentDetails: { paymentType: payment_type || '', bankName: bank_name || '', cardType: card_type || '' },

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Plus, Trash2 } from 'lucide-react';
+import { Edit2, Plus, Trash2, X } from 'lucide-react';
 import { api, getToken } from '../../lib/api';
 import ImageUploader from '../../components/forms/ImageUploader';
 import { categoryOptions } from '../../data/categoryOptions';
@@ -53,6 +53,7 @@ export default function AdminPromoCodesTab() {
   const [sellers, setSellers] = useState<SellerOption[]>([]);
   const [form, setForm] = useState(emptyForm);
   const [loading, setLoading] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [error, setError] = useState('');
 
   const token = getToken('admin');
@@ -88,18 +89,79 @@ export default function AdminPromoCodesTab() {
   const bankOptions = ['BRAC Bank', 'City Bank', 'DBBL', 'Eastern Bank', 'IFIC Bank', 'Prime Bank', 'Standard Chartered', 'UCB'].map((b) => ({ value: b, label: b }));
   const cardTypeOptions = ['Visa', 'Mastercard', 'American Express', 'Debit', 'Credit'].map((c) => ({ value: c, label: c }));
 
+  const toLocalDateTimeInput = (value?: string) => {
+    if (!value) return '';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '';
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  };
+
+  const idOf = (item: any) => String(item?.id || item?._id || item || '').trim();
+
+  const payloadFromForm = () => ({
+    ...form,
+    code: form.code.trim().toUpperCase(),
+    discountValue: Number(form.discountValue),
+    minOrderAmount: Number(form.minOrderAmount || 0),
+    maxDiscountAmount: Number(form.maxDiscountAmount || 0),
+    maxUses: form.maxUses === '' ? '' : Number(form.maxUses || 0),
+  });
+
   const add = async () => {
     setLoading(true);
     setError('');
     try {
-      await api.post('/admin/promos', { ...form, discountValue: Number(form.discountValue), minOrderAmount: Number(form.minOrderAmount || 0), maxDiscountAmount: Number(form.maxDiscountAmount || 0) }, token);
+      const payload = payloadFromForm();
+      if (editingId) {
+        await api.put(`/admin/promos/${editingId}`, payload, token);
+      } else {
+        await api.post('/admin/promos', payload, token);
+      }
       setForm(emptyForm);
+      setEditingId(null);
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to save promo');
     } finally {
       setLoading(false);
     }
+  };
+
+  const startEdit = (promo: any) => {
+    setEditingId(promo.id || promo._id);
+    setForm({
+      code: promo.code || '',
+      description: promo.description || '',
+      image: promo.image || '',
+      discountType: promo.discountType || 'percentage',
+      discountValue: String(promo.discountValue ?? ''),
+      minOrderAmount: String(promo.minOrderAmount ?? 0),
+      maxDiscountAmount: String(promo.maxDiscountAmount ?? 0),
+      maxUses: promo.maxUses == null ? '' : String(promo.maxUses),
+      appliesTo: promo.appliesTo || 'all',
+      categories: Array.isArray(promo.categories) ? promo.categories : [],
+      subcategories: Array.isArray(promo.subcategories) ? promo.subcategories : [],
+      childCategories: Array.isArray(promo.childCategories) ? promo.childCategories : [],
+      brands: Array.isArray(promo.brands) ? promo.brands : [],
+      sellers: Array.isArray(promo.sellers) ? promo.sellers.map(idOf).filter(Boolean) : [],
+      products: Array.isArray(promo.products) ? promo.products.map(idOf).filter(Boolean) : [],
+      voucherType: promo.voucherType || 'general',
+      paymentTypes: Array.isArray(promo.paymentTypes) ? promo.paymentTypes : [],
+      paymentMethods: Array.isArray(promo.paymentMethods) ? promo.paymentMethods : [],
+      banks: Array.isArray(promo.banks) ? promo.banks : [],
+      cardTypes: Array.isArray(promo.cardTypes) ? promo.cardTypes : [],
+      weekendOnly: Boolean(promo.weekendOnly),
+      startsAt: toLocalDateTimeInput(promo.startsAt),
+      expiresAt: toLocalDateTimeInput(promo.expiresAt),
+      active: promo.active !== false,
+    });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setForm(emptyForm);
   };
 
   const del = async (id: string) => { await api.delete(`/admin/promos/${id}`, token); await load(); };
@@ -125,7 +187,10 @@ export default function AdminPromoCodesTab() {
   return (
     <div className="space-y-4">
       <div className="bg-white rounded-2xl border p-4">
-        <h2 className="text-xl font-black mb-1">Promo Codes</h2>
+        <div className="flex items-center justify-between gap-3 mb-1">
+          <h2 className="text-xl font-black">Promo Codes</h2>
+          {editingId && <button onClick={cancelEdit} className="text-sm font-bold text-gray-500 hover:text-gray-800 flex items-center gap-1"><X size={16}/> Cancel edit</button>}
+        </div>
         <p className="text-sm text-gray-500 mb-4">Create promos for all products or selected category, brand, seller, or products.</p>
         {error && <div className="mb-3 bg-red-50 text-red-600 border border-red-100 rounded-xl p-3 text-sm">{error}</div>}
         <div className="grid md:grid-cols-4 gap-3">
@@ -178,13 +243,13 @@ export default function AdminPromoCodesTab() {
         </div>
 
 
-        <button onClick={add} disabled={loading} className="mt-4 bg-blue-600 disabled:bg-blue-300 text-white rounded-xl font-bold px-5 py-2.5 flex items-center gap-2"><Plus size={16}/>{loading ? 'Saving...' : 'Create Promo'}</button>
+        <button onClick={add} disabled={loading} className="mt-4 bg-blue-600 disabled:bg-blue-300 text-white rounded-xl font-bold px-5 py-2.5 flex items-center gap-2"><Plus size={16}/>{loading ? 'Saving...' : editingId ? 'Update Promo' : 'Create Promo'}</button>
       </div>
 
       <div className="bg-white rounded-2xl border overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-gray-50"><tr><th className="p-3 text-left">Code</th><th>Discount</th><th>Target</th><th>Min</th><th>Uses</th><th>Active</th><th></th></tr></thead>
-          <tbody>{promos.map((p) => <tr key={p.id} className="border-t align-top"><td className="p-3 font-bold text-orange-600">{p.code}<p className="text-xs text-gray-500 font-normal">{p.description}</p></td><td className="p-3 text-center">{p.discountType === 'percentage' ? `${p.discountValue}%` : `৳${p.discountValue}`}</td><td className="p-3 max-w-md text-xs text-gray-600">{targetSummary(p)}</td><td className="p-3 text-center">৳{Number(p.minOrderAmount || 0).toLocaleString()}</td><td className="p-3 text-center">{p.usedCount || 0}{p.maxUses ? `/${p.maxUses}` : ''}</td><td className="p-3 text-center">{p.active ? 'Yes' : 'No'}</td><td className="p-3 text-right"><button onClick={() => del(p.id)} className="text-red-500 hover:text-red-600"><Trash2 size={16}/></button></td></tr>)}</tbody>
+          <tbody>{promos.map((p) => <tr key={p.id} className="border-t align-top"><td className="p-3 font-bold text-orange-600">{p.code}<p className="text-xs text-gray-500 font-normal">{p.description}</p></td><td className="p-3 text-center">{p.discountType === 'percentage' ? `${p.discountValue}%` : `৳${p.discountValue}`}</td><td className="p-3 max-w-md text-xs text-gray-600">{targetSummary(p)}</td><td className="p-3 text-center">৳{Number(p.minOrderAmount || 0).toLocaleString()}</td><td className="p-3 text-center">{p.usedCount || 0}{p.maxUses ? `/${p.maxUses}` : ''}</td><td className="p-3 text-center">{p.active ? 'Yes' : 'No'}</td><td className="p-3 text-right"><div className="flex items-center justify-end gap-2"><button onClick={() => startEdit(p)} className="text-blue-600 hover:text-blue-700" title="Edit promo"><Edit2 size={16}/></button><button onClick={() => del(p.id)} className="text-red-500 hover:text-red-600" title="Delete promo"><Trash2 size={16}/></button></div></td></tr>)}</tbody>
         </table>
       </div>
     </div>

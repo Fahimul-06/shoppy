@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Image as ImageIcon, Plus, Trash2 } from 'lucide-react';
+import { Edit2, Image as ImageIcon, Plus, Trash2, X } from 'lucide-react';
 import { api, getToken } from '../../lib/api';
 import ImageUploader from '../../components/forms/ImageUploader';
 
@@ -51,6 +51,7 @@ export default function AdminBannersTab() {
   const [sellers, setSellers] = useState<SellerOption[]>([]);
   const [form, setForm] = useState(emptyForm);
   const [loading, setLoading] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [msg, setMsg] = useState('');
   const [error, setError] = useState('');
   const [productSearch, setProductSearch] = useState('');
@@ -118,14 +119,45 @@ export default function AdminBannersTab() {
         link: form.link || (form.placement === 'hero' ? '' : undefined),
         sortOrder: Number(form.sortOrder || 0),
       };
-      await api.post('/admin/banners', payload, token);
+      if (editingId) {
+        await api.put(`/admin/banners/${editingId}`, payload, token);
+        setMsg('Display photo updated');
+      } else {
+        await api.post('/admin/banners', payload, token);
+        setMsg('Display photo saved');
+      }
       setForm(emptyForm);
+      setEditingId(null);
       setProductSearch('');
-      setMsg('Display photo saved');
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to save display photo');
     } finally { setLoading(false); }
+  };
+
+  const getItemId = (item: any) => String(item?.id || item?._id || item || '');
+
+  const startEdit = (banner: Banner) => {
+    setEditingId(banner.id);
+    setForm({
+      image: banner.image || '',
+      title: banner.title || '',
+      subtitle: banner.subtitle || '',
+      link: banner.link || '',
+      placement: (banner.placement === 'header' ? 'hero' : (banner.placement || 'hero')) as Placement,
+      relatedType: (banner.relatedType || 'all') as RelatedType,
+      relatedValue: banner.relatedValue || '',
+      products: Array.isArray(banner.products) ? banner.products.map(getItemId).filter(Boolean) : [],
+      sortOrder: String(banner.sortOrder || 0),
+      active: banner.active !== false,
+    });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setForm(emptyForm);
+    setProductSearch('');
   };
 
   const remove = async (id: string) => {
@@ -155,7 +187,10 @@ export default function AdminBannersTab() {
   return (
     <div className="space-y-5">
       <div className="bg-white rounded-2xl border p-5">
-        <h2 className="text-xl font-black flex items-center gap-2"><ImageIcon /> Hero, Event, Campaign & Voucher Photos</h2>
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-xl font-black flex items-center gap-2"><ImageIcon /> Hero, Event, Campaign & Voucher Photos</h2>
+          {editingId && <button onClick={cancelEdit} className="text-sm font-bold text-gray-500 hover:text-gray-800 flex items-center gap-1"><X size={16}/> Cancel edit</button>}
+        </div>
         <p className="text-sm text-gray-500 mt-1">
           Upload homepage hero photos and the slim under-header event/campaign/voucher photos. Event, campaign, and voucher photos can open related product pages when customers click them.
         </p>
@@ -236,7 +271,7 @@ export default function AdminBannersTab() {
           <label className="flex items-center gap-2 text-sm font-semibold md:col-span-2"><input type="checkbox" checked={form.active} onChange={(e) => setForm({ ...form, active: e.target.checked })} /> Active</label>
           <ImageUploader label="Display photo" helperText="Upload hero/event/campaign/voucher photo" value={form.image} onChange={(url) => setForm({ ...form, image: url })} token={token} />
         </div>
-        <button onClick={save} disabled={loading} className="mt-4 bg-blue-600 disabled:bg-blue-300 text-white rounded-xl px-5 py-2.5 font-bold flex items-center gap-2"><Plus size={16}/>{loading ? 'Saving...' : 'Add display photo'}</button>
+        <button onClick={save} disabled={loading} className="mt-4 bg-blue-600 disabled:bg-blue-300 text-white rounded-xl px-5 py-2.5 font-bold flex items-center gap-2"><Plus size={16}/>{loading ? 'Saving...' : editingId ? 'Update display photo' : 'Add display photo'}</button>
       </div>
 
       <div className="grid md:grid-cols-2 gap-4">
@@ -254,7 +289,10 @@ export default function AdminBannersTab() {
                     <p className="text-xs text-gray-500 mt-1">Related: {banner.relatedType || 'all'} {banner.relatedValue ? `• ${banner.relatedValue}` : ''}</p>
                   )}
                 </div>
-                <button onClick={() => remove(banner.id)} className="text-red-500 hover:text-red-600"><Trash2 size={17}/></button>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => startEdit(banner)} className="text-blue-600 hover:text-blue-700" title="Edit banner"><Edit2 size={17}/></button>
+                  <button onClick={() => remove(banner.id)} className="text-red-500 hover:text-red-600" title="Delete banner"><Trash2 size={17}/></button>
+                </div>
               </div>
             </div>
           </div>

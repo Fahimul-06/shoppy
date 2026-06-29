@@ -983,6 +983,13 @@ router.patch('/delivery-support/:deliveryManId/call/:messageId/status', requireA
   }
   const io = req.app.get('io');
   io?.to(`delivery:${deliveryMan._id}:support`).emit('delivery-support:message', message);
+  if (message.callRoomName && status === 'joined') {
+    io?.to(`delivery:${deliveryMan._id}:support`).emit('delivery-support:call-answered', {
+      roomId: message.callRoomName,
+      callUrl: message.callUrl || `/call/${message.callRoomName}`,
+      status: 'joined',
+    });
+  }
   io?.to('admin:delivery-support').emit('delivery-support:refresh');
   if (message.callRoomName && status === 'ended') io?.to(`call:${message.callRoomName}`).emit('call:ended', { roomId: message.callRoomName, reason: 'ended', endedBy: 'admin' });
   res.json({ message });

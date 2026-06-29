@@ -221,6 +221,13 @@ io.on('connection', (socket) => {
       const room = await InternetCallRoom.findOneAndUpdate({ roomId }, { $set: patch }, { new: true }).populate('deliveryMan', 'fullName phone deliveryCode role');
       if (room?.supportMessage) await DeliverySupportMessage.findByIdAndUpdate(room.supportMessage, { $set: { callStatus: room.status } });
       io.to(`call:${roomId}`).emit('call:room', { room, role: check.role });
+      if (check.role === 'admin' && room?.deliveryMan) {
+        io.to(`delivery:${room.deliveryMan._id || room.deliveryMan}:support`).emit('delivery-support:call-answered', {
+          roomId,
+          callUrl: `/call/${roomId}`,
+          status: 'joined',
+        });
+      }
       io.to('admin:delivery-support').emit('delivery-support:refresh');
       ack?.({ ok: true, room, role: check.role });
     } catch (error) {

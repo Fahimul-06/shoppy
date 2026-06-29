@@ -90,6 +90,37 @@ router.get('/support', requireDeliveryMan, async (req, res) => {
   res.json({ messages });
 });
 
+
+router.post('/support/call', requireDeliveryMan, async (req, res) => {
+  const deliveryCode = req.deliveryMan.deliveryCode || String(req.deliveryMan._id).slice(-6);
+  const roomName = `shoppy-delivery-${deliveryCode}-${Date.now()}`.replace(/[^a-zA-Z0-9-]/g, '');
+  const callUrl = `https://meet.jit.si/${roomName}`;
+  const message = await DeliverySupportMessage.create({
+    deliveryMan: req.deliveryMan._id,
+    senderType: 'delivery',
+    sender: req.deliveryMan._id,
+    message: 'ডেলিভারি ম্যান ইন্টারনেট কল শুরু করেছেন। Customer care can join the virtual call.',
+    messageType: 'call',
+    callRoomName: roomName,
+    callUrl,
+    callStatus: 'ringing',
+    language: 'bn',
+    readByAdmin: false,
+    readByDelivery: true,
+  });
+  res.status(201).json({ message, callUrl, roomName });
+});
+
+router.patch('/support/call/:messageId/end', requireDeliveryMan, async (req, res) => {
+  const message = await DeliverySupportMessage.findOneAndUpdate(
+    { _id: req.params.messageId, deliveryMan: req.deliveryMan._id, messageType: 'call' },
+    { $set: { callStatus: 'ended' } },
+    { new: true }
+  );
+  if (!message) return res.status(404).json({ message: 'Call session not found' });
+  res.json({ message });
+});
+
 router.post('/support', requireDeliveryMan, async (req, res) => {
   const text = String(req.body?.message || '').trim();
   if (!text) return res.status(400).json({ message: 'Message is required' });

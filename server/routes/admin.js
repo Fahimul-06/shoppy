@@ -902,6 +902,21 @@ router.post('/delivery-support/:deliveryManId', requireAdminPermission('customer
   res.status(201).json({ message: chatMessage });
 });
 
+
+router.patch('/delivery-support/:deliveryManId/call/:messageId/status', requireAdminPermission('customerCare'), async (req, res) => {
+  const status = String(req.body?.status || '').trim();
+  if (!['joined', 'ended', 'missed'].includes(status)) return res.status(400).json({ message: 'Invalid call status' });
+  const deliveryMan = await User.findOne({ _id: req.params.deliveryManId, role: 'delivery' }).select('_id');
+  if (!deliveryMan) return res.status(404).json({ message: 'Delivery man not found' });
+  const message = await DeliverySupportMessage.findOneAndUpdate(
+    { _id: req.params.messageId, deliveryMan: deliveryMan._id, messageType: 'call' },
+    { $set: { callStatus: status, readByAdmin: true } },
+    { new: true }
+  );
+  if (!message) return res.status(404).json({ message: 'Call session not found' });
+  res.json({ message });
+});
+
 function normalizePromoPayload(body = {}) {
   const arrayOfStrings = (value) => Array.isArray(value) ? value.map((x) => String(x || '').trim()).filter(Boolean) : [];
   const arrayOfIds = (value) => Array.isArray(value) ? value.map((x) => String(x || '').trim()).filter(Boolean) : [];

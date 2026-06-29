@@ -2,6 +2,7 @@ import express from 'express';
 import bcrypt from 'bcryptjs';
 import User from '../models/User.js';
 import Order from '../models/Order.js';
+import DeliverySupportMessage from '../models/DeliverySupportMessage.js';
 import { requireDeliveryMan, signToken } from '../middleware/auth.js';
 import { resolvePaymentStatus } from '../utils/payment.js';
 
@@ -12,6 +13,8 @@ const deliveryUser = (u) => ({
   fullName: u.fullName,
   phone: u.phone,
   nid: u.nid || '',
+  deliveryCode: u.deliveryCode || '',
+  deliveryBarcode: u.deliveryBarcode || '',
   role: 'delivery',
 });
 
@@ -35,11 +38,14 @@ const safeOrder = (order) => ({
 });
 
 router.post('/login', async (req, res) => {
-  const phone = String(req.body?.phone || '').trim();
+  const loginId = String(req.body?.loginId || req.body?.deliveryCode || req.body?.idNumber || req.body?.phone || '').trim();
   const password = String(req.body?.password || '');
-  const user = await User.findOne({ role: 'delivery', phone });
+  const query = /^\d{6}$/.test(loginId)
+    ? { role: 'delivery', deliveryCode: loginId }
+    : { role: 'delivery', phone: loginId };
+  const user = await User.findOne(query);
   if (!user || !(await bcrypt.compare(password, user.passwordHash))) {
-    return res.status(401).json({ message: 'Invalid delivery man credentials' });
+    return res.status(401).json({ message: 'Invalid delivery ID or password' });
   }
   res.json({ token: signToken({ id: user.id, role: 'delivery' }), user: deliveryUser(user) });
 });
@@ -57,24 +63,46 @@ router.get('/orders', requireDeliveryMan, async (req, res) => {
 
 router.patch('/orders/:id/status', requireDeliveryMan, async (req, res) => {
   const status = String(req.body?.status || '').trim();
-  if (!['shipped', 'delivered'].includes(status)) return res.status(400).json({ message: 'Delivery man can only mark shipped or delivered' });
-  const existing = await Order.findOne({ _id: req.params.id, deliveryMan: req.deliveryMan._id });
-  if (!existing) return res.status(404).json({ message: 'Assigned order not found' });
-  const update = { status };
-  if (status === 'delivered') {
-    update.paymentStatus = resolvePaymentStatus({
-      paymentMethod: existing.paymentMethod,
-      paymentDetails: existing.paymentDetails || {},
-      status,
-      currentPaymentStatus: existing.paymentStatus,
-    });
-  }
+  if (status !== 'delivered') return res.status(400).json({ message: 'Delivery man can only mark delivered' });
+  const existing = await Order.findOne({ _id: req.params.id, deliveryMan: req.deliveryMan._id, status: 'shipped' });
+  if (!existing) return res.status(404).json({ message: 'Shipped assigned order not found' });
+  const update = { status: 'delivered' };
+  update.paymentStatus = resolvePaymentStatus({
+    paymentMethod: existing.paymentMethod,
+    paymentDetails: existing.paymentDetails || {},
+    status: 'delivered',
+    currentPaymentStatus: existing.paymentStatus,
+  });
   const order = await Order.findOneAndUpdate(
     { _id: req.params.id, deliveryMan: req.deliveryMan._id },
     { $set: update },
     { new: true }
   ).populate('user');
   res.json({ order: safeOrder(order) });
+});
+
+router.get('/support', requireDeliveryMan, async (req, res) => {
+  await DeliverySupportMessage.updateMany(
+    { deliveryMan: req.deliveryMan._id, senderType: 'admin', readByDelivery: false },
+    { readByDelivery: true }
+  );
+  const messages = await DeliverySupportMessage.find({ deliveryMan: req.deliveryMan._id }).sort({ createdAt: 1 });
+  res.json({ messages });
+});
+
+router.post('/support', requireDeliveryMan, async (req, res) => {
+  const text = String(req.body?.message || '').trim();
+  if (!text) return res.status(400).json({ message: 'Message is required' });
+  const message = await DeliverySupportMessage.create({
+    deliveryMan: req.deliveryMan._id,
+    senderType: 'delivery',
+    sender: req.deliveryMan._id,
+    message: text,
+    language: String(req.body?.language || 'bn').trim() || 'bn',
+    readByAdmin: false,
+    readByDelivery: true,
+  });
+  res.status(201).json({ message });
 });
 
 export default router;

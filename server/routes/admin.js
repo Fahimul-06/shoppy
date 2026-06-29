@@ -10,6 +10,7 @@ import CancellationRequest from '../models/CancellationRequest.js';
 import ChatMessage from '../models/ChatMessage.js';
 import CustomerCareMessage from '../models/CustomerCareMessage.js';
 import CustomerNotification from '../models/CustomerNotification.js';
+import DeliverySupportMessage from '../models/DeliverySupportMessage.js';
 import HeroSlide from '../models/HeroSlide.js';
 import PlatformSetting from '../models/PlatformSetting.js';
 import { isPromoActive } from '../utils/promo.js';
@@ -52,6 +53,25 @@ async function ensureEmployeeIdentity(employee) {
   return employee;
 }
 
+function makeDeliveryBarcodeSvgDataUrl(code) {
+  return makeEmployeeBarcodeSvgDataUrl(code);
+}
+
+async function generateUniqueDeliveryCode() {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    const code = String(Math.floor(100000 + Math.random() * 900000));
+    const exists = await User.exists({ $or: [{ deliveryCode: code }, { employeeCode: code }] });
+    if (!exists) return code;
+  }
+  return String(Date.now()).slice(-6).padStart(6, '0');
+}
+
+async function ensureDeliveryIdentity(deliveryMan) {
+  if (!deliveryMan.deliveryCode) deliveryMan.deliveryCode = await generateUniqueDeliveryCode();
+  if (!deliveryMan.deliveryBarcode) deliveryMan.deliveryBarcode = makeDeliveryBarcodeSvgDataUrl(deliveryMan.deliveryCode);
+  return deliveryMan;
+}
+
 const adminUser = (u) => ({
   id: u.id,
   fullName: u.fullName,
@@ -72,6 +92,8 @@ const deliveryManPayload = (u) => ({
   fullName: u.fullName,
   phone: u.phone,
   nid: u.nid || '',
+  deliveryCode: u.deliveryCode || '',
+  deliveryBarcode: u.deliveryBarcode || '',
   createdAt: u.createdAt,
 });
 
@@ -491,6 +513,12 @@ router.delete('/employees/:id', requireAdminPermission('employees'), async (req,
 
 router.get('/delivery-men', requireAdminPermission('deliveryMen'), async (_req, res) => {
   const deliveryMen = await User.find({ role: 'delivery' }).sort({ createdAt: -1 });
+  let changed = false;
+  for (const man of deliveryMen) {
+    const beforeCode = man.deliveryCode;
+    await ensureDeliveryIdentity(man);
+    if (man.deliveryCode !== beforeCode || man.isModified?.()) { await man.save(); changed = true; }
+  }
   res.json({ deliveryMen: deliveryMen.map(deliveryManPayload) });
 });
 
@@ -507,7 +535,7 @@ router.post('/delivery-men', requireAdminPermission('deliveryMen'), async (req, 
   let email = `${digits}@delivery.shoppy.local`;
   let counter = 1;
   while (await User.exists({ email })) email = `${digits}.${counter++}@delivery.shoppy.local`;
-  const deliveryMan = await User.create({
+  const deliveryMan = new User({
     fullName,
     phone,
     nid,
@@ -516,7 +544,9 @@ router.post('/delivery-men', requireAdminPermission('deliveryMen'), async (req, 
     passwordHash: await bcrypt.hash(password, 10),
     createdByAdmin: req.user._id,
   });
-  res.status(201).json({ deliveryMan: deliveryManPayload(deliveryMan), loginPhone: phone });
+  await ensureDeliveryIdentity(deliveryMan);
+  await deliveryMan.save();
+  res.status(201).json({ deliveryMan: deliveryManPayload(deliveryMan), loginId: deliveryMan.deliveryCode });
 });
 
 router.put('/delivery-men/:id', requireAdminPermission('deliveryMen'), async (req, res) => {
@@ -526,6 +556,7 @@ router.put('/delivery-men/:id', requireAdminPermission('deliveryMen'), async (re
   if (req.body?.phone !== undefined) deliveryMan.phone = String(req.body.phone || '').trim();
   if (req.body?.nid !== undefined) deliveryMan.nid = String(req.body.nid || '').trim();
   if (req.body?.password) deliveryMan.passwordHash = await bcrypt.hash(String(req.body.password), 10);
+  await ensureDeliveryIdentity(deliveryMan);
   await deliveryMan.save();
   res.json({ deliveryMan: deliveryManPayload(deliveryMan) });
 });
@@ -811,6 +842,61 @@ router.post('/customer-care/:customerId', requireAdminPermission('customerCare')
     sender: req.user._id,
     message: text,
     readByCustomer: false,
+    readByAdmin: true,
+  });
+  res.status(201).json({ message: chatMessage });
+});
+
+
+router.get('/delivery-support', requireAdminPermission('customerCare'), async (_req, res) => {
+  const messages = await DeliverySupportMessage.find()
+    .populate({ path: 'deliveryMan', select: 'fullName phone nid deliveryCode deliveryBarcode' })
+    .sort({ createdAt: -1 });
+
+  const groups = new Map();
+  for (const message of messages) {
+    const deliveryId = message.deliveryMan?._id?.toString?.() || message.deliveryMan?.toString?.();
+    if (!deliveryId) continue;
+    if (!groups.has(deliveryId)) {
+      groups.set(deliveryId, {
+        id: deliveryId,
+        deliveryMan: message.deliveryMan,
+        lastMessage: message,
+        messageCount: 0,
+        unreadForAdmin: 0,
+      });
+    }
+    const group = groups.get(deliveryId);
+    group.messageCount += 1;
+    if (!message.readByAdmin && message.senderType === 'delivery') group.unreadForAdmin += 1;
+  }
+
+  res.json({ conversations: Array.from(groups.values()) });
+});
+
+router.get('/delivery-support/:deliveryManId', requireAdminPermission('customerCare'), async (req, res) => {
+  const deliveryMan = await User.findOne({ _id: req.params.deliveryManId, role: 'delivery' }).select('fullName phone nid deliveryCode deliveryBarcode role');
+  if (!deliveryMan) return res.status(404).json({ message: 'Delivery man not found' });
+  await DeliverySupportMessage.updateMany(
+    { deliveryMan: deliveryMan._id, senderType: 'delivery', readByAdmin: false },
+    { readByAdmin: true }
+  );
+  const messages = await DeliverySupportMessage.find({ deliveryMan: deliveryMan._id }).sort({ createdAt: 1 });
+  res.json({ deliveryMan, messages });
+});
+
+router.post('/delivery-support/:deliveryManId', requireAdminPermission('customerCare'), async (req, res) => {
+  const text = String(req.body?.message || '').trim();
+  if (!text) return res.status(400).json({ message: 'Message is required' });
+  const deliveryMan = await User.findOne({ _id: req.params.deliveryManId, role: 'delivery' }).select('_id');
+  if (!deliveryMan) return res.status(404).json({ message: 'Delivery man not found' });
+  const chatMessage = await DeliverySupportMessage.create({
+    deliveryMan: deliveryMan._id,
+    senderType: 'admin',
+    sender: req.user._id,
+    message: text,
+    language: String(req.body?.language || 'bn').trim() || 'bn',
+    readByDelivery: false,
     readByAdmin: true,
   });
   res.status(201).json({ message: chatMessage });

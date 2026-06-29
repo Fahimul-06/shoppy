@@ -26,6 +26,8 @@ const userSchema = new mongoose.Schema({
   adminPosition: { type: String, trim: true },
   employeeCode: { type: String, trim: true, unique: true, sparse: true },
   employeeBarcode: { type: String, trim: true },
+  deliveryCode: { type: String, trim: true, unique: true, sparse: true },
+  deliveryBarcode: { type: String, trim: true },
   adminPermissions: [{ type: String, trim: true }],
   adminStatus: { type: String, enum: ['active', 'inactive'], default: 'active' },
   createdByAdmin: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },

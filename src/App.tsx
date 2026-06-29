@@ -33,6 +33,12 @@ import DeliveryLoginPage from './pages/delivery/DeliveryLoginPage';
 import DeliveryDashboardPage from './pages/delivery/DeliveryDashboardPage';
 import DeliveryCallRoomPage from './pages/delivery/DeliveryCallRoomPage';
 import DeliverySupportPage from './pages/delivery/DeliverySupportPage';
+import DeliveryOrdersPage from './pages/delivery/DeliveryOrdersPage';
+import HelpCenterPage from './pages/HelpCenterPage';
+import HowToBuyPage from './pages/HowToBuyPage';
+import ReturnsRefundsPage from './pages/ReturnsRefundsPage';
+import ContactUsPage from './pages/ContactUsPage';
+import OrderTrackingPage from './pages/OrderTrackingPage';
 
 function StoreLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -74,6 +80,11 @@ export default function App() {
           <Route path="/returns" element={<StorePage><ReturnsPage /></StorePage>} />
           <Route path="/cancellations" element={<StorePage><CancellationsPage /></StorePage>} />
           <Route path="/notifications" element={<StorePage><NotificationsPage /></StorePage>} />
+          <Route path="/help-center" element={<StorePage><HelpCenterPage /></StorePage>} />
+          <Route path="/how-to-buy" element={<StorePage><HowToBuyPage /></StorePage>} />
+          <Route path="/returns-refunds" element={<StorePage><ReturnsRefundsPage /></StorePage>} />
+          <Route path="/contact-us" element={<StorePage><ContactUsPage /></StorePage>} />
+          <Route path="/order-tracking" element={<StorePage><OrderTrackingPage /></StorePage>} />
 
           {/* Seller routes */}
           <Route path="/seller/register" element={<SellerRegisterPage />} />
@@ -83,6 +94,7 @@ export default function App() {
           {/* Delivery routes */}
           <Route path="/delivery/login" element={<DeliveryLoginPage />} />
           <Route path="/delivery" element={<DeliveryDashboardPage />} />
+          <Route path="/delivery/orders" element={<DeliveryOrdersPage />} />
           <Route path="/delivery/support" element={<DeliverySupportPage />} />
           <Route path="/call/:roomId" element={<DeliveryCallRoomPage />} />
 

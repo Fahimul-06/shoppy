@@ -3,11 +3,11 @@ import { Link } from 'react-router-dom';
 import { MapPin, Phone, Mail, Facebook, Twitter, Instagram, Youtube, ShoppingCart } from 'lucide-react';
 
 const customerCare = [
-  { label: 'Help Center', to: '/account' },
-  { label: 'How to Buy', to: '/account' },
-  { label: 'Returns & Refunds', to: '/account' },
-  { label: 'Contact Us', to: '/account' },
-  { label: 'Order Tracking', to: '/account' },
+  { label: 'Help Center', to: '/help-center' },
+  { label: 'How to Buy', to: '/how-to-buy' },
+  { label: 'Returns & Refunds', to: '/returns-refunds' },
+  { label: 'Contact Us', to: '/contact-us' },
+  { label: 'Order Tracking', to: '/order-tracking' },
 ];
 const aboutLinks = [
   { label: 'About Shoppy', to: '/account' },

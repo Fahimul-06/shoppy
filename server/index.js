@@ -249,6 +249,34 @@ io.on('connection', (socket) => {
     }
   });
 
+  socket.on('call:relay-audio', async ({ roomId = '', chunk, mimeType = 'audio/webm;codecs=opus' } = {}, ack) => {
+    try {
+      const check = await canJoinCallRoom(user, String(roomId));
+      if (!check.allowed) throw new Error('You cannot relay audio in this call');
+      if (!chunk) throw new Error('Audio chunk missing');
+      socket.to(`call:${roomId}`).emit('call:relay-audio', {
+        from: check.role,
+        mimeType,
+        chunk,
+        createdAt: new Date().toISOString(),
+      });
+      ack?.({ ok: true });
+    } catch (error) {
+      ack?.({ ok: false, message: error.message || 'Audio relay failed' });
+    }
+  });
+
+  socket.on('call:relay-mode', async ({ roomId = '', enabled = true } = {}, ack) => {
+    try {
+      const check = await canJoinCallRoom(user, String(roomId));
+      if (!check.allowed) throw new Error('You cannot update this call mode');
+      io.to(`call:${roomId}`).emit('call:relay-mode', { enabled: Boolean(enabled), by: check.role });
+      ack?.({ ok: true });
+    } catch (error) {
+      ack?.({ ok: false, message: error.message || 'Relay mode update failed' });
+    }
+  });
+
   async function endSocketCall(roomId, reason = 'ended') {
     const check = await canJoinCallRoom(user, String(roomId || ''));
     if (!check.allowed) return;

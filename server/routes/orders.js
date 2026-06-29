@@ -10,6 +10,7 @@ import ProductReview from '../models/ProductReview.js';
 import { requireUser } from '../middleware/auth.js';
 import { calculatePromoDiscount, isPromoActive, promoMatchesUsageConditions } from '../utils/promo.js';
 import { calculateOrderCharges, getPlatformSettings } from './settings.js';
+import { resolvePaymentStatus } from '../utils/payment.js';
 const router = express.Router();
 
 router.post('/', requireUser, async (req, res) => {
@@ -92,6 +93,7 @@ router.post('/', requireUser, async (req, res) => {
     totalAmount,
     paymentMethod: payment_method,
     paymentDetails: { paymentType: payment_type || '', bankName: bank_name || '', cardType: card_type || '' },
+    paymentStatus: resolvePaymentStatus({ paymentMethod: payment_method, paymentDetails: { paymentType: payment_type || '', bankName: bank_name || '', cardType: card_type || '' }, status: 'pending' }),
     shippingAddress,
   });
 

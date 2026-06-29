@@ -15,6 +15,7 @@ import PlatformSetting from '../models/PlatformSetting.js';
 import { isPromoActive } from '../utils/promo.js';
 import { requireAdmin, requireOwnerAdmin, requireAdminPermission, signToken } from '../middleware/auth.js';
 import { getPlatformSettings } from './settings.js';
+import { resolvePaymentStatus, isAutoPaidPayment } from '../utils/payment.js';
 const router = express.Router();
 const ADMIN_PERMISSION_KEYS = ['dashboard','sellers','customers','products','sales','banners','orders','returns','cancellations','messages','customerCare','promos','notifications','deliveryMen'];
 const normalizePermissions = (permissions = []) => [...new Set((Array.isArray(permissions) ? permissions : []).map((p) => String(p || '').trim()).filter((p) => ADMIN_PERMISSION_KEYS.includes(p)))];
@@ -500,7 +501,7 @@ router.post('/orders/assign-delivery', requireAdminPermission('orders'), async (
   if (!deliveryMan) return res.status(404).json({ message: 'Delivery man not found' });
   const result = await Order.updateMany(
     { _id: { $in: orderIds } },
-    { $set: { deliveryMan: deliveryMan._id, assignedToDeliveryAt: new Date(), status: 'shipped' } }
+    { $set: { deliveryMan: deliveryMan._id, assignedToDeliveryAt: new Date() } }
   );
   res.json({ message: 'Orders assigned to delivery man', assignedCount: result.modifiedCount || result.matchedCount || 0 });
 });
@@ -572,6 +573,13 @@ router.post('/sales/apply', requireAdminPermission('sales'), async (req, res, ne
   }
 });
 router.get('/orders', requireAdminPermission('orders'), async (_req, res) => {
+  await Order.updateMany(
+    {
+      paymentStatus: { $ne: 'paid' },
+      paymentMethod: { $in: [/^bkash$/i, /^nagad$/i, /^nogod$/i, /^card$/i, /^bank$/i, /^mobile_banking$/i, /^prepaid$/i, /^online$/i] },
+    },
+    { $set: { paymentStatus: 'paid' } }
+  );
   const orders = await Order.find()
     .populate('user')
     .populate('items.product')
@@ -583,7 +591,19 @@ router.patch('/orders/:id', requireAdminPermission('orders'), async (req, res) =
   const existing = await Order.findById(req.params.id).populate('user');
   if (!existing) return res.status(404).json({ message: 'Order not found' });
   const previousStatus = existing.status;
-  const order = await Order.findByIdAndUpdate(req.params.id, req.body, { new: true }).populate('user').populate('deliveryMan');
+  const update = { ...req.body };
+  const nextStatus = update.status || existing.status;
+  const nextPaymentMethod = update.paymentMethod || existing.paymentMethod;
+  const nextPaymentDetails = update.paymentDetails || existing.paymentDetails || {};
+  if (isAutoPaidPayment(nextPaymentMethod, nextPaymentDetails) || nextStatus === 'delivered') {
+    update.paymentStatus = resolvePaymentStatus({
+      paymentMethod: nextPaymentMethod,
+      paymentDetails: nextPaymentDetails,
+      status: nextStatus,
+      currentPaymentStatus: update.paymentStatus || existing.paymentStatus,
+    });
+  }
+  const order = await Order.findByIdAndUpdate(req.params.id, update, { new: true }).populate('user').populate('deliveryMan');
 
   if (req.body?.status && req.body.status !== previousStatus && ['processing', 'shipped', 'delivered'].includes(req.body.status)) {
     const typeMap = {

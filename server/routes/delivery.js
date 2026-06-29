@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import User from '../models/User.js';
 import Order from '../models/Order.js';
 import { requireDeliveryMan, signToken } from '../middleware/auth.js';
+import { resolvePaymentStatus } from '../utils/payment.js';
 
 const router = express.Router();
 
@@ -28,13 +29,7 @@ const safeOrder = (order) => ({
     phone: order.user.phone,
     email: order.user.email,
   } : null,
-  items: (order.items || []).map((item) => ({
-    id: item.id,
-    quantity: item.quantity,
-    unitPrice: item.unitPrice,
-    totalPrice: item.totalPrice,
-    product: item.productSnapshot || item.product || {},
-  })),
+  itemCount: (order.items || []).reduce((sum, item) => sum + Number(item.quantity || 0), 0),
   createdAt: order.createdAt,
   assignedToDeliveryAt: order.assignedToDeliveryAt,
 });
@@ -54,9 +49,8 @@ router.get('/me', requireDeliveryMan, (req, res) => {
 });
 
 router.get('/orders', requireDeliveryMan, async (req, res) => {
-  const orders = await Order.find({ deliveryMan: req.deliveryMan._id })
+  const orders = await Order.find({ deliveryMan: req.deliveryMan._id, status: { $in: ['shipped', 'delivered'] } })
     .populate('user')
-    .populate('items.product')
     .sort({ assignedToDeliveryAt: -1, createdAt: -1 });
   res.json({ orders: orders.map(safeOrder) });
 });
@@ -64,12 +58,22 @@ router.get('/orders', requireDeliveryMan, async (req, res) => {
 router.patch('/orders/:id/status', requireDeliveryMan, async (req, res) => {
   const status = String(req.body?.status || '').trim();
   if (!['shipped', 'delivered'].includes(status)) return res.status(400).json({ message: 'Delivery man can only mark shipped or delivered' });
+  const existing = await Order.findOne({ _id: req.params.id, deliveryMan: req.deliveryMan._id });
+  if (!existing) return res.status(404).json({ message: 'Assigned order not found' });
+  const update = { status };
+  if (status === 'delivered') {
+    update.paymentStatus = resolvePaymentStatus({
+      paymentMethod: existing.paymentMethod,
+      paymentDetails: existing.paymentDetails || {},
+      status,
+      currentPaymentStatus: existing.paymentStatus,
+    });
+  }
   const order = await Order.findOneAndUpdate(
     { _id: req.params.id, deliveryMan: req.deliveryMan._id },
-    { $set: { status } },
+    { $set: update },
     { new: true }
-  ).populate('user').populate('items.product');
-  if (!order) return res.status(404).json({ message: 'Assigned order not found' });
+  ).populate('user');
   res.json({ order: safeOrder(order) });
 });
 

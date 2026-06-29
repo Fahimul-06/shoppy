@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Loader2, Pencil, Save, Trash2, UserPlus } from 'lucide-react';
+import { Barcode, Copy, Loader2, Pencil, Save, Trash2, UserPlus } from 'lucide-react';
 import { api, getToken } from '../../lib/api';
 
 type Employee = {
@@ -10,10 +10,12 @@ type Employee = {
   adminPosition?: string;
   adminPermissions?: string[];
   adminStatus?: 'active' | 'inactive';
+  employeeCode?: string;
+  employeeBarcode?: string;
 };
 
 const permissionLabels: Record<string, string> = {
-  dashboard: 'Dashboard', sellers: 'Sellers', customers: 'Customers', products: 'Products', sales: 'Sales', banners: 'Banners', orders: 'Orders', returns: 'Returns', cancellations: 'Cancellations', messages: 'Order Messages', customerCare: 'Customer Care', promos: 'Promos/Vouchers', notifications: 'Notifications',
+  dashboard: 'Dashboard', sellers: 'Sellers', customers: 'Customers', products: 'Products', sales: 'Sales', banners: 'Banners', orders: 'Orders', returns: 'Returns', cancellations: 'Cancellations', messages: 'Order Messages', customerCare: 'Customer Care', promos: 'Promos/Vouchers', notifications: 'Notifications', employees: 'Employee Management', deliveryMen: 'Delivery Men',
 };
 
 const defaultForm = { fullName: '', phone: '', position: '', password: '', permissions: [] as string[] };
@@ -59,7 +61,7 @@ export default function AdminEmployeesTab() {
         setMessage('Employee updated.');
       } else {
         await api.post('/admin/employees', { ...form, adminPermissions: form.permissions }, getToken('admin'));
-        setMessage('Employee ID created. Employee can login with phone and password.');
+        setMessage('Employee ID created with 6-digit ID number and barcode. Employee can login with phone and password.');
       }
       reset();
       await load();
@@ -113,9 +115,18 @@ export default function AdminEmployeesTab() {
 
     <div className="bg-white rounded-2xl border overflow-hidden">
       <div className="p-5 border-b"><h3 className="font-black">Employee List</h3><p className="text-sm text-gray-500">Employees login from Admin Login using their phone number and password.</p></div>
-      <div className="overflow-x-auto"><table className="w-full text-sm"><thead className="bg-gray-50 text-left"><tr><th className="p-3">Name</th><th className="p-3">Phone</th><th className="p-3">Position</th><th className="p-3">Access</th><th className="p-3">Status</th><th className="p-3 text-right">Actions</th></tr></thead><tbody className="divide-y">
-        {employees.map((employee) => <tr key={employee.id}><td className="p-3 font-bold">{employee.fullName}</td><td className="p-3">{employee.phone}</td><td className="p-3">{employee.adminPosition}</td><td className="p-3 max-w-md"><div className="flex flex-wrap gap-1">{(employee.adminPermissions || []).map((p)=><span key={p} className="bg-gray-100 rounded-full px-2 py-1 text-[11px] font-bold text-gray-600">{permissionLabels[p] || p}</span>)}</div></td><td className="p-3"><button onClick={()=>toggleStatus(employee)} className={`rounded-full px-3 py-1 text-xs font-black ${employee.adminStatus === 'inactive' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>{employee.adminStatus === 'inactive' ? 'Inactive' : 'Active'}</button></td><td className="p-3"><div className="flex justify-end gap-2"><button onClick={()=>edit(employee)} className="p-2 rounded-lg bg-blue-50 text-blue-700"><Pencil size={15}/></button><button onClick={()=>remove(employee)} className="p-2 rounded-lg bg-red-50 text-red-700"><Trash2 size={15}/></button></div></td></tr>)}
-        {!employees.length && <tr><td colSpan={6} className="p-8 text-center text-gray-500">No employee IDs created yet.</td></tr>}
+      <div className="overflow-x-auto"><table className="w-full text-sm"><thead className="bg-gray-50 text-left"><tr><th className="p-3">Employee</th><th className="p-3">6-Digit ID</th><th className="p-3">Barcode</th><th className="p-3">Phone</th><th className="p-3">Position</th><th className="p-3">Access</th><th className="p-3">Status</th><th className="p-3 text-right">Actions</th></tr></thead><tbody className="divide-y">
+        {employees.map((employee) => <tr key={employee.id}>
+          <td className="p-3 font-bold">{employee.fullName}</td>
+          <td className="p-3"><div className="inline-flex items-center gap-2 rounded-xl bg-slate-100 px-3 py-2 font-black tracking-widest"><Barcode size={16}/>{employee.employeeCode || '------'}{employee.employeeCode && <button title="Copy employee ID" onClick={()=>navigator.clipboard?.writeText(employee.employeeCode || '')} className="text-slate-500 hover:text-blue-600"><Copy size={13}/></button>}</div></td>
+          <td className="p-3">{employee.employeeBarcode ? <img src={employee.employeeBarcode} alt={`Barcode ${employee.employeeCode || ''}`} className="h-12 max-w-[150px] rounded border bg-white object-contain p-1"/> : <span className="text-gray-400">Auto generated</span>}</td>
+          <td className="p-3">{employee.phone}</td>
+          <td className="p-3">{employee.adminPosition}</td>
+          <td className="p-3 max-w-md"><div className="flex flex-wrap gap-1">{(employee.adminPermissions || []).map((p)=><span key={p} className="bg-gray-100 rounded-full px-2 py-1 text-[11px] font-bold text-gray-600">{permissionLabels[p] || p}</span>)}</div></td>
+          <td className="p-3"><button onClick={()=>toggleStatus(employee)} className={`rounded-full px-3 py-1 text-xs font-black ${employee.adminStatus === 'inactive' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>{employee.adminStatus === 'inactive' ? 'Inactive' : 'Active'}</button></td>
+          <td className="p-3"><div className="flex justify-end gap-2"><button onClick={()=>edit(employee)} className="p-2 rounded-lg bg-blue-50 text-blue-700"><Pencil size={15}/></button><button onClick={()=>remove(employee)} className="p-2 rounded-lg bg-red-50 text-red-700"><Trash2 size={15}/></button></div></td>
+        </tr>)}
+        {!employees.length && <tr><td colSpan={8} className="p-8 text-center text-gray-500">No employee IDs created yet.</td></tr>}
       </tbody></table></div>
     </div>
   </div>;

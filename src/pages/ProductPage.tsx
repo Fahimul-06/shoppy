@@ -9,6 +9,7 @@ import { api } from '../lib/api';
 import { defaultPlatformSettings, fetchPublicPlatformSettings, getProductFrameImage, type PlatformSettings } from '../lib/platformSettings';
 import { useProducts } from '../hooks/useProducts';
 import { getDisplayOriginalPrice, getSaleDiscount, getSalePrice, withSalePricing } from '../utils/salePricing';
+import { getProductOrderId } from '../lib/productIdentity';
 
 type ProductPromo = {
   id?: string;
@@ -174,8 +175,9 @@ export default function ProductPage() {
   const productForCart = withSalePricing(product);
   const colorOptions = Array.isArray(product.colorOptions) ? product.colorOptions.filter(Boolean) : [];
   const sizeOptions = Array.isArray(product.sizeOptions) ? product.sizeOptions.filter(Boolean) : [];
-  const variantKey = `${product.id}::${selectedColor || 'no-color'}::${selectedSize || 'no-size'}`;
-  const productForCartWithOptions = { ...productForCart, id: variantKey, baseProductId: product.id, selectedColor, selectedSize };
+  const baseProductId = getProductOrderId(product as any) || product.id;
+  const variantKey = `${baseProductId}::${selectedColor || 'no-color'}::${selectedSize || 'no-size'}`;
+  const productForCartWithOptions = { ...productForCart, id: variantKey, baseProductId, selectedColor, selectedSize };
 
   const seller = product.seller && typeof product.seller === 'object' ? product.seller : null;
   const sellerShopLogo = seller?.shopLogo || '';

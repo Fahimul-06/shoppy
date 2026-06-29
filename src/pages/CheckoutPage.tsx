@@ -5,6 +5,7 @@ import { useCart } from '../context/CartContext';
 import { placeOrder as saveOrder } from '../lib/db';
 import { api, getToken } from '../lib/api';
 import { calculateCharges, defaultPlatformSettings, fetchPublicPlatformSettings, type PlatformSettings } from '../lib/platformSettings';
+import { getProductOrderId } from '../lib/productIdentity';
 
 const steps = ['Delivery Address', 'Payment Method', 'Confirmation'];
 
@@ -89,7 +90,7 @@ export default function CheckoutPage() {
       const response = await api.post<{ promo: any; discount: number; eligibleItemCount: number }>('/promos/validate', {
         code,
         items: checkoutItems.map(({ product, quantity }) => ({
-          product_id: product.baseProductId || product.id,
+          product_id: getProductOrderId(product as any),
           selected_color: product.selectedColor || '',
           selected_size: product.selectedSize || '',
           product_snapshot: product as unknown as Record<string, unknown>,
@@ -132,6 +133,11 @@ export default function CheckoutPage() {
       setStep(0);
       return;
     }
+    const invalidItem = checkoutItems.find(({ product }) => !getProductOrderId(product as any));
+    if (invalidItem) {
+      setError('One product in your cart has an old/missing product ID. Please remove it and add it again from the product page.');
+      return;
+    }
     setPlacing(true);
     setError('');
     try {
@@ -149,7 +155,7 @@ export default function CheckoutPage() {
         card_type: cardType,
         shipping_address: address,
         items: checkoutItems.map(({ product, quantity }) => ({
-          product_id: product.baseProductId || product.id,
+          product_id: getProductOrderId(product as any),
           selected_color: product.selectedColor || '',
           selected_size: product.selectedSize || '',
           product_snapshot: product as unknown as Record<string, unknown>,

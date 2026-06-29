@@ -7,6 +7,7 @@ import ProductRail from '../components/ProductRail';
 import { useProducts } from '../hooks/useProducts';
 import { getBestSellingProducts } from '../utils/productCollections';
 import { calculateCharges, defaultPlatformSettings, fetchPublicPlatformSettings, type PlatformSettings } from '../lib/platformSettings';
+import { getProductOrderId } from '../lib/productIdentity';
 
 export default function CartPage() {
   const { state, removeItem, updateQuantity, totalItems } = useCart();
@@ -64,7 +65,7 @@ export default function CartPage() {
       const response = await api.post<{ promo: { code: string }; discount: number; eligibleItemCount: number }>('/promos/validate', {
         code,
         items: selectedItems.map(({ product, quantity }) => ({
-          product_id: product.baseProductId || product.id,
+          product_id: getProductOrderId(product as any),
           product_snapshot: product as unknown as Record<string, unknown>,
           quantity,
           unit_price: product.price,

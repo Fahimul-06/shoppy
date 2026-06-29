@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { Bike, Loader2, Mic, MicOff, PhoneCall, PhoneOff, ShieldCheck, Volume2 } from 'lucide-react';
+import { Bike, Loader2, Mic, MicOff, PhoneCall, PhoneOff, ShieldCheck, Volume2, Wifi } from 'lucide-react';
 import { api, getToken } from '../../lib/api';
 import { createRealtimeSocket, socketAck } from '../../lib/socket';
 import type { Socket } from 'socket.io-client';
@@ -31,6 +31,15 @@ function pickRole(requested: string | null): Role {
   return 'delivery';
 }
 
+function pickRecorderMimeType() {
+  const choices = [
+    'audio/webm;codecs=opus',
+    'audio/webm',
+    'audio/mp4',
+  ];
+  return choices.find((type) => typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(type)) || '';
+}
+
 export default function DeliveryCallRoomPage() {
   const { roomId = '' } = useParams();
   const [searchParams] = useSearchParams();
@@ -45,12 +54,16 @@ export default function DeliveryCallRoomPage() {
   const localStreamRef = useRef<MediaStream | null>(null);
   const socketRef = useRef<Socket | null>(null);
   const makingOfferRef = useRef(false);
-  const answerSentRef = useRef(false);
   const hasEndedRef = useRef(false);
   const mountedRef = useRef(true);
   const remoteDescriptionReadyRef = useRef(false);
   const pendingCandidatesRef = useRef<RTCIceCandidateInit[]>([]);
   const offerTimerRef = useRef<number | null>(null);
+  const relayFallbackTimerRef = useRef<number | null>(null);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const relayQueueRef = useRef<{ blob: Blob; url: string }[]>([]);
+  const relayPlayingRef = useRef(false);
+  const relayModeRef = useRef(false);
 
   const [room, setRoom] = useState<any>(null);
   const [status, setStatus] = useState('Preparing live call room...');
@@ -58,6 +71,7 @@ export default function DeliveryCallRoomPage() {
   const [muted, setMuted] = useState(false);
   const [connected, setConnected] = useState(false);
   const [ending, setEnding] = useState(false);
+  const [relayMode, setRelayMode] = useState(false);
 
   const callHome = () => role === 'admin' ? '/admin' : '/delivery/support';
 
@@ -67,9 +81,74 @@ export default function DeliveryCallRoomPage() {
     await socketAck(socket, 'call:signal', { roomId, type, payload });
   };
 
+  const playNextRelayChunk = () => {
+    if (relayPlayingRef.current || hasEndedRef.current) return;
+    const next = relayQueueRef.current.shift();
+    if (!next) return;
+    relayPlayingRef.current = true;
+    const audio = new Audio(next.url);
+    audio.onended = () => {
+      URL.revokeObjectURL(next.url);
+      relayPlayingRef.current = false;
+      playNextRelayChunk();
+    };
+    audio.onerror = () => {
+      URL.revokeObjectURL(next.url);
+      relayPlayingRef.current = false;
+      playNextRelayChunk();
+    };
+    audio.play().catch(() => {
+      URL.revokeObjectURL(next.url);
+      relayPlayingRef.current = false;
+      playNextRelayChunk();
+    });
+  };
+
+  const startOwnServerRelay = async (reason = 'network fallback') => {
+    if (relayModeRef.current || hasEndedRef.current) return;
+    const socket = socketRef.current;
+    const stream = localStreamRef.current;
+    if (!socket?.connected || !stream) return;
+
+    const audioTracks = stream.getAudioTracks();
+    if (!audioTracks.length || typeof MediaRecorder === 'undefined') {
+      setError('This browser does not support own-server audio relay. Try Chrome/Edge mobile or desktop.');
+      return;
+    }
+
+    relayModeRef.current = true;
+    setRelayMode(true);
+    setConnected(true);
+    setError('');
+    setStatus(`Connected using own-server relay mode (${reason}). Works through strict NAT/mobile networks because audio passes through your backend.`);
+
+    try {
+      await socketAck(socket, 'call:relay-mode', { roomId, enabled: true }, 2500).catch(() => {});
+      const mimeType = pickRecorderMimeType();
+      const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+      recorderRef.current = recorder;
+      recorder.ondataavailable = async (event) => {
+        if (!event.data?.size || hasEndedRef.current || !socket.connected || muted) return;
+        const chunk = await event.data.arrayBuffer();
+        socket.emit('call:relay-audio', { roomId, chunk, mimeType: event.data.type || mimeType || 'audio/webm' });
+      };
+      recorder.onerror = () => setError('Audio relay recorder failed. Please rejoin the call.');
+      recorder.start(700);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not start own-server audio relay');
+    }
+  };
+
   const closeLocalCall = (stopTracks = true) => {
     if (offerTimerRef.current) window.clearTimeout(offerTimerRef.current);
+    if (relayFallbackTimerRef.current) window.clearTimeout(relayFallbackTimerRef.current);
     offerTimerRef.current = null;
+    relayFallbackTimerRef.current = null;
+    try { recorderRef.current?.stop(); } catch { /* recorder may already be stopped */ }
+    recorderRef.current = null;
+    relayModeRef.current = false;
+    relayQueueRef.current.splice(0).forEach((item) => URL.revokeObjectURL(item.url));
+    relayPlayingRef.current = false;
     pcRef.current?.close();
     pcRef.current = null;
     if (stopTracks) localStreamRef.current?.getTracks().forEach((track) => track.stop());
@@ -79,6 +158,7 @@ export default function DeliveryCallRoomPage() {
     if (localAudioRef.current) localAudioRef.current.srcObject = null;
     if (remoteAudioRef.current) remoteAudioRef.current.srcObject = null;
     setConnected(false);
+    setRelayMode(false);
   };
 
   const leavePageAfterEnd = () => {
@@ -133,29 +213,29 @@ export default function DeliveryCallRoomPage() {
     pc.onconnectionstatechange = () => {
       const state = pc.connectionState;
       if (state === 'connected') {
+        if (relayFallbackTimerRef.current) window.clearTimeout(relayFallbackTimerRef.current);
         setError('');
         setConnected(true);
-        setStatus('Connected — live internet audio call is running.');
+        setRelayMode(false);
+        setStatus('Connected — direct WebRTC audio call is running.');
       } else if (state === 'connecting') {
         setStatus('Connecting live audio...');
       } else if (state === 'disconnected') {
-        setStatus('Connection interrupted. Trying to reconnect...');
+        setStatus('Connection interrupted. Switching to own-server relay if direct audio does not return...');
+        window.setTimeout(() => {
+          if (!hasEndedRef.current && pcRef.current?.connectionState !== 'connected') startOwnServerRelay('direct WebRTC disconnected');
+        }, 2500);
       } else if (state === 'failed') {
-        setConnected(false);
-        setStatus('Connection failed. Trying to restart the live call connection...');
-        if (role === 'admin' && !hasEndedRef.current) {
-          makeAdminOffer(true).catch(() => setError('Connection failed. For mobile networks, configure your own TURN server with VITE_TURN_URLS, VITE_TURN_USERNAME, and VITE_TURN_CREDENTIAL.'));
-        } else {
-          setError('Connection failed. Keep both users on the call page and try again. For mobile networks, configure your own TURN server.');
-        }
+        setStatus('Direct WebRTC failed. Switching to own-server relay mode...');
+        startOwnServerRelay('strict NAT/mobile network').catch(() => {});
       } else if (state === 'closed') {
         setStatus('Call stopped.');
       }
     };
 
     pc.oniceconnectionstatechange = () => {
-      if (pc.iceConnectionState === 'failed' && role === 'admin' && !hasEndedRef.current) {
-        makeAdminOffer(true).catch(() => {});
+      if (pc.iceConnectionState === 'failed' && !hasEndedRef.current) {
+        startOwnServerRelay('ICE failed').catch(() => {});
       }
     };
 
@@ -180,7 +260,7 @@ export default function DeliveryCallRoomPage() {
       const offer = await pc.createOffer({ offerToReceiveAudio: true, iceRestart });
       await pc.setLocalDescription(offer);
       await sendSignal('offer', pc.localDescription);
-      setStatus(iceRestart ? 'Restarting live audio connection...' : 'Calling delivery man live... waiting for answer.');
+      setStatus(iceRestart ? 'Restarting direct connection...' : 'Calling delivery man live... waiting for answer.');
     } finally {
       makingOfferRef.current = false;
     }
@@ -191,14 +271,12 @@ export default function DeliveryCallRoomPage() {
     const pc = createPeer();
 
     if (signal.type === 'offer' && role === 'delivery') {
-      answerSentRef.current = false;
       await pc.setRemoteDescription(new RTCSessionDescription(signal.payload));
       remoteDescriptionReadyRef.current = true;
       await flushPendingCandidates();
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
       await sendSignal('answer', pc.localDescription);
-      answerSentRef.current = true;
       setStatus('Answered. Connecting live audio...');
       return;
     }
@@ -235,6 +313,10 @@ export default function DeliveryCallRoomPage() {
     }
     if (offerTimerRef.current) window.clearTimeout(offerTimerRef.current);
     offerTimerRef.current = window.setTimeout(() => makeAdminOffer().catch((e) => setError(e instanceof Error ? e.message : 'Could not start live call')), 400);
+    if (relayFallbackTimerRef.current) window.clearTimeout(relayFallbackTimerRef.current);
+    relayFallbackTimerRef.current = window.setTimeout(() => {
+      if (!connected && !hasEndedRef.current) startOwnServerRelay('direct connection timeout');
+    }, 9000);
   };
 
   const toggleMute = () => {
@@ -264,6 +346,14 @@ export default function DeliveryCallRoomPage() {
             setRoom(payload.room);
             maybeStartOffer(payload.room);
           }
+        });
+        socket.on('call:relay-mode', () => startOwnServerRelay('peer switched to relay').catch(() => {}));
+        socket.on('call:relay-audio', ({ from, chunk, mimeType }: { from: Role; chunk: ArrayBuffer; mimeType: string }) => {
+          if (from === role || hasEndedRef.current) return;
+          const blob = new Blob([chunk], { type: mimeType || 'audio/webm' });
+          const url = URL.createObjectURL(blob);
+          relayQueueRef.current.push({ blob, url });
+          playNextRelayChunk();
         });
         socket.on('call:ended', () => {
           if (!hasEndedRef.current) {
@@ -322,14 +412,14 @@ export default function DeliveryCallRoomPage() {
 
         <div className="rounded-2xl bg-slate-900/80 border border-white/10 p-5 space-y-3">
           <div className="flex items-center gap-3">
-            {error ? <PhoneOff className="text-red-300"/> : connected ? <Volume2 className="text-green-300"/> : <Loader2 className="animate-spin text-blue-300"/>}
+            {error ? <PhoneOff className="text-red-300"/> : relayMode ? <Wifi className="text-emerald-300"/> : connected ? <Volume2 className="text-green-300"/> : <Loader2 className="animate-spin text-blue-300"/>}
             <div>
               <p className="font-black">{error || status}</p>
               <p className="text-xs text-slate-400">You are joined as: {role === 'admin' ? 'Customer Care/Admin' : 'Delivery Man'}</p>
             </div>
           </div>
           {room?.deliveryMan && <p className="text-sm text-slate-300">Delivery: <b>{room.deliveryMan.fullName}</b> • ID: {room.deliveryMan.deliveryCode}</p>}
-          <div className="rounded-xl bg-blue-950/60 border border-blue-500/20 p-3 text-xs text-blue-100 flex gap-2"><ShieldCheck size={16}/> Realtime call uses Socket.IO signaling + your own WebRTC page. No Jitsi or meeting-room provider is used. For reliable mobile-network calls, configure your own TURN server.</div>
+          <div className="rounded-xl bg-blue-950/60 border border-blue-500/20 p-3 text-xs text-blue-100 flex gap-2"><ShieldCheck size={16}/> No Jitsi and no third-party meeting room. The app tries direct WebRTC first; if strict NAT/mobile networks block it, the call automatically switches to your own backend Socket.IO audio relay.</div>
         </div>
 
         <audio ref={localAudioRef} autoPlay muted className="hidden" />
@@ -337,9 +427,11 @@ export default function DeliveryCallRoomPage() {
 
         <div className="mt-6 flex flex-wrap gap-3 justify-center">
           <button onClick={toggleMute} disabled={!localStreamRef.current} className={`rounded-2xl px-5 py-3 font-black flex items-center gap-2 ${muted ? 'bg-yellow-500 text-slate-950' : 'bg-white/10 hover:bg-white/20'}`}>{muted ? <MicOff/> : <Mic/>}{muted ? 'Unmute' : 'Mute'}</button>
+          <button onClick={() => startOwnServerRelay('manual switch')} disabled={relayMode || !localStreamRef.current} className="rounded-2xl px-5 py-3 font-black flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-500"><Wifi/>Own Relay</button>
           <button onClick={() => stopRoomAndExit('ended')} disabled={ending} className="rounded-2xl px-6 py-3 font-black flex items-center gap-2 bg-red-600 hover:bg-red-700 disabled:bg-gray-500"><PhoneOff/>{ending ? 'Ending...' : 'End Call'}</button>
         </div>
 
+        {relayMode && <p className="mt-4 text-sm text-emerald-100 bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-3">Own-server relay mode is active. This works on strict NAT/mobile networks because audio travels through your backend WebSocket connection instead of requiring direct peer-to-peer NAT traversal.</p>}
         {error && <p className="mt-4 text-sm text-red-200 bg-red-500/10 border border-red-500/20 rounded-xl p-3">{error}</p>}
       </div>
     </div>

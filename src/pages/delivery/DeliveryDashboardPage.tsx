@@ -106,7 +106,7 @@ export default function DeliveryDashboardPage() {
     try {
       const res = await api.post<{ message: any; callUrl: string }>('/delivery/support/call', {}, getToken('delivery'));
       setSupportMessages((prev) => [...prev, res.message]);
-      if (res.callUrl) window.open(res.callUrl, '_blank', 'noopener,noreferrer');
+      if (res.callUrl) window.open(`${res.callUrl}?role=delivery`, '_blank', 'noopener,noreferrer');
     } catch (e) {
       setSupportError(e instanceof Error ? e.message : 'ইন্টারনেট কল শুরু করা যায়নি');
     } finally {
@@ -155,7 +155,7 @@ export default function DeliveryDashboardPage() {
           {supportMessages.length === 0 ? <p className="text-center text-gray-500 mt-20 text-sm">No support messages yet. বাংলায় মেসেজ লিখুন।</p> : supportMessages.map((m)=>{
             const isCall = m.messageType === 'call';
             return <div key={m.id || m._id} className={`max-w-[82%] rounded-2xl px-3 py-2 text-sm ${m.senderType === 'delivery' ? 'ml-auto bg-blue-600 text-white' : 'bg-white border text-gray-800'}`}>
-              {isCall ? <div className="space-y-2"><p className="font-black flex items-center gap-2"><Video size={15}/> Internet call request</p><p>{m.message}</p>{m.callUrl && <a href={m.callUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-lg bg-white text-blue-700 px-3 py-1 font-black text-xs">Open call <ExternalLink size={12}/></a>}<p className="text-xs opacity-80">Status: {m.callStatus || 'ringing'}</p></div> : <p>{m.message}</p>}
+              {isCall ? <div className="space-y-2"><p className="font-black flex items-center gap-2"><Video size={15}/> Internet call request</p><p>{m.message}</p>{m.callUrl && <a href={`${m.callUrl}?role=delivery`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-lg bg-white text-blue-700 px-3 py-1 font-black text-xs">Open call <ExternalLink size={12}/></a>}<p className="text-xs opacity-80">Status: {m.callStatus || 'ringing'}</p></div> : <p>{m.message}</p>}
               <p className={`text-[10px] mt-1 ${m.senderType === 'delivery' ? 'text-blue-100' : 'text-gray-400'}`}>{m.createdAt ? new Date(m.createdAt).toLocaleString() : ''}</p>
             </div>})}
         </div>

@@ -98,7 +98,7 @@ export default function AdminCustomerCareTab() {
 
   const joinCall = async (message: any) => {
     if (!selected || !message?.callUrl) return;
-    window.open(message.callUrl, '_blank', 'noopener,noreferrer');
+    window.open(`${message.callUrl}?role=admin`, '_blank', 'noopener,noreferrer');
     try {
       const res = await api.patch<{ message: any }>(`/admin/delivery-support/${selected.id}/call/${message.id || message._id}/status`, { status: 'joined' }, getToken('admin'));
       setMessages((prev) => prev.map((m) => String(m.id || m._id) === String(message.id || message._id) ? res.message : m));

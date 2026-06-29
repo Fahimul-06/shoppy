@@ -32,6 +32,7 @@ import AdminPage from './pages/admin/AdminPage';
 import DeliveryLoginPage from './pages/delivery/DeliveryLoginPage';
 import DeliveryDashboardPage from './pages/delivery/DeliveryDashboardPage';
 import DeliveryCallRoomPage from './pages/delivery/DeliveryCallRoomPage';
+import DeliverySupportPage from './pages/delivery/DeliverySupportPage';
 
 function StoreLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -82,6 +83,7 @@ export default function App() {
           {/* Delivery routes */}
           <Route path="/delivery/login" element={<DeliveryLoginPage />} />
           <Route path="/delivery" element={<DeliveryDashboardPage />} />
+          <Route path="/delivery/support" element={<DeliverySupportPage />} />
           <Route path="/call/:roomId" element={<DeliveryCallRoomPage />} />
 
           {/* Admin routes. These are intentionally outside StoreLayout so the admin login page always renders cleanly. */}

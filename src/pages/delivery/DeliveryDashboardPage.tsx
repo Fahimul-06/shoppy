@@ -1,8 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { BellRing, Bike, ExternalLink, Headphones, LogOut, MapPin, MessageCircle, Package, Phone, Send, User, Video, Volume2 } from 'lucide-react';
+import { BellRing, Bike, Headphones, LogOut, MapPin, Package, Phone, User, Volume2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { api, clearSession, getSessionUser, getToken } from '../../lib/api';
-import { createRealtimeSocket, socketAck } from '../../lib/socket';
+import { createRealtimeSocket } from '../../lib/socket';
 import type { Socket } from 'socket.io-client';
 
 const formatAddress = (address?: any) => {
@@ -41,34 +41,8 @@ export default function DeliveryDashboardPage() {
   const [newOrderNotice, setNewOrderNotice] = useState('');
   const knownOrderIds = useRef<Set<string>>(new Set());
   const firstLoadDone = useRef(false);
-  const supportMessageIds = useRef<Set<string>>(new Set());
-  const socketRef = useRef<Socket | null>(null);
-
-  const [supportMessages, setSupportMessages] = useState<any[]>([]);
-  const [supportText, setSupportText] = useState('');
-  const [supportError, setSupportError] = useState('');
-  const [startingCall, setStartingCall] = useState(false);
 
   const logout = () => { clearSession('delivery'); navigate('/delivery/login'); };
-
-  const mergeSupportMessages = (incoming: any[]) => {
-    setSupportMessages((prev) => {
-      const map = new Map<string, any>();
-      [...prev, ...incoming].forEach((m) => {
-        const id = String(m.id || m._id || `${m.createdAt}-${m.message}`);
-        map.set(id, m);
-        supportMessageIds.current.add(id);
-      });
-      return Array.from(map.values()).sort((a, b) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime());
-    });
-  };
-
-  const loadSupport = async () => {
-    const token = getToken('delivery');
-    if (!token) return;
-    const res = await api.get<{ messages: any[] }>('/delivery/support', token);
-    mergeSupportMessages(res.messages || []);
-  };
 
   const load = async (silent = false) => {
     const token = getToken('delivery');
@@ -91,7 +65,6 @@ export default function DeliveryDashboardPage() {
       knownOrderIds.current = incomingIds;
       firstLoadDone.current = true;
       setOrders(incoming);
-      loadSupport().catch(() => {});
     } catch {
       clearSession('delivery'); navigate('/delivery/login');
     } finally { if (!silent) setLoading(false); }
@@ -107,16 +80,13 @@ export default function DeliveryDashboardPage() {
     const token = getToken('delivery');
     if (!token) return;
     const socket = createRealtimeSocket('delivery');
-    socketRef.current = socket;
-    socket.on('connect', () => socket.emit('delivery-support:join', {}));
-    socket.on('delivery-support:message', (message: any) => mergeSupportMessages([message]));
+    socket.on('connect', () => socket.emit('delivery-dashboard:join', {}));
     socket.on('delivery:orders-assigned', (payload: any) => {
       setNewOrderNotice(payload?.message || 'New assigned order received.');
       if (soundEnabled) playLoudAlert();
       load(true).catch(() => {});
     });
-    socket.on('connect_error', () => setSupportError('Realtime connection failed. Fallback refresh is still active.'));
-    return () => { socket.disconnect(); socketRef.current = null; };
+    return () => { socket.disconnect(); };
   }, [soundEnabled]);
 
   const enableSound = () => {
@@ -130,40 +100,6 @@ export default function DeliveryDashboardPage() {
     await load();
   };
 
-
-  const startVirtualCall = async () => {
-    if (startingCall) return;
-    setStartingCall(true);
-    setSupportError('');
-    try {
-      const res = await api.post<{ message: any; callUrl: string }>('/delivery/support/call', {}, getToken('delivery'));
-      mergeSupportMessages([res.message]);
-      if (res.callUrl) window.open(`${res.callUrl}?role=delivery`, '_blank', 'noopener,noreferrer');
-    } catch (e) {
-      setSupportError(e instanceof Error ? e.message : 'ইন্টারনেট কল শুরু করা যায়নি');
-    } finally {
-      setStartingCall(false);
-    }
-  };
-
-  const sendSupport = async () => {
-    const clean = supportText.trim();
-    if (!clean) return;
-    setSupportText('');
-    setSupportError('');
-    try {
-      if (socketRef.current?.connected) {
-        const res = await socketAck<{ message: any }>(socketRef.current, 'delivery-support:message', { message: clean, language: 'bn' });
-        mergeSupportMessages([res.message]);
-      } else {
-        const res = await api.post<{ message: any }>('/delivery/support', { message: clean, language: 'bn' }, getToken('delivery'));
-        mergeSupportMessages([res.message]);
-      }
-    } catch (e) {
-      setSupportError(e instanceof Error ? e.message : 'মেসেজ পাঠানো যায়নি');
-      setSupportText(clean);
-    }
-  };
 
   return <div className="min-h-screen bg-gray-100">
     <header className="bg-slate-950 text-white"><div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between"><div><h1 className="text-xl font-black flex items-center gap-2"><Bike size={22}/> Delivery Dashboard</h1><p className="text-xs text-slate-300">{user?.fullName} • ID: {user?.deliveryCode || '------'} • {user?.phone}</p></div><button onClick={logout} className="bg-white/10 rounded-xl px-4 py-2 text-sm font-bold flex gap-2 items-center"><LogOut size={15}/> Logout</button></div></header>
@@ -186,19 +122,16 @@ export default function DeliveryDashboardPage() {
           <div className="mt-4 flex gap-2">{o.status !== 'delivered' ? <button onClick={()=>updateStatus(o.id)} className="px-4 py-2 rounded-xl bg-green-600 text-white font-black text-sm">Mark Delivered</button> : <span className="px-4 py-2 rounded-xl bg-green-50 text-green-700 border border-green-200 font-black text-sm">Delivered</span>}</div>
         </div>})}{!orders.length && <div className="bg-white border rounded-2xl p-8 text-center text-sm text-gray-500">No shipped assigned orders yet.</div>}</div>}
 
-      <section className="bg-white border rounded-2xl overflow-hidden">
-        <div className="p-4 border-b flex flex-col md:flex-row md:items-center md:justify-between gap-3"><div><h2 className="font-black flex items-center gap-2"><Headphones size={18}/> Customer Care Support</h2><p className="text-xs text-gray-500">বাংলায় চ্যাট করুন অথবা ইন্টারনেট কল করুন।</p></div><button onClick={startVirtualCall} disabled={startingCall} className="bg-green-600 disabled:bg-gray-300 text-white rounded-xl px-4 py-2 font-black flex items-center justify-center gap-2 text-sm"><Video size={16}/>{startingCall ? 'Starting...' : 'Internet Call'}</button></div>
-        <div className="h-72 overflow-y-auto p-4 bg-gray-50 space-y-2">
-          {supportMessages.length === 0 ? <p className="text-center text-gray-500 mt-20 text-sm">No support messages yet. বাংলায় মেসেজ লিখুন।</p> : supportMessages.map((m)=>{
-            const isCall = m.messageType === 'call';
-            return <div key={m.id || m._id} className={`max-w-[82%] rounded-2xl px-3 py-2 text-sm ${m.senderType === 'delivery' ? 'ml-auto bg-blue-600 text-white' : 'bg-white border text-gray-800'}`}>
-              {isCall ? <div className="space-y-2"><p className="font-black flex items-center gap-2"><Video size={15}/> Internet call request</p><p>{m.message}</p>{m.callUrl && <a href={`${m.callUrl}?role=delivery`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-lg bg-white text-blue-700 px-3 py-1 font-black text-xs">Open call <ExternalLink size={12}/></a>}<p className="text-xs opacity-80">Status: {m.callStatus || 'ringing'}</p></div> : <p>{m.message}</p>}
-              <p className={`text-[10px] mt-1 ${m.senderType === 'delivery' ? 'text-blue-100' : 'text-gray-400'}`}>{m.createdAt ? new Date(m.createdAt).toLocaleString() : ''}</p>
-            </div>})}
+      <button onClick={() => navigate('/delivery/support')} className="w-full bg-white border rounded-2xl p-5 text-left hover:border-blue-300 hover:shadow-md transition flex items-center justify-between gap-4">
+        <div className="flex items-center gap-4">
+          <div className="h-14 w-14 rounded-2xl bg-blue-600 text-white flex items-center justify-center"><Headphones size={26}/></div>
+          <div>
+            <h2 className="font-black text-lg">Customer Care Support</h2>
+            <p className="text-sm text-gray-500">বাংলায় চ্যাট করুন অথবা ইন্টারনেট কল করুন।</p>
+          </div>
         </div>
-        {supportError && <p className="px-4 pt-2 text-xs text-red-600 font-bold">{supportError}</p>}
-        <div className="p-3 border-t flex gap-2"><input value={supportText} onChange={(e)=>setSupportText(e.target.value)} onKeyDown={(e)=>{ if (e.key === 'Enter') sendSupport(); }} className="flex-1 border rounded-xl px-3 py-2 text-sm" placeholder="বাংলায় লিখুন... / Write message..."/><button onClick={sendSupport} disabled={!supportText.trim()} className="bg-blue-600 disabled:bg-gray-300 text-white rounded-xl px-4 font-black flex items-center gap-2"><Send size={16}/> Send</button></div>
-      </section>
+        <span className="bg-blue-50 text-blue-700 rounded-xl px-4 py-2 text-sm font-black">Open</span>
+      </button>
     </main>
   </div>;
 }

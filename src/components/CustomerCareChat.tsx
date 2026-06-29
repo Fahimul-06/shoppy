@@ -25,7 +25,12 @@ export default function CustomerCareChat() {
 
   const token = getToken('user');
   const user = getSessionUser('user');
-  const hidden = useMemo(() => location.pathname.startsWith('/admin') || location.pathname.startsWith('/seller'), [location.pathname]);
+  const hidden = useMemo(() => (
+    location.pathname.startsWith('/admin') ||
+    location.pathname.startsWith('/seller') ||
+    location.pathname.startsWith('/delivery') ||
+    location.pathname.startsWith('/call')
+  ), [location.pathname]);
 
   const loadMessages = async (markRead = false) => {
     if (!token || hidden) return;

@@ -9,7 +9,7 @@ function defaultApiBaseUrl() {
   return '/api';
 }
 
-const API_BASE_URL = defaultApiBaseUrl().replace(/\/$/, '');
+export const API_BASE_URL = defaultApiBaseUrl().replace(/\/$/, '');
 
 type ApiOptions = RequestInit & { token?: string | null; timeoutMs?: number };
 
@@ -92,3 +92,9 @@ export const api = {
   delete: <T>(path: string, token?: string | null) => apiFetch<T>(path, { method: 'DELETE', token }),
   upload: <T>(path: string, formData: FormData, token?: string | null) => apiFetch<T>(path, { method: 'POST', body: formData, token, timeoutMs: 120000 }),
 };
+
+
+export function getSocketBaseUrl() {
+  if (API_BASE_URL.endsWith('/api')) return API_BASE_URL.slice(0, -4);
+  return API_BASE_URL;
+}

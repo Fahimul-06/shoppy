@@ -2,13 +2,15 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { Bike, Loader2, Mic, MicOff, PhoneCall, PhoneOff, ShieldCheck, Volume2 } from 'lucide-react';
 import { api, getToken } from '../../lib/api';
+import { createRealtimeSocket, socketAck } from '../../lib/socket';
+import type { Socket } from 'socket.io-client';
 
 type Role = 'delivery' | 'admin';
 
 type Signal = {
-  id: string;
+  id?: string;
   from: Role;
-  to: Role;
+  to?: Role;
   type: 'offer' | 'answer' | 'candidate' | 'leave';
   payload: any;
 };
@@ -34,20 +36,58 @@ export default function DeliveryCallRoomPage() {
   const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
-  const seenSignalsRef = useRef<Set<string>>(new Set());
+  const socketRef = useRef<Socket | null>(null);
   const makingOfferRef = useRef(false);
   const answerSentRef = useRef(false);
+  const hasEndedRef = useRef(false);
   const mountedRef = useRef(true);
 
   const [room, setRoom] = useState<any>(null);
-  const [status, setStatus] = useState('Preparing call room...');
+  const [status, setStatus] = useState('Preparing live call room...');
   const [error, setError] = useState('');
   const [muted, setMuted] = useState(false);
   const [connected, setConnected] = useState(false);
   const [ending, setEnding] = useState(false);
 
+  const callHome = () => role === 'admin' ? '/admin' : '/delivery';
+
   const sendSignal = async (type: Signal['type'], payload: any = {}) => {
-    await api.post(`/calls/${roomId}/signals`, { type, payload }, token);
+    const socket = socketRef.current;
+    if (!socket?.connected) throw new Error('Realtime call connection is not ready');
+    await socketAck(socket, 'call:signal', { roomId, type, payload });
+  };
+
+  const closeLocalCall = (stopTracks = true) => {
+    pcRef.current?.close();
+    pcRef.current = null;
+    if (stopTracks) localStreamRef.current?.getTracks().forEach((track) => track.stop());
+    localStreamRef.current = null;
+    if (localAudioRef.current) localAudioRef.current.srcObject = null;
+    if (remoteAudioRef.current) remoteAudioRef.current.srcObject = null;
+    setConnected(false);
+  };
+
+  const leavePageAfterEnd = () => {
+    window.setTimeout(() => navigate(callHome(), { replace: true }), 450);
+  };
+
+  const stopRoomAndExit = async (reason = 'ended') => {
+    if (hasEndedRef.current) return;
+    hasEndedRef.current = true;
+    setEnding(true);
+    try {
+      if (socketRef.current?.connected) {
+        await socketAck(socketRef.current, 'call:end', { roomId, reason }, 2500).catch(() => {});
+      } else {
+        await api.patch(`/calls/${roomId}/status`, { status: 'ended' }, token).catch(() => {});
+      }
+    } finally {
+      closeLocalCall(true);
+      socketRef.current?.disconnect();
+      setStatus('Call ended. Leaving call room...');
+      setEnding(false);
+      leavePageAfterEnd();
+    }
   };
 
   const createPeer = () => {
@@ -56,7 +96,7 @@ export default function DeliveryCallRoomPage() {
     pcRef.current = pc;
 
     pc.onicecandidate = (event) => {
-      if (event.candidate) sendSignal('candidate', event.candidate.toJSON()).catch(() => {});
+      if (event.candidate && !hasEndedRef.current) sendSignal('candidate', event.candidate.toJSON()).catch(() => {});
     };
 
     pc.ontrack = (event) => {
@@ -71,15 +111,15 @@ export default function DeliveryCallRoomPage() {
       const state = pc.connectionState;
       if (state === 'connected') {
         setConnected(true);
-        setStatus('Connected — internet audio call is live.');
+        setStatus('Connected — live internet audio call is running.');
       } else if (state === 'connecting') {
-        setStatus('Connecting audio...');
+        setStatus('Connecting live audio...');
       } else if (state === 'disconnected') {
         setStatus('Connection interrupted. Trying to reconnect...');
       } else if (state === 'failed') {
         setStatus('Connection failed. End this call and start again.');
       } else if (state === 'closed') {
-        setStatus('Call ended.');
+        setStatus('Call stopped.');
       }
     };
 
@@ -96,21 +136,20 @@ export default function DeliveryCallRoomPage() {
 
   const makeAdminOffer = async () => {
     const pc = createPeer();
-    if (role !== 'admin' || makingOfferRef.current || pc.signalingState !== 'stable') return;
+    if (role !== 'admin' || makingOfferRef.current || pc.signalingState !== 'stable' || hasEndedRef.current) return;
     makingOfferRef.current = true;
     try {
       const offer = await pc.createOffer({ offerToReceiveAudio: true });
       await pc.setLocalDescription(offer);
       await sendSignal('offer', pc.localDescription);
-      setStatus('Calling delivery man... waiting for answer.');
+      setStatus('Calling delivery man live... waiting for answer.');
     } finally {
       makingOfferRef.current = false;
     }
   };
 
   const handleSignal = async (signal: Signal) => {
-    if (seenSignalsRef.current.has(signal.id)) return;
-    seenSignalsRef.current.add(signal.id);
+    if (hasEndedRef.current || signal.from === role) return;
     const pc = createPeer();
 
     if (signal.type === 'offer' && role === 'delivery') {
@@ -120,14 +159,14 @@ export default function DeliveryCallRoomPage() {
         await pc.setLocalDescription(answer);
         await sendSignal('answer', pc.localDescription);
         answerSentRef.current = true;
-        setStatus('Answer sent. Connecting audio...');
+        setStatus('Answer sent. Connecting live audio...');
       }
       return;
     }
 
     if (signal.type === 'answer' && role === 'admin') {
       await pc.setRemoteDescription(new RTCSessionDescription(signal.payload));
-      setStatus('Answer received. Connecting audio...');
+      setStatus('Answer received. Connecting live audio...');
       return;
     }
 
@@ -138,38 +177,7 @@ export default function DeliveryCallRoomPage() {
 
     if (signal.type === 'leave') {
       setStatus(`${peerRole === 'admin' ? 'Customer care' : 'Delivery man'} ended the call.`);
-      closeLocalCall(false);
-    }
-  };
-
-  const pollSignals = async () => {
-    if (!mountedRef.current || !token || !roomId) return;
-    const seen = Array.from(seenSignalsRef.current).join(',');
-    const res = await api.get<{ signals: Signal[]; room: any }>(`/calls/${roomId}/signals?seen=${encodeURIComponent(seen)}`, token);
-    setRoom(res.room);
-    for (const signal of res.signals || []) await handleSignal(signal);
-  };
-
-  const closeLocalCall = (stopTracks = true) => {
-    pcRef.current?.close();
-    pcRef.current = null;
-    if (stopTracks) localStreamRef.current?.getTracks().forEach((track) => track.stop());
-    localStreamRef.current = null;
-    setConnected(false);
-  };
-
-  const endCall = async () => {
-    if (ending) return;
-    setEnding(true);
-    try {
-      await sendSignal('leave', {});
-      await api.patch(`/calls/${roomId}/status`, { status: 'ended' }, token);
-    } catch {
-      // Call can still close locally.
-    } finally {
-      closeLocalCall(true);
-      setStatus('Call ended.');
-      setEnding(false);
+      await stopRoomAndExit('peer-left');
     }
   };
 
@@ -187,32 +195,54 @@ export default function DeliveryCallRoomPage() {
         return;
       }
       try {
-        setStatus('Joining own call room...');
+        setStatus('Joining realtime call room...');
         const detail = await api.get<{ room: any }>(`/calls/${roomId}`, token);
         setRoom(detail.room);
         await startMedia();
-        const joined = await api.post<{ room: any }>(`/calls/${roomId}/join`, {}, token);
-        setRoom(joined.room);
-        setStatus(role === 'admin' ? 'Starting call to delivery man...' : 'Waiting for customer care to join...');
-        if (role === 'admin') await makeAdminOffer();
+
+        const socket = createRealtimeSocket(role);
+        socketRef.current = socket;
+        socket.on('call:signal', (signal: Signal) => handleSignal(signal).catch((e) => setError(e instanceof Error ? e.message : 'Signal failed')));
+        socket.on('call:room', (payload: any) => { if (payload?.room) setRoom(payload.room); });
+        socket.on('call:ended', () => {
+          if (!hasEndedRef.current) {
+            hasEndedRef.current = true;
+            closeLocalCall(true);
+            setStatus('Call ended. Leaving call room...');
+            leavePageAfterEnd();
+          }
+        });
+        socket.on('connect', async () => {
+          const joined = await socketAck<{ room: any; role: Role }>(socket, 'call:join', { roomId }).catch((e) => { throw e; });
+          if (mountedRef.current) setRoom(joined.room);
+          setStatus(role === 'admin' ? 'Starting live call to delivery man...' : 'Waiting for customer care to join...');
+          if (role === 'admin') await makeAdminOffer();
+        });
+        socket.on('connect_error', (e) => setError(e.message || 'Realtime call connection failed'));
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Could not start internet call');
         setStatus('Call failed.');
       }
     };
     init();
-    const timer = window.setInterval(() => pollSignals().catch(() => {}), 1800);
+
+    const onBeforeUnload = () => {
+      if (!hasEndedRef.current) socketRef.current?.emit('call:end', { roomId, reason: 'left-page' });
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
     return () => {
       mountedRef.current = false;
-      window.clearInterval(timer);
+      window.removeEventListener('beforeunload', onBeforeUnload);
+      if (!hasEndedRef.current) socketRef.current?.emit('call:end', { roomId, reason: 'left-page' });
       closeLocalCall(true);
+      socketRef.current?.disconnect();
     };
   }, [roomId, role]);
 
   useEffect(() => {
     if (role !== 'admin') return;
     const timer = window.setInterval(() => {
-      if (!connected) makeAdminOffer().catch(() => {});
+      if (!connected && socketRef.current?.connected && !hasEndedRef.current) makeAdminOffer().catch(() => {});
     }, 6000);
     return () => window.clearInterval(timer);
   }, [connected, role]);
@@ -222,7 +252,7 @@ export default function DeliveryCallRoomPage() {
       <div className="w-full max-w-xl rounded-3xl border border-white/10 bg-white/10 backdrop-blur p-6 shadow-2xl">
         <div className="flex items-start justify-between gap-4 mb-6">
           <div>
-            <p className="text-xs uppercase tracking-[0.25em] text-blue-200 font-black">Own Internet Call Room</p>
+            <p className="text-xs uppercase tracking-[0.25em] text-blue-200 font-black">Realtime Own Internet Call Room</p>
             <h1 className="text-2xl font-black mt-1 flex items-center gap-2"><PhoneCall/> Delivery Support Call</h1>
             <p className="text-sm text-slate-300 mt-1">Room: {roomId}</p>
           </div>
@@ -238,7 +268,7 @@ export default function DeliveryCallRoomPage() {
             </div>
           </div>
           {room?.deliveryMan && <p className="text-sm text-slate-300">Delivery: <b>{room.deliveryMan.fullName}</b> • ID: {room.deliveryMan.deliveryCode}</p>}
-          <div className="rounded-xl bg-blue-950/60 border border-blue-500/20 p-3 text-xs text-blue-100 flex gap-2"><ShieldCheck size={16}/> This call uses your own app room and backend signaling. No Jitsi or third-party meeting room is used.</div>
+          <div className="rounded-xl bg-blue-950/60 border border-blue-500/20 p-3 text-xs text-blue-100 flex gap-2"><ShieldCheck size={16}/> Realtime call uses Socket.IO signaling + your own WebRTC page. No Jitsi or meeting-room provider is used.</div>
         </div>
 
         <audio ref={localAudioRef} autoPlay muted className="hidden" />
@@ -246,7 +276,7 @@ export default function DeliveryCallRoomPage() {
 
         <div className="mt-6 flex flex-wrap gap-3 justify-center">
           <button onClick={toggleMute} disabled={!localStreamRef.current} className={`rounded-2xl px-5 py-3 font-black flex items-center gap-2 ${muted ? 'bg-yellow-500 text-slate-950' : 'bg-white/10 hover:bg-white/20'}`}>{muted ? <MicOff/> : <Mic/>}{muted ? 'Unmute' : 'Mute'}</button>
-          <button onClick={endCall} disabled={ending} className="rounded-2xl px-6 py-3 font-black flex items-center gap-2 bg-red-600 hover:bg-red-700 disabled:bg-gray-500"><PhoneOff/>{ending ? 'Ending...' : 'End Call'}</button>
+          <button onClick={() => stopRoomAndExit('ended')} disabled={ending} className="rounded-2xl px-6 py-3 font-black flex items-center gap-2 bg-red-600 hover:bg-red-700 disabled:bg-gray-500"><PhoneOff/>{ending ? 'Ending...' : 'End Call'}</button>
         </div>
 
         {error && <p className="mt-4 text-sm text-red-200 bg-red-500/10 border border-red-500/20 rounded-xl p-3">{error}</p>}

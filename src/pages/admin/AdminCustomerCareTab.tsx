@@ -1,6 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Bike, ExternalLink, Headphones, Loader2, MessageCircle, Send, UserRound, Video, Volume2 } from 'lucide-react';
 import { api, getToken } from '../../lib/api';
+import { createRealtimeSocket, socketAck } from '../../lib/socket';
+import type { Socket } from 'socket.io-client';
 
 type Conversation = {
   id: string;
@@ -46,6 +48,17 @@ export default function AdminCustomerCareTab() {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
   const [callSoundEnabled, setCallSoundEnabled] = useState(false);
+  const socketRef = useRef<Socket | null>(null);
+  const selectedRef = useRef<Conversation | null>(null);
+  const modeRef = useRef<Mode>('customer');
+
+  const mergeMessages = (incoming: any[]) => {
+    setMessages((prev) => {
+      const map = new Map<string, any>();
+      [...prev, ...incoming].forEach((m) => map.set(String(m.id || m._id || `${m.createdAt}-${m.message}`), m));
+      return Array.from(map.values()).sort((a, b) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime());
+    });
+  };
 
   const loadConversations = async (targetMode = mode) => {
     const endpoint = targetMode === 'delivery' ? '/admin/delivery-support' : '/admin/customer-care';
@@ -58,16 +71,38 @@ export default function AdminCustomerCareTab() {
     setConversations(nextConversations);
   };
 
-  useEffect(() => { loadConversations().catch(() => setConversations([])); }, [mode, callSoundEnabled]);
+  useEffect(() => { modeRef.current = mode; loadConversations().catch(() => setConversations([])); }, [mode, callSoundEnabled]);
   useEffect(() => {
     if (mode !== 'delivery') return;
-    const timer = window.setInterval(() => loadConversations('delivery').catch(() => {}), 8000);
+    const timer = window.setInterval(() => loadConversations('delivery').catch(() => {}), 30000);
     return () => window.clearInterval(timer);
   }, [mode, callSoundEnabled]);
+
+  useEffect(() => {
+    const token = getToken('admin');
+    if (!token) return;
+    const socket = createRealtimeSocket('admin');
+    socketRef.current = socket;
+    socket.on('delivery-support:refresh', () => {
+      if (modeRef.current === 'delivery') loadConversations('delivery').catch(() => {});
+    });
+    socket.on('delivery-support:call', () => {
+      if (callSoundEnabled) playIncomingCallSound();
+      if (modeRef.current === 'delivery') loadConversations('delivery').catch(() => {});
+    });
+    socket.on('delivery-support:message', (message: any) => {
+      if (modeRef.current !== 'delivery') return;
+      const deliveryId = String(message.deliveryMan?._id || message.deliveryMan || '');
+      if (selectedRef.current?.id && deliveryId === String(selectedRef.current.id)) mergeMessages([message]);
+      loadConversations('delivery').catch(() => {});
+    });
+    return () => { socket.disconnect(); socketRef.current = null; };
+  }, [callSoundEnabled]);
 
   const changeMode = (nextMode: Mode) => {
     setMode(nextMode);
     setSelected(null);
+    selectedRef.current = null;
     setMessages([]);
     setPerson(null);
     setError('');
@@ -75,6 +110,7 @@ export default function AdminCustomerCareTab() {
 
   const openConversation = async (conversation: Conversation) => {
     setSelected(conversation);
+    selectedRef.current = conversation;
     setLoading(true);
     setError('');
     try {
@@ -82,6 +118,7 @@ export default function AdminCustomerCareTab() {
         const res = await api.get<{ deliveryMan: any; messages: any[] }>(`/admin/delivery-support/${conversation.id}`, getToken('admin'));
         setPerson(res.deliveryMan);
         setMessages(res.messages || []);
+        socketRef.current?.emit('delivery-support:join', { deliveryManId: conversation.id });
       } else {
         const res = await api.get<{ customer: any; messages: any[] }>(`/admin/customer-care/${conversation.id}`, getToken('admin'));
         setPerson(res.customer);
@@ -115,9 +152,14 @@ export default function AdminCustomerCareTab() {
     setSending(true);
     setError('');
     try {
-      const endpoint = mode === 'delivery' ? `/admin/delivery-support/${selected.id}` : `/admin/customer-care/${selected.id}`;
-      const res = await api.post<{ message: any }>(endpoint, { message: clean, language: mode === 'delivery' ? 'bn' : 'en' }, getToken('admin'));
-      setMessages((prev) => [...prev, res.message]);
+      if (mode === 'delivery' && socketRef.current?.connected) {
+        const res = await socketAck<{ message: any }>(socketRef.current, 'delivery-support:admin-message', { deliveryManId: selected.id, message: clean, language: 'bn' });
+        mergeMessages([res.message]);
+      } else {
+        const endpoint = mode === 'delivery' ? `/admin/delivery-support/${selected.id}` : `/admin/customer-care/${selected.id}`;
+        const res = await api.post<{ message: any }>(endpoint, { message: clean, language: mode === 'delivery' ? 'bn' : 'en' }, getToken('admin'));
+        mergeMessages([res.message]);
+      }
       loadConversations().catch(() => {});
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Reply could not be sent');

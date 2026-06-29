@@ -2,6 +2,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import { BellRing, Bike, ExternalLink, Headphones, LogOut, MapPin, MessageCircle, Package, Phone, Send, User, Video, Volume2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { api, clearSession, getSessionUser, getToken } from '../../lib/api';
+import { createRealtimeSocket, socketAck } from '../../lib/socket';
+import type { Socket } from 'socket.io-client';
 
 const formatAddress = (address?: any) => {
   if (!address) return 'No address';
@@ -39,6 +41,8 @@ export default function DeliveryDashboardPage() {
   const [newOrderNotice, setNewOrderNotice] = useState('');
   const knownOrderIds = useRef<Set<string>>(new Set());
   const firstLoadDone = useRef(false);
+  const supportMessageIds = useRef<Set<string>>(new Set());
+  const socketRef = useRef<Socket | null>(null);
 
   const [supportMessages, setSupportMessages] = useState<any[]>([]);
   const [supportText, setSupportText] = useState('');
@@ -47,11 +51,23 @@ export default function DeliveryDashboardPage() {
 
   const logout = () => { clearSession('delivery'); navigate('/delivery/login'); };
 
+  const mergeSupportMessages = (incoming: any[]) => {
+    setSupportMessages((prev) => {
+      const map = new Map<string, any>();
+      [...prev, ...incoming].forEach((m) => {
+        const id = String(m.id || m._id || `${m.createdAt}-${m.message}`);
+        map.set(id, m);
+        supportMessageIds.current.add(id);
+      });
+      return Array.from(map.values()).sort((a, b) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime());
+    });
+  };
+
   const loadSupport = async () => {
     const token = getToken('delivery');
     if (!token) return;
     const res = await api.get<{ messages: any[] }>('/delivery/support', token);
-    setSupportMessages(res.messages || []);
+    mergeSupportMessages(res.messages || []);
   };
 
   const load = async (silent = false) => {
@@ -83,8 +99,24 @@ export default function DeliveryDashboardPage() {
 
   useEffect(() => { load(); }, []);
   useEffect(() => {
-    const timer = window.setInterval(() => load(true), 10000);
+    const timer = window.setInterval(() => load(true), 30000);
     return () => window.clearInterval(timer);
+  }, [soundEnabled]);
+
+  useEffect(() => {
+    const token = getToken('delivery');
+    if (!token) return;
+    const socket = createRealtimeSocket('delivery');
+    socketRef.current = socket;
+    socket.on('connect', () => socket.emit('delivery-support:join', {}));
+    socket.on('delivery-support:message', (message: any) => mergeSupportMessages([message]));
+    socket.on('delivery:orders-assigned', (payload: any) => {
+      setNewOrderNotice(payload?.message || 'New assigned order received.');
+      if (soundEnabled) playLoudAlert();
+      load(true).catch(() => {});
+    });
+    socket.on('connect_error', () => setSupportError('Realtime connection failed. Fallback refresh is still active.'));
+    return () => { socket.disconnect(); socketRef.current = null; };
   }, [soundEnabled]);
 
   const enableSound = () => {
@@ -105,7 +137,7 @@ export default function DeliveryDashboardPage() {
     setSupportError('');
     try {
       const res = await api.post<{ message: any; callUrl: string }>('/delivery/support/call', {}, getToken('delivery'));
-      setSupportMessages((prev) => [...prev, res.message]);
+      mergeSupportMessages([res.message]);
       if (res.callUrl) window.open(`${res.callUrl}?role=delivery`, '_blank', 'noopener,noreferrer');
     } catch (e) {
       setSupportError(e instanceof Error ? e.message : 'ইন্টারনেট কল শুরু করা যায়নি');
@@ -120,8 +152,13 @@ export default function DeliveryDashboardPage() {
     setSupportText('');
     setSupportError('');
     try {
-      const res = await api.post<{ message: any }>('/delivery/support', { message: clean, language: 'bn' }, getToken('delivery'));
-      setSupportMessages((prev) => [...prev, res.message]);
+      if (socketRef.current?.connected) {
+        const res = await socketAck<{ message: any }>(socketRef.current, 'delivery-support:message', { message: clean, language: 'bn' });
+        mergeSupportMessages([res.message]);
+      } else {
+        const res = await api.post<{ message: any }>('/delivery/support', { message: clean, language: 'bn' }, getToken('delivery'));
+        mergeSupportMessages([res.message]);
+      }
     } catch (e) {
       setSupportError(e instanceof Error ? e.message : 'মেসেজ পাঠানো যায়নি');
       setSupportText(clean);

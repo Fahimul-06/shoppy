@@ -116,6 +116,9 @@ router.patch('/:roomId/status', requireCallParticipant, async (req, res) => {
   if (room.supportMessage) {
     await DeliverySupportMessage.findByIdAndUpdate(room.supportMessage, { $set: { callStatus: status } });
   }
+  const io = req.app.get('io');
+  io?.to(`call:${req.params.roomId}`).emit(status === 'ended' ? 'call:ended' : 'call:room', { room, roomId: req.params.roomId, reason: status, endedBy: req.callRole });
+  io?.to('admin:delivery-support').emit('delivery-support:refresh');
   res.json({ room: publicRoomPayload(room, req.callRole) });
 });
 

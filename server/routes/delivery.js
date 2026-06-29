@@ -115,6 +115,11 @@ router.post('/support/call', requireDeliveryMan, async (req, res) => {
     supportMessage: message._id,
     status: 'ringing',
   });
+  const io = req.app.get('io');
+  io?.to(`delivery:${req.deliveryMan._id}:support`).emit('delivery-support:message', message);
+  io?.to('admin:delivery-support').emit('delivery-support:message', message);
+  io?.to('admin:delivery-support').emit('delivery-support:call', { message, deliveryMan: deliveryUser(req.deliveryMan) });
+  io?.to('admin:delivery-support').emit('delivery-support:refresh');
   res.status(201).json({ message, callUrl, roomName });
 });
 
@@ -131,6 +136,10 @@ router.patch('/support/call/:messageId/end', requireDeliveryMan, async (req, res
       { $set: { status: 'ended', endedAt: new Date() } }
     );
   }
+  const io = req.app.get('io');
+  io?.to(`delivery:${req.deliveryMan._id}:support`).emit('delivery-support:message', message);
+  io?.to('admin:delivery-support').emit('delivery-support:refresh');
+  if (message.callRoomName) io?.to(`call:${message.callRoomName}`).emit('call:ended', { roomId: message.callRoomName, reason: 'ended', endedBy: 'delivery' });
   res.json({ message });
 });
 
@@ -146,6 +155,10 @@ router.post('/support', requireDeliveryMan, async (req, res) => {
     readByAdmin: false,
     readByDelivery: true,
   });
+  const io = req.app.get('io');
+  io?.to(`delivery:${req.deliveryMan._id}:support`).emit('delivery-support:message', message);
+  io?.to('admin:delivery-support').emit('delivery-support:message', message);
+  io?.to('admin:delivery-support').emit('delivery-support:refresh');
   res.status(201).json({ message });
 });
 

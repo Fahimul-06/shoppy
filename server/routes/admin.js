@@ -580,6 +580,15 @@ router.post('/orders/assign-delivery', requireAdminPermission('orders'), async (
     { _id: { $in: orderIds } },
     { $set: { deliveryMan: deliveryMan._id, assignedToDeliveryAt: new Date() } }
   );
+  const assignedOrders = await Order.find({ _id: { $in: orderIds } });
+  const io = req.app.get('io');
+  const visibleOrders = assignedOrders.filter((order) => order.status === 'shipped');
+  if (visibleOrders.length) {
+    io?.to(`delivery:${deliveryMan._id}:orders`).emit('delivery:orders-assigned', {
+      orders: visibleOrders,
+      message: `${visibleOrders.length} shipped order(s) assigned to you.`,
+    });
+  }
   res.json({ message: 'Orders assigned to delivery man', assignedCount: result.modifiedCount || result.matchedCount || 0 });
 });
 
@@ -681,6 +690,14 @@ router.patch('/orders/:id', requireAdminPermission('orders'), async (req, res) =
     });
   }
   const order = await Order.findByIdAndUpdate(req.params.id, update, { new: true }).populate('user').populate('deliveryMan');
+
+  const io = req.app.get('io');
+  if (req.body?.status === 'shipped' && order.deliveryMan) {
+    io?.to(`delivery:${order.deliveryMan._id || order.deliveryMan}:orders`).emit('delivery:orders-assigned', {
+      orders: [order],
+      message: `Order ${order.orderNumber || ''} is ready for delivery.`,
+    });
+  }
 
   if (req.body?.status && req.body.status !== previousStatus && ['processing', 'shipped', 'delivered'].includes(req.body.status)) {
     const typeMap = {
@@ -845,6 +862,10 @@ router.post('/customer-care/:customerId', requireAdminPermission('customerCare')
     readByCustomer: false,
     readByAdmin: true,
   });
+  const io = req.app.get('io');
+  io?.to(`delivery:${deliveryMan._id}:support`).emit('delivery-support:message', chatMessage);
+  io?.to('admin:delivery-support').emit('delivery-support:message', chatMessage);
+  io?.to('admin:delivery-support').emit('delivery-support:refresh');
   res.status(201).json({ message: chatMessage });
 });
 
@@ -900,6 +921,10 @@ router.post('/delivery-support/:deliveryManId', requireAdminPermission('customer
     readByDelivery: false,
     readByAdmin: true,
   });
+  const io = req.app.get('io');
+  io?.to(`delivery:${deliveryMan._id}:support`).emit('delivery-support:message', chatMessage);
+  io?.to('admin:delivery-support').emit('delivery-support:message', chatMessage);
+  io?.to('admin:delivery-support').emit('delivery-support:refresh');
   res.status(201).json({ message: chatMessage });
 });
 
@@ -921,6 +946,10 @@ router.patch('/delivery-support/:deliveryManId/call/:messageId/status', requireA
       { $set: { status, adminJoinedAt: status === 'joined' ? new Date() : undefined, endedAt: status === 'ended' ? new Date() : undefined } }
     );
   }
+  const io = req.app.get('io');
+  io?.to(`delivery:${deliveryMan._id}:support`).emit('delivery-support:message', message);
+  io?.to('admin:delivery-support').emit('delivery-support:refresh');
+  if (message.callRoomName && status === 'ended') io?.to(`call:${message.callRoomName}`).emit('call:ended', { roomId: message.callRoomName, reason: 'ended', endedBy: 'admin' });
   res.json({ message });
 });
 

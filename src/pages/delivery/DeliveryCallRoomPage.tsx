@@ -15,7 +15,14 @@ type Signal = {
   payload: any;
 };
 
-const rtcConfig: RTCConfiguration = { iceServers: [] };
+function buildRtcConfig(): RTCConfiguration {
+  const urls = String(import.meta.env.VITE_TURN_URLS || import.meta.env.VITE_TURN_URL || '').split(',').map((url) => url.trim()).filter(Boolean);
+  const username = String(import.meta.env.VITE_TURN_USERNAME || '').trim();
+  const credential = String(import.meta.env.VITE_TURN_CREDENTIAL || '').trim();
+  const iceServers: RTCIceServer[] = [];
+  if (urls.length) iceServers.push(username || credential ? { urls, username, credential } : { urls });
+  return { iceServers, iceTransportPolicy: 'all', bundlePolicy: 'balanced' };
+}
 
 function pickRole(requested: string | null): Role {
   if (requested === 'admin' && getToken('admin')) return 'admin';
@@ -41,6 +48,9 @@ export default function DeliveryCallRoomPage() {
   const answerSentRef = useRef(false);
   const hasEndedRef = useRef(false);
   const mountedRef = useRef(true);
+  const remoteDescriptionReadyRef = useRef(false);
+  const pendingCandidatesRef = useRef<RTCIceCandidateInit[]>([]);
+  const offerTimerRef = useRef<number | null>(null);
 
   const [room, setRoom] = useState<any>(null);
   const [status, setStatus] = useState('Preparing live call room...');
@@ -49,7 +59,7 @@ export default function DeliveryCallRoomPage() {
   const [connected, setConnected] = useState(false);
   const [ending, setEnding] = useState(false);
 
-  const callHome = () => role === 'admin' ? '/admin' : '/delivery';
+  const callHome = () => role === 'admin' ? '/admin' : '/delivery/support';
 
   const sendSignal = async (type: Signal['type'], payload: any = {}) => {
     const socket = socketRef.current;
@@ -58,17 +68,21 @@ export default function DeliveryCallRoomPage() {
   };
 
   const closeLocalCall = (stopTracks = true) => {
+    if (offerTimerRef.current) window.clearTimeout(offerTimerRef.current);
+    offerTimerRef.current = null;
     pcRef.current?.close();
     pcRef.current = null;
     if (stopTracks) localStreamRef.current?.getTracks().forEach((track) => track.stop());
     localStreamRef.current = null;
+    remoteDescriptionReadyRef.current = false;
+    pendingCandidatesRef.current = [];
     if (localAudioRef.current) localAudioRef.current.srcObject = null;
     if (remoteAudioRef.current) remoteAudioRef.current.srcObject = null;
     setConnected(false);
   };
 
   const leavePageAfterEnd = () => {
-    window.setTimeout(() => navigate(callHome(), { replace: true }), 450);
+    window.setTimeout(() => navigate(callHome(), { replace: true }), 350);
   };
 
   const stopRoomAndExit = async (reason = 'ended') => {
@@ -90,9 +104,18 @@ export default function DeliveryCallRoomPage() {
     }
   };
 
+  const flushPendingCandidates = async () => {
+    const pc = pcRef.current;
+    if (!pc || !remoteDescriptionReadyRef.current) return;
+    const pending = pendingCandidatesRef.current.splice(0);
+    for (const candidate of pending) {
+      try { await pc.addIceCandidate(new RTCIceCandidate(candidate)); } catch { /* ignore duplicate/early candidates */ }
+    }
+  };
+
   const createPeer = () => {
     if (pcRef.current) return pcRef.current;
-    const pc = new RTCPeerConnection(rtcConfig);
+    const pc = new RTCPeerConnection(buildRtcConfig());
     pcRef.current = pc;
 
     pc.onicecandidate = (event) => {
@@ -110,6 +133,7 @@ export default function DeliveryCallRoomPage() {
     pc.onconnectionstatechange = () => {
       const state = pc.connectionState;
       if (state === 'connected') {
+        setError('');
         setConnected(true);
         setStatus('Connected — live internet audio call is running.');
       } else if (state === 'connecting') {
@@ -117,9 +141,21 @@ export default function DeliveryCallRoomPage() {
       } else if (state === 'disconnected') {
         setStatus('Connection interrupted. Trying to reconnect...');
       } else if (state === 'failed') {
-        setStatus('Connection failed. End this call and start again.');
+        setConnected(false);
+        setStatus('Connection failed. Trying to restart the live call connection...');
+        if (role === 'admin' && !hasEndedRef.current) {
+          makeAdminOffer(true).catch(() => setError('Connection failed. For mobile networks, configure your own TURN server with VITE_TURN_URLS, VITE_TURN_USERNAME, and VITE_TURN_CREDENTIAL.'));
+        } else {
+          setError('Connection failed. Keep both users on the call page and try again. For mobile networks, configure your own TURN server.');
+        }
       } else if (state === 'closed') {
         setStatus('Call stopped.');
+      }
+    };
+
+    pc.oniceconnectionstatechange = () => {
+      if (pc.iceConnectionState === 'failed' && role === 'admin' && !hasEndedRef.current) {
+        makeAdminOffer(true).catch(() => {});
       }
     };
 
@@ -127,6 +163,7 @@ export default function DeliveryCallRoomPage() {
   };
 
   const startMedia = async () => {
+    if (localStreamRef.current) return;
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
     localStreamRef.current = stream;
     if (localAudioRef.current) localAudioRef.current.srcObject = stream;
@@ -134,15 +171,16 @@ export default function DeliveryCallRoomPage() {
     stream.getTracks().forEach((track) => pc.addTrack(track, stream));
   };
 
-  const makeAdminOffer = async () => {
+  const makeAdminOffer = async (iceRestart = false) => {
     const pc = createPeer();
-    if (role !== 'admin' || makingOfferRef.current || pc.signalingState !== 'stable' || hasEndedRef.current) return;
+    if (role !== 'admin' || makingOfferRef.current || hasEndedRef.current) return;
+    if (pc.signalingState !== 'stable') return;
     makingOfferRef.current = true;
     try {
-      const offer = await pc.createOffer({ offerToReceiveAudio: true });
+      const offer = await pc.createOffer({ offerToReceiveAudio: true, iceRestart });
       await pc.setLocalDescription(offer);
       await sendSignal('offer', pc.localDescription);
-      setStatus('Calling delivery man live... waiting for answer.');
+      setStatus(iceRestart ? 'Restarting live audio connection...' : 'Calling delivery man live... waiting for answer.');
     } finally {
       makingOfferRef.current = false;
     }
@@ -153,25 +191,32 @@ export default function DeliveryCallRoomPage() {
     const pc = createPeer();
 
     if (signal.type === 'offer' && role === 'delivery') {
+      answerSentRef.current = false;
       await pc.setRemoteDescription(new RTCSessionDescription(signal.payload));
-      if (!answerSentRef.current) {
-        const answer = await pc.createAnswer();
-        await pc.setLocalDescription(answer);
-        await sendSignal('answer', pc.localDescription);
-        answerSentRef.current = true;
-        setStatus('Answer sent. Connecting live audio...');
-      }
+      remoteDescriptionReadyRef.current = true;
+      await flushPendingCandidates();
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+      await sendSignal('answer', pc.localDescription);
+      answerSentRef.current = true;
+      setStatus('Answered. Connecting live audio...');
       return;
     }
 
     if (signal.type === 'answer' && role === 'admin') {
       await pc.setRemoteDescription(new RTCSessionDescription(signal.payload));
+      remoteDescriptionReadyRef.current = true;
+      await flushPendingCandidates();
       setStatus('Answer received. Connecting live audio...');
       return;
     }
 
     if (signal.type === 'candidate' && signal.payload) {
-      try { await pc.addIceCandidate(new RTCIceCandidate(signal.payload)); } catch { /* ignore early/duplicate candidates */ }
+      if (!remoteDescriptionReadyRef.current || !pc.remoteDescription) {
+        pendingCandidatesRef.current.push(signal.payload);
+      } else {
+        try { await pc.addIceCandidate(new RTCIceCandidate(signal.payload)); } catch { /* ignore duplicate/early candidates */ }
+      }
       return;
     }
 
@@ -179,6 +224,17 @@ export default function DeliveryCallRoomPage() {
       setStatus(`${peerRole === 'admin' ? 'Customer care' : 'Delivery man'} ended the call.`);
       await stopRoomAndExit('peer-left');
     }
+  };
+
+  const maybeStartOffer = (nextRoom?: any) => {
+    if (role !== 'admin' || hasEndedRef.current) return;
+    const currentRoom = nextRoom || room;
+    if (!currentRoom?.deliveryJoinedAt || !currentRoom?.adminJoinedAt) {
+      setStatus('Waiting for both sides to enter the call page...');
+      return;
+    }
+    if (offerTimerRef.current) window.clearTimeout(offerTimerRef.current);
+    offerTimerRef.current = window.setTimeout(() => makeAdminOffer().catch((e) => setError(e instanceof Error ? e.message : 'Could not start live call')), 400);
   };
 
   const toggleMute = () => {
@@ -203,7 +259,12 @@ export default function DeliveryCallRoomPage() {
         const socket = createRealtimeSocket(role);
         socketRef.current = socket;
         socket.on('call:signal', (signal: Signal) => handleSignal(signal).catch((e) => setError(e instanceof Error ? e.message : 'Signal failed')));
-        socket.on('call:room', (payload: any) => { if (payload?.room) setRoom(payload.room); });
+        socket.on('call:room', (payload: any) => {
+          if (payload?.room) {
+            setRoom(payload.room);
+            maybeStartOffer(payload.room);
+          }
+        });
         socket.on('call:ended', () => {
           if (!hasEndedRef.current) {
             hasEndedRef.current = true;
@@ -215,8 +276,8 @@ export default function DeliveryCallRoomPage() {
         socket.on('connect', async () => {
           const joined = await socketAck<{ room: any; role: Role }>(socket, 'call:join', { roomId }).catch((e) => { throw e; });
           if (mountedRef.current) setRoom(joined.room);
-          setStatus(role === 'admin' ? 'Starting live call to delivery man...' : 'Waiting for customer care to join...');
-          if (role === 'admin') await makeAdminOffer();
+          setStatus(role === 'admin' ? 'Waiting for delivery man answer...' : 'Waiting for customer care to answer...');
+          maybeStartOffer(joined.room);
         });
         socket.on('connect_error', (e) => setError(e.message || 'Realtime call connection failed'));
       } catch (e) {
@@ -242,10 +303,10 @@ export default function DeliveryCallRoomPage() {
   useEffect(() => {
     if (role !== 'admin') return;
     const timer = window.setInterval(() => {
-      if (!connected && socketRef.current?.connected && !hasEndedRef.current) makeAdminOffer().catch(() => {});
+      if (!connected && socketRef.current?.connected && !hasEndedRef.current) maybeStartOffer();
     }, 6000);
     return () => window.clearInterval(timer);
-  }, [connected, role]);
+  }, [connected, role, room]);
 
   return (
     <div className="min-h-screen bg-slate-950 text-white grid place-items-center p-4">
@@ -268,7 +329,7 @@ export default function DeliveryCallRoomPage() {
             </div>
           </div>
           {room?.deliveryMan && <p className="text-sm text-slate-300">Delivery: <b>{room.deliveryMan.fullName}</b> • ID: {room.deliveryMan.deliveryCode}</p>}
-          <div className="rounded-xl bg-blue-950/60 border border-blue-500/20 p-3 text-xs text-blue-100 flex gap-2"><ShieldCheck size={16}/> Realtime call uses Socket.IO signaling + your own WebRTC page. No Jitsi or meeting-room provider is used.</div>
+          <div className="rounded-xl bg-blue-950/60 border border-blue-500/20 p-3 text-xs text-blue-100 flex gap-2"><ShieldCheck size={16}/> Realtime call uses Socket.IO signaling + your own WebRTC page. No Jitsi or meeting-room provider is used. For reliable mobile-network calls, configure your own TURN server.</div>
         </div>
 
         <audio ref={localAudioRef} autoPlay muted className="hidden" />

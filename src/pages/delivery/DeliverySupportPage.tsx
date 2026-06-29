@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, ExternalLink, Headphones, Send, Video } from 'lucide-react';
+import { ArrowLeft, ExternalLink, Headphones, PhoneCall, Send, Video } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { api, getSessionUser, getToken } from '../../lib/api';
 import { createRealtimeSocket, socketAck } from '../../lib/socket';
@@ -13,6 +13,7 @@ export default function DeliverySupportPage() {
   const [supportError, setSupportError] = useState('');
   const [startingCall, setStartingCall] = useState(false);
   const socketRef = useRef<Socket | null>(null);
+  const pendingCallUrlRef = useRef<string>('');
 
   const mergeSupportMessages = (incoming: any[]) => {
     setSupportMessages((prev) => {
@@ -44,7 +45,14 @@ export default function DeliverySupportPage() {
     const socket = createRealtimeSocket('delivery');
     socketRef.current = socket;
     socket.on('connect', () => socket.emit('delivery-support:join', {}));
-    socket.on('delivery-support:message', (message: any) => mergeSupportMessages([message]));
+    socket.on('delivery-support:message', (message: any) => {
+      mergeSupportMessages([message]);
+      if (message?.messageType === 'call' && message?.callUrl) pendingCallUrlRef.current = `${message.callUrl}?role=delivery`;
+    });
+    socket.on('delivery-support:call-answered', (payload: any) => {
+      const callUrl = payload?.callUrl || pendingCallUrlRef.current;
+      if (callUrl) navigate(`${callUrl}?role=delivery`.replace('?role=delivery?role=delivery', '?role=delivery'), { replace: false });
+    });
     socket.on('connect_error', () => setSupportError('Realtime connection failed. Fallback refresh is still active.'));
     const timer = window.setInterval(() => loadSupport(), 30000);
     return () => { window.clearInterval(timer); socket.disconnect(); socketRef.current = null; };
@@ -55,9 +63,12 @@ export default function DeliverySupportPage() {
     setStartingCall(true);
     setSupportError('');
     try {
-      const res = await api.post<{ message: any; callUrl: string }>('/delivery/support/call', {}, getToken('delivery'));
+      const res = await api.post<{ message: any; callUrl: string; roomName?: string }>('/delivery/support/call', {}, getToken('delivery'));
       mergeSupportMessages([res.message]);
-      if (res.callUrl) window.open(`${res.callUrl}?role=delivery`, '_blank', 'noopener,noreferrer');
+      if (res.callUrl) {
+        pendingCallUrlRef.current = `${res.callUrl}?role=delivery`;
+        navigate(`${res.callUrl}?role=delivery`, { replace: false });
+      }
     } catch (e) {
       setSupportError(e instanceof Error ? e.message : 'ইন্টারনেট কল শুরু করা যায়নি');
     } finally {
@@ -92,7 +103,7 @@ export default function DeliverySupportPage() {
           <h1 className="text-xl font-black flex items-center gap-2"><Headphones size={22}/> Customer Care Support</h1>
           <p className="text-xs text-slate-300">{user?.fullName} • ID: {user?.deliveryCode || '------'}</p>
         </div>
-        <button onClick={startVirtualCall} disabled={startingCall} className="bg-green-600 disabled:bg-gray-500 text-white rounded-xl px-4 py-2 font-black flex items-center justify-center gap-2 text-sm"><Video size={16}/>{startingCall ? 'Starting...' : 'Internet Call'}</button>
+        <button onClick={startVirtualCall} disabled={startingCall} className="bg-green-600 disabled:bg-gray-500 text-white rounded-xl px-4 py-2 font-black flex items-center justify-center gap-2 text-sm"><PhoneCall size={16}/>{startingCall ? 'Starting...' : 'Internet Call'}</button>
       </div>
     </header>
 

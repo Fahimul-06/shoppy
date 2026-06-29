@@ -135,14 +135,14 @@ export default function AdminCustomerCareTab() {
 
   const joinCall = async (message: any) => {
     if (!selected || !message?.callUrl) return;
-    window.open(`${message.callUrl}?role=admin`, '_blank', 'noopener,noreferrer');
     try {
       const res = await api.patch<{ message: any }>(`/admin/delivery-support/${selected.id}/call/${message.id || message._id}/status`, { status: 'joined' }, getToken('admin'));
       setMessages((prev) => prev.map((m) => String(m.id || m._id) === String(message.id || message._id) ? res.message : m));
       loadConversations().catch(() => {});
     } catch {
-      // Call link is still opened even if status update fails.
+      // Continue to the call room even if the message status update fails.
     }
+    window.location.assign(`${message.callUrl}?role=admin`);
   };
 
   const sendReply = async () => {
@@ -222,7 +222,7 @@ export default function AdminCustomerCareTab() {
                   const isAdmin = m.senderType === 'admin';
                   const isCall = m.messageType === 'call';
                   return <div key={m.id || m._id} className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm ${isAdmin ? 'ml-auto bg-slate-950 text-white' : 'bg-white border text-gray-700'}`}>
-                    {isCall ? <div className="space-y-2"><p className="font-black flex items-center gap-2"><Video size={15}/> Internet call request</p><p>{m.message}</p><div className="flex flex-wrap gap-2 items-center"><button onClick={() => joinCall(m)} className="inline-flex items-center gap-1 rounded-lg bg-green-600 text-white px-3 py-1 font-black text-xs">Join Call <ExternalLink size={12}/></button><span className="text-xs font-bold opacity-75">Status: {m.callStatus || 'ringing'}</span></div></div> : <p>{m.message}</p>}
+                    {isCall ? <div className="space-y-2"><p className="font-black flex items-center gap-2"><Video size={15}/> Internet call request</p><p>{m.message}</p><div className="flex flex-wrap gap-2 items-center"><button onClick={() => joinCall(m)} className="inline-flex items-center gap-1 rounded-lg bg-green-600 text-white px-3 py-1 font-black text-xs">Answer Call <ExternalLink size={12}/></button><span className="text-xs font-bold opacity-75">Status: {m.callStatus || 'ringing'}</span></div></div> : <p>{m.message}</p>}
                     <p className={`text-[10px] mt-1 ${isAdmin ? 'text-slate-300' : 'text-gray-400'}`}>{m.createdAt ? new Date(m.createdAt).toLocaleString() : ''}</p>
                   </div>;
                 })}

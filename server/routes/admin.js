@@ -17,8 +17,41 @@ import { requireAdmin, requireOwnerAdmin, requireAdminPermission, signToken } fr
 import { getPlatformSettings } from './settings.js';
 import { resolvePaymentStatus, isAutoPaidPayment } from '../utils/payment.js';
 const router = express.Router();
-const ADMIN_PERMISSION_KEYS = ['dashboard','sellers','customers','products','sales','banners','orders','returns','cancellations','messages','customerCare','promos','notifications','deliveryMen'];
+const ADMIN_PERMISSION_KEYS = ['dashboard','sellers','customers','products','sales','banners','orders','returns','cancellations','messages','customerCare','promos','notifications','employees','deliveryMen'];
 const normalizePermissions = (permissions = []) => [...new Set((Array.isArray(permissions) ? permissions : []).map((p) => String(p || '').trim()).filter((p) => ADMIN_PERMISSION_KEYS.includes(p)))];
+
+function makeEmployeeBarcodeSvgDataUrl(code) {
+  const digits = String(code || '').replace(/\D/g, '').padStart(6, '0').slice(-6);
+  const patterns = ['212222','222122','222221','121223','121322','131222','122213','122312','132212','221213'];
+  const sequence = ['211214', ...digits.split('').map((d) => patterns[Number(d)] || patterns[0]), '2331112'];
+  let x = 10;
+  const bars = [];
+  sequence.join('').split('').forEach((widthChar, index) => {
+    const width = Number(widthChar) || 1;
+    if (index % 2 === 0) bars.push(`<rect x="${x}" y="8" width="${width * 2}" height="52" fill="#111827"/>`);
+    x += width * 2;
+  });
+  const width = Math.max(150, x + 10);
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="82" viewBox="0 0 ${width} 82"><rect width="100%" height="100%" fill="#ffffff"/>${bars.join('')}<text x="50%" y="76" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" font-weight="700" fill="#111827">${digits}</text></svg>`;
+  return `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`;
+}
+
+async function generateUniqueEmployeeCode() {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    const code = String(Math.floor(100000 + Math.random() * 900000));
+    const exists = await User.exists({ employeeCode: code });
+    if (!exists) return code;
+  }
+  const fallback = String(Date.now()).slice(-6).padStart(6, '0');
+  return fallback;
+}
+
+async function ensureEmployeeIdentity(employee) {
+  if (!employee.employeeCode) employee.employeeCode = await generateUniqueEmployeeCode();
+  if (!employee.employeeBarcode) employee.employeeBarcode = makeEmployeeBarcodeSvgDataUrl(employee.employeeCode);
+  return employee;
+}
+
 const adminUser = (u) => ({
   id: u.id,
   fullName: u.fullName,
@@ -27,6 +60,8 @@ const adminUser = (u) => ({
   role: u.role,
   adminType: u.adminType || 'owner',
   adminPosition: u.adminPosition || '',
+  employeeCode: u.employeeCode || '',
+  employeeBarcode: u.employeeBarcode || '',
   adminPermissions: u.adminType === 'employee' ? normalizePermissions(u.adminPermissions) : ADMIN_PERMISSION_KEYS,
   adminStatus: u.adminStatus || 'active',
 });
@@ -387,16 +422,23 @@ router.get('/notification-counts', requireAdmin, async (_req, res) => {
 });
 
 
-router.get('/employee-permissions', requireOwnerAdmin, (_req, res) => {
+router.get('/employee-permissions', requireAdminPermission('employees'), (_req, res) => {
   res.json({ permissions: ADMIN_PERMISSION_KEYS });
 });
 
-router.get('/employees', requireOwnerAdmin, async (_req, res) => {
+router.get('/employees', requireAdminPermission('employees'), async (_req, res) => {
   const employees = await User.find({ role: 'admin', adminType: 'employee' }).sort({ createdAt: -1 });
+  let changed = false;
+  for (const employee of employees) {
+    const beforeCode = employee.employeeCode;
+    const beforeBarcode = employee.employeeBarcode;
+    await ensureEmployeeIdentity(employee);
+    if (employee.employeeCode !== beforeCode || employee.employeeBarcode !== beforeBarcode) { await employee.save(); changed = true; }
+  }
   res.json({ employees: employees.map(adminUser) });
 });
 
-router.post('/employees', requireOwnerAdmin, async (req, res) => {
+router.post('/employees', requireAdminPermission('employees'), async (req, res) => {
   const fullName = String(req.body?.fullName || req.body?.name || '').trim();
   const phone = String(req.body?.phone || '').trim();
   const adminPosition = String(req.body?.position || req.body?.adminPosition || '').trim();
@@ -410,11 +452,14 @@ router.post('/employees', requireOwnerAdmin, async (req, res) => {
   let email = `${digits}@employee.shoppy.local`;
   let counter = 1;
   while (await User.exists({ email })) email = `${digits}.${counter++}@employee.shoppy.local`;
+  const employeeCode = await generateUniqueEmployeeCode();
   const employee = await User.create({
     fullName,
     phone,
     email,
     adminPosition,
+    employeeCode,
+    employeeBarcode: makeEmployeeBarcodeSvgDataUrl(employeeCode),
     adminPermissions,
     adminType: 'employee',
     adminStatus: 'active',
@@ -425,7 +470,7 @@ router.post('/employees', requireOwnerAdmin, async (req, res) => {
   res.status(201).json({ employee: adminUser(employee), loginPhone: phone });
 });
 
-router.put('/employees/:id', requireOwnerAdmin, async (req, res) => {
+router.put('/employees/:id', requireAdminPermission('employees'), async (req, res) => {
   const employee = await User.findOne({ _id: req.params.id, role: 'admin', adminType: 'employee' });
   if (!employee) return res.status(404).json({ message: 'Employee not found' });
   if (req.body?.fullName !== undefined || req.body?.name !== undefined) employee.fullName = String(req.body.fullName || req.body.name || '').trim();
@@ -438,7 +483,7 @@ router.put('/employees/:id', requireOwnerAdmin, async (req, res) => {
   res.json({ employee: adminUser(employee) });
 });
 
-router.delete('/employees/:id', requireOwnerAdmin, async (req, res) => {
+router.delete('/employees/:id', requireAdminPermission('employees'), async (req, res) => {
   await User.deleteOne({ _id: req.params.id, role: 'admin', adminType: 'employee' });
   res.json({ ok: true });
 });

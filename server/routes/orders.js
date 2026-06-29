@@ -21,10 +21,35 @@ router.post('/', requireUser, async (req, res) => {
   const orderItems = [];
   const promoItems = [];
   for (const item of items) {
-    const productId = item.product_id || item.productId;
-    if (!mongoose.isValidObjectId(productId)) return res.status(400).json({ message: `Invalid MongoDB productId: ${productId}` });
-    const product = await Product.findById(productId).populate('seller', 'name shopName shopLogo status');
-    if (!product) return res.status(404).json({ message: `Product not found: ${productId}` });
+    const snapshot = item.product_snapshot || item.productSnapshot || {};
+    const productRef = item.product_id || item.productId || item.product || item.id || snapshot.baseProductId || snapshot.product_id || snapshot.productId || snapshot.id || snapshot._id || snapshot.legacyId;
+    const refText = String(productRef || '').trim();
+    const product = mongoose.isValidObjectId(refText)
+      ? await Product.findById(refText).populate('seller', 'name shopName shopLogo status')
+      : refText
+        ? await Product.findOne({ legacyId: refText }).populate('seller', 'name shopName shopLogo status')
+        : null;
+    if (!product) {
+      const nameFallback = String(snapshot.name || '').trim();
+      const matchedByName = nameFallback
+        ? await Product.findOne({ name: nameFallback, active: { $ne: false } }).populate('seller', 'name shopName shopLogo status')
+        : null;
+      if (!matchedByName) return res.status(400).json({ message: 'Order contains a product without a valid product ID. Please remove it from cart and add it again.' });
+      const quantity = Math.max(1, Number(item.quantity || 1));
+      const unitPrice = Number(item.unit_price ?? item.unitPrice ?? matchedByName.price ?? 0);
+      const totalPrice = unitPrice * quantity;
+      orderItems.push({
+        product: matchedByName.id,
+        productSnapshot: item.product_snapshot || item.productSnapshot || matchedByName.toJSON(),
+        quantity,
+        unitPrice,
+        totalPrice,
+        selectedColor: String(item.selected_color || item.selectedColor || '').trim(),
+        selectedSize: String(item.selected_size || item.selectedSize || '').trim(),
+      });
+      promoItems.push({ product: matchedByName, quantity, unit_price: unitPrice, total_price: totalPrice });
+      continue;
+    }
     const quantity = Math.max(1, Number(item.quantity || 1));
     const unitPrice = Number(item.unit_price ?? item.unitPrice ?? product.price ?? 0);
     const totalPrice = unitPrice * quantity;

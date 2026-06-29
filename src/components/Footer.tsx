@@ -10,11 +10,18 @@ const customerCare = [
   { label: 'Order Tracking', to: '/order-tracking' },
 ];
 const aboutLinks = [
-  { label: 'About Shoppy', to: '/account' },
-  { label: 'Careers', to: '/account' },
+  { label: 'About Shoppy', to: '/about-shoppy' },
+  { label: 'Careers', to: '/careers' },
   { label: 'Sell on Shoppy', to: '/seller/register' },
-  { label: 'Blog', to: '/account' },
-  { label: 'Press Room', to: '/account' },
+  { label: 'Blog', to: '/blog' },
+  { label: 'Press Room', to: '/press-room' },
+];
+
+const legalLinks = [
+  { label: 'Privacy Policy', to: '/privacy-policy' },
+  { label: 'Terms & Conditions', to: '/terms-conditions' },
+  { label: 'Cookie Policy', to: '/cookie-policy' },
+  { label: 'Sitemap', to: '/sitemap' },
 ];
 
 export default function Footer() {
@@ -125,9 +132,9 @@ export default function Footer() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex flex-col sm:flex-row items-center justify-between gap-3">
           <p className="text-xs text-gray-500">© 2024 Shoppy. All rights reserved.</p>
           <div className="flex items-center gap-4">
-            {['Privacy Policy', 'Terms & Conditions', 'Cookie Policy', 'Sitemap'].map((link) => (
-              <Link key={link} to="/account" className="text-xs text-gray-500 hover:text-gray-300 transition-colors">
-                {link}
+            {legalLinks.map((link) => (
+              <Link key={link.label} to={link.to} className="text-xs text-gray-500 hover:text-gray-300 transition-colors">
+                {link.label}
               </Link>
             ))}
           </div>

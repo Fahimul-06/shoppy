@@ -39,6 +39,14 @@ import HowToBuyPage from './pages/HowToBuyPage';
 import ReturnsRefundsPage from './pages/ReturnsRefundsPage';
 import ContactUsPage from './pages/ContactUsPage';
 import OrderTrackingPage from './pages/OrderTrackingPage';
+import AboutShoppyPage from './pages/AboutShoppyPage';
+import CareersPage from './pages/CareersPage';
+import BlogPage from './pages/BlogPage';
+import PressRoomPage from './pages/PressRoomPage';
+import PrivacyPolicyPage from './pages/PrivacyPolicyPage';
+import TermsConditionsPage from './pages/TermsConditionsPage';
+import CookiePolicyPage from './pages/CookiePolicyPage';
+import SitemapPage from './pages/SitemapPage';
 
 function StoreLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -85,6 +93,14 @@ export default function App() {
           <Route path="/returns-refunds" element={<StorePage><ReturnsRefundsPage /></StorePage>} />
           <Route path="/contact-us" element={<StorePage><ContactUsPage /></StorePage>} />
           <Route path="/order-tracking" element={<StorePage><OrderTrackingPage /></StorePage>} />
+          <Route path="/about-shoppy" element={<StorePage><AboutShoppyPage /></StorePage>} />
+          <Route path="/careers" element={<StorePage><CareersPage /></StorePage>} />
+          <Route path="/blog" element={<StorePage><BlogPage /></StorePage>} />
+          <Route path="/press-room" element={<StorePage><PressRoomPage /></StorePage>} />
+          <Route path="/privacy-policy" element={<StorePage><PrivacyPolicyPage /></StorePage>} />
+          <Route path="/terms-conditions" element={<StorePage><TermsConditionsPage /></StorePage>} />
+          <Route path="/cookie-policy" element={<StorePage><CookiePolicyPage /></StorePage>} />
+          <Route path="/sitemap" element={<StorePage><SitemapPage /></StorePage>} />
 
           {/* Seller routes */}
           <Route path="/seller/register" element={<SellerRegisterPage />} />

@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import User from '../models/User.js';
 import Order from '../models/Order.js';
 import DeliverySupportMessage from '../models/DeliverySupportMessage.js';
+import InternetCallRoom from '../models/InternetCallRoom.js';
 import { requireDeliveryMan, signToken } from '../middleware/auth.js';
 import { resolvePaymentStatus } from '../utils/payment.js';
 
@@ -94,7 +95,7 @@ router.get('/support', requireDeliveryMan, async (req, res) => {
 router.post('/support/call', requireDeliveryMan, async (req, res) => {
   const deliveryCode = req.deliveryMan.deliveryCode || String(req.deliveryMan._id).slice(-6);
   const roomName = `shoppy-delivery-${deliveryCode}-${Date.now()}`.replace(/[^a-zA-Z0-9-]/g, '');
-  const callUrl = `https://meet.jit.si/${roomName}`;
+  const callUrl = `/call/${roomName}`;
   const message = await DeliverySupportMessage.create({
     deliveryMan: req.deliveryMan._id,
     senderType: 'delivery',
@@ -108,6 +109,12 @@ router.post('/support/call', requireDeliveryMan, async (req, res) => {
     readByAdmin: false,
     readByDelivery: true,
   });
+  await InternetCallRoom.create({
+    roomId: roomName,
+    deliveryMan: req.deliveryMan._id,
+    supportMessage: message._id,
+    status: 'ringing',
+  });
   res.status(201).json({ message, callUrl, roomName });
 });
 
@@ -118,6 +125,12 @@ router.patch('/support/call/:messageId/end', requireDeliveryMan, async (req, res
     { new: true }
   );
   if (!message) return res.status(404).json({ message: 'Call session not found' });
+  if (message.callRoomName) {
+    await InternetCallRoom.findOneAndUpdate(
+      { roomId: message.callRoomName },
+      { $set: { status: 'ended', endedAt: new Date() } }
+    );
+  }
   res.json({ message });
 });
 

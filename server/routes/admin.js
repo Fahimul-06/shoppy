@@ -11,6 +11,7 @@ import ChatMessage from '../models/ChatMessage.js';
 import CustomerCareMessage from '../models/CustomerCareMessage.js';
 import CustomerNotification from '../models/CustomerNotification.js';
 import DeliverySupportMessage from '../models/DeliverySupportMessage.js';
+import InternetCallRoom from '../models/InternetCallRoom.js';
 import HeroSlide from '../models/HeroSlide.js';
 import PlatformSetting from '../models/PlatformSetting.js';
 import { isPromoActive } from '../utils/promo.js';
@@ -914,6 +915,12 @@ router.patch('/delivery-support/:deliveryManId/call/:messageId/status', requireA
     { new: true }
   );
   if (!message) return res.status(404).json({ message: 'Call session not found' });
+  if (message.callRoomName) {
+    await InternetCallRoom.findOneAndUpdate(
+      { roomId: message.callRoomName },
+      { $set: { status, adminJoinedAt: status === 'joined' ? new Date() : undefined, endedAt: status === 'ended' ? new Date() : undefined } }
+    );
+  }
   res.json({ message });
 });
 

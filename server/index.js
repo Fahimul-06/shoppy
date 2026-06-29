@@ -20,8 +20,7 @@ import notificationRoutes from './routes/notifications.js';
 import shopRoutes from './routes/shops.js';
 import settingsRoutes from './routes/settings.js';
 import deliveryRoutes from './routes/delivery.js';
-import DeliverySupportMessage from './models/DeliverySupportMessage.js';
-import { requireDeliveryMan } from './middleware/auth.js';
+import callRoutes from './routes/calls.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -56,30 +55,7 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api/shops', shopRoutes);
 app.use('/api/settings', settingsRoutes);
 
-// Compatibility route: keep delivery virtual call working even if an older delivery router is cached or not mounted correctly.
-app.post('/api/delivery/support/call', requireDeliveryMan, async (req, res, next) => {
-  try {
-    const deliveryCode = req.deliveryMan.deliveryCode || String(req.deliveryMan._id).slice(-6);
-    const roomName = `shoppy-delivery-${deliveryCode}-${Date.now()}`.replace(/[^a-zA-Z0-9-]/g, '');
-    const callUrl = `https://meet.jit.si/${roomName}`;
-    const message = await DeliverySupportMessage.create({
-      deliveryMan: req.deliveryMan._id,
-      senderType: 'delivery',
-      sender: req.deliveryMan._id,
-      message: 'ডেলিভারি ম্যান ইন্টারনেট কল শুরু করেছেন। Customer care can join the virtual call.',
-      messageType: 'call',
-      callRoomName: roomName,
-      callUrl,
-      callStatus: 'ringing',
-      language: 'bn',
-      readByAdmin: false,
-      readByDelivery: true,
-    });
-    res.status(201).json({ message, callUrl, roomName });
-  } catch (error) {
-    next(error);
-  }
-});
+app.use('/api/calls', callRoutes);
 app.use('/api/delivery', deliveryRoutes);
 
 

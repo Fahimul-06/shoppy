@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Bike, Headphones, Loader2, MessageCircle, Send, UserRound } from 'lucide-react';
+import { Bike, ExternalLink, Headphones, Loader2, MessageCircle, Send, UserRound, Video, Volume2 } from 'lucide-react';
 import { api, getToken } from '../../lib/api';
 
 type Conversation = {
@@ -13,6 +13,28 @@ type Conversation = {
 
 type Mode = 'customer' | 'delivery';
 
+function playIncomingCallSound() {
+  try {
+    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioContextClass) return;
+    const ctx = new AudioContextClass();
+    const gain = ctx.createGain();
+    gain.gain.value = 0.7;
+    gain.connect(ctx.destination);
+    [0, 0.22, 0.44, 0.88, 1.1, 1.32].forEach((delay) => {
+      const osc = ctx.createOscillator();
+      osc.type = 'sine';
+      osc.frequency.value = 740;
+      osc.connect(gain);
+      osc.start(ctx.currentTime + delay);
+      osc.stop(ctx.currentTime + delay + 0.14);
+    });
+    window.setTimeout(() => ctx.close?.(), 1800);
+  } catch {
+    // Browser may block sound until enabled by user click.
+  }
+}
+
 export default function AdminCustomerCareTab() {
   const [mode, setMode] = useState<Mode>('customer');
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -23,14 +45,25 @@ export default function AdminCustomerCareTab() {
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState('');
+  const [callSoundEnabled, setCallSoundEnabled] = useState(false);
 
   const loadConversations = async (targetMode = mode) => {
     const endpoint = targetMode === 'delivery' ? '/admin/delivery-support' : '/admin/customer-care';
     const res = await api.get<{ conversations: Conversation[] }>(endpoint, getToken('admin'));
-    setConversations(res.conversations || []);
+    const nextConversations = res.conversations || [];
+    if (targetMode === 'delivery' && callSoundEnabled) {
+      const hasUnreadCall = nextConversations.some((c) => c.lastMessage?.messageType === 'call' && c.lastMessage?.callStatus === 'ringing' && (c.unreadForAdmin || 0) > 0);
+      if (hasUnreadCall) playIncomingCallSound();
+    }
+    setConversations(nextConversations);
   };
 
-  useEffect(() => { loadConversations().catch(() => setConversations([])); }, [mode]);
+  useEffect(() => { loadConversations().catch(() => setConversations([])); }, [mode, callSoundEnabled]);
+  useEffect(() => {
+    if (mode !== 'delivery') return;
+    const timer = window.setInterval(() => loadConversations('delivery').catch(() => {}), 8000);
+    return () => window.clearInterval(timer);
+  }, [mode, callSoundEnabled]);
 
   const changeMode = (nextMode: Mode) => {
     setMode(nextMode);
@@ -62,6 +95,19 @@ export default function AdminCustomerCareTab() {
     }
   };
 
+
+  const joinCall = async (message: any) => {
+    if (!selected || !message?.callUrl) return;
+    window.open(message.callUrl, '_blank', 'noopener,noreferrer');
+    try {
+      const res = await api.patch<{ message: any }>(`/admin/delivery-support/${selected.id}/call/${message.id || message._id}/status`, { status: 'joined' }, getToken('admin'));
+      setMessages((prev) => prev.map((m) => String(m.id || m._id) === String(message.id || message._id) ? res.message : m));
+      loadConversations().catch(() => {});
+    } catch {
+      // Call link is still opened even if status update fails.
+    }
+  };
+
   const sendReply = async () => {
     if (!selected || !text.trim() || sending) return;
     const clean = text.trim();
@@ -89,6 +135,7 @@ export default function AdminCustomerCareTab() {
       <div className="bg-white rounded-2xl border p-3 flex flex-wrap gap-2">
         <button onClick={()=>changeMode('customer')} className={`px-4 py-2 rounded-xl font-black text-sm flex items-center gap-2 ${mode==='customer'?'bg-slate-950 text-white':'bg-gray-100 text-gray-700'}`}><Headphones size={16}/> Customer Support</button>
         <button onClick={()=>changeMode('delivery')} className={`px-4 py-2 rounded-xl font-black text-sm flex items-center gap-2 ${mode==='delivery'?'bg-blue-600 text-white':'bg-blue-50 text-blue-700'}`}><Bike size={16}/> Delivery Support বাংলা</button>
+        {mode === 'delivery' && <button onClick={()=>{ setCallSoundEnabled(true); playIncomingCallSound(); }} className={`px-4 py-2 rounded-xl font-black text-sm flex items-center gap-2 ${callSoundEnabled?'bg-green-600 text-white':'bg-red-50 text-red-700 border border-red-100'}`}><Volume2 size={16}/>{callSoundEnabled ? 'Call Sound On' : 'Enable Call Sound'}</button>}
       </div>
 
       <div className="grid lg:grid-cols-[360px,1fr] gap-5">
@@ -106,7 +153,7 @@ export default function AdminCustomerCareTab() {
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center justify-between gap-2"><p className="font-black truncate">{nameOf(p)}</p>{(c.unreadForAdmin || 0) > 0 && <span className="bg-red-600 text-white text-xs rounded-full min-w-5 h-5 px-1 grid place-items-center">{c.unreadForAdmin}</span>}</div>
                     <p className="text-xs text-gray-500 truncate">{mode === 'delivery' ? `ID: ${p?.deliveryCode || '------'} • ${p?.phone || ''}` : (p?.email || p?.phone || 'Customer account')}</p>
-                    <p className="text-sm text-gray-600 truncate mt-1">{c.lastMessage?.message || 'No message'}</p>
+                    <p className="text-sm text-gray-600 truncate mt-1">{c.lastMessage?.messageType === 'call' ? '📞 Internet call request' : (c.lastMessage?.message || 'No message')}</p>
                     <p className="text-[11px] text-gray-400 mt-1">{c.lastMessage?.createdAt ? new Date(c.lastMessage.createdAt).toLocaleString() : ''} • {c.messageCount || 0} message(s)</p>
                   </div>
                 </div>
@@ -131,7 +178,11 @@ export default function AdminCustomerCareTab() {
               <div className="flex-1 overflow-y-auto p-4 space-y-2 bg-gray-50">
                 {loading ? <div className="h-full grid place-items-center"><Loader2 className="animate-spin text-orange-500" /></div> : messages.length === 0 ? <p className="text-center text-gray-500 mt-20">No messages yet.</p> : messages.map((m) => {
                   const isAdmin = m.senderType === 'admin';
-                  return <div key={m.id || m._id} className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm ${isAdmin ? 'ml-auto bg-slate-950 text-white' : 'bg-white border text-gray-700'}`}><p>{m.message}</p><p className={`text-[10px] mt-1 ${isAdmin ? 'text-slate-300' : 'text-gray-400'}`}>{m.createdAt ? new Date(m.createdAt).toLocaleString() : ''}</p></div>;
+                  const isCall = m.messageType === 'call';
+                  return <div key={m.id || m._id} className={`max-w-[80%] rounded-2xl px-3 py-2 text-sm ${isAdmin ? 'ml-auto bg-slate-950 text-white' : 'bg-white border text-gray-700'}`}>
+                    {isCall ? <div className="space-y-2"><p className="font-black flex items-center gap-2"><Video size={15}/> Internet call request</p><p>{m.message}</p><div className="flex flex-wrap gap-2 items-center"><button onClick={() => joinCall(m)} className="inline-flex items-center gap-1 rounded-lg bg-green-600 text-white px-3 py-1 font-black text-xs">Join Call <ExternalLink size={12}/></button><span className="text-xs font-bold opacity-75">Status: {m.callStatus || 'ringing'}</span></div></div> : <p>{m.message}</p>}
+                    <p className={`text-[10px] mt-1 ${isAdmin ? 'text-slate-300' : 'text-gray-400'}`}>{m.createdAt ? new Date(m.createdAt).toLocaleString() : ''}</p>
+                  </div>;
                 })}
               </div>
 

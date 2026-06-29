@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { BellRing, Bike, Headphones, LogOut, MapPin, MessageCircle, Package, Phone, Send, User, Volume2 } from 'lucide-react';
+import { BellRing, Bike, ExternalLink, Headphones, LogOut, MapPin, MessageCircle, Package, Phone, Send, User, Video, Volume2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { api, clearSession, getSessionUser, getToken } from '../../lib/api';
 
@@ -43,6 +43,7 @@ export default function DeliveryDashboardPage() {
   const [supportMessages, setSupportMessages] = useState<any[]>([]);
   const [supportText, setSupportText] = useState('');
   const [supportError, setSupportError] = useState('');
+  const [startingCall, setStartingCall] = useState(false);
 
   const logout = () => { clearSession('delivery'); navigate('/delivery/login'); };
 
@@ -97,6 +98,22 @@ export default function DeliveryDashboardPage() {
     await load();
   };
 
+
+  const startVirtualCall = async () => {
+    if (startingCall) return;
+    setStartingCall(true);
+    setSupportError('');
+    try {
+      const res = await api.post<{ message: any; callUrl: string }>('/delivery/support/call', {}, getToken('delivery'));
+      setSupportMessages((prev) => [...prev, res.message]);
+      if (res.callUrl) window.open(res.callUrl, '_blank', 'noopener,noreferrer');
+    } catch (e) {
+      setSupportError(e instanceof Error ? e.message : 'ইন্টারনেট কল শুরু করা যায়নি');
+    } finally {
+      setStartingCall(false);
+    }
+  };
+
   const sendSupport = async () => {
     const clean = supportText.trim();
     if (!clean) return;
@@ -133,9 +150,14 @@ export default function DeliveryDashboardPage() {
         </div>})}{!orders.length && <div className="bg-white border rounded-2xl p-8 text-center text-sm text-gray-500">No shipped assigned orders yet.</div>}</div>}
 
       <section className="bg-white border rounded-2xl overflow-hidden">
-        <div className="p-4 border-b flex items-center justify-between"><div><h2 className="font-black flex items-center gap-2"><Headphones size={18}/> Customer Care Support</h2><p className="text-xs text-gray-500">বাংলায় সাপোর্টের সাথে চ্যাট করতে পারবেন।</p></div><MessageCircle className="text-blue-600"/></div>
+        <div className="p-4 border-b flex flex-col md:flex-row md:items-center md:justify-between gap-3"><div><h2 className="font-black flex items-center gap-2"><Headphones size={18}/> Customer Care Support</h2><p className="text-xs text-gray-500">বাংলায় চ্যাট করুন অথবা ইন্টারনেট কল করুন।</p></div><button onClick={startVirtualCall} disabled={startingCall} className="bg-green-600 disabled:bg-gray-300 text-white rounded-xl px-4 py-2 font-black flex items-center justify-center gap-2 text-sm"><Video size={16}/>{startingCall ? 'Starting...' : 'Internet Call'}</button></div>
         <div className="h-72 overflow-y-auto p-4 bg-gray-50 space-y-2">
-          {supportMessages.length === 0 ? <p className="text-center text-gray-500 mt-20 text-sm">No support messages yet. বাংলায় মেসেজ লিখুন।</p> : supportMessages.map((m)=><div key={m.id || m._id} className={`max-w-[82%] rounded-2xl px-3 py-2 text-sm ${m.senderType === 'delivery' ? 'ml-auto bg-blue-600 text-white' : 'bg-white border text-gray-800'}`}><p>{m.message}</p><p className={`text-[10px] mt-1 ${m.senderType === 'delivery' ? 'text-blue-100' : 'text-gray-400'}`}>{m.createdAt ? new Date(m.createdAt).toLocaleString() : ''}</p></div>)}
+          {supportMessages.length === 0 ? <p className="text-center text-gray-500 mt-20 text-sm">No support messages yet. বাংলায় মেসেজ লিখুন।</p> : supportMessages.map((m)=>{
+            const isCall = m.messageType === 'call';
+            return <div key={m.id || m._id} className={`max-w-[82%] rounded-2xl px-3 py-2 text-sm ${m.senderType === 'delivery' ? 'ml-auto bg-blue-600 text-white' : 'bg-white border text-gray-800'}`}>
+              {isCall ? <div className="space-y-2"><p className="font-black flex items-center gap-2"><Video size={15}/> Internet call request</p><p>{m.message}</p>{m.callUrl && <a href={m.callUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-lg bg-white text-blue-700 px-3 py-1 font-black text-xs">Open call <ExternalLink size={12}/></a>}<p className="text-xs opacity-80">Status: {m.callStatus || 'ringing'}</p></div> : <p>{m.message}</p>}
+              <p className={`text-[10px] mt-1 ${m.senderType === 'delivery' ? 'text-blue-100' : 'text-gray-400'}`}>{m.createdAt ? new Date(m.createdAt).toLocaleString() : ''}</p>
+            </div>})}
         </div>
         {supportError && <p className="px-4 pt-2 text-xs text-red-600 font-bold">{supportError}</p>}
         <div className="p-3 border-t flex gap-2"><input value={supportText} onChange={(e)=>setSupportText(e.target.value)} onKeyDown={(e)=>{ if (e.key === 'Enter') sendSupport(); }} className="flex-1 border rounded-xl px-3 py-2 text-sm" placeholder="বাংলায় লিখুন... / Write message..."/><button onClick={sendSupport} disabled={!supportText.trim()} className="bg-blue-600 disabled:bg-gray-300 text-white rounded-xl px-4 font-black flex items-center gap-2"><Send size={16}/> Send</button></div>

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Bike, ChevronDown, ChevronUp, MapPin, Package, Phone, User } from 'lucide-react';
+import { Barcode, Bike, ChevronDown, ChevronUp, MapPin, Package, Phone, User } from 'lucide-react';
 import { api, getToken } from '../../lib/api';
 
 type OrderAddress = {
@@ -143,6 +143,21 @@ export default function AdminOrdersTab() {
                     <tr className="border-t bg-orange-50/30">
                       <td colSpan={8} className="p-4">
                         <div className="grid lg:grid-cols-3 gap-4">
+                          <div className="bg-white border rounded-2xl p-4 lg:col-span-3">
+                            <h3 className="font-black text-gray-900 mb-3 flex items-center gap-2"><Barcode size={16}/> Order Barcode</h3>
+                            <div className="flex flex-col md:flex-row md:items-center gap-4">
+                              {o.orderBarcode ? (
+                                <img src={o.orderBarcode} alt={o.orderBarcodeValue || o.orderNumber || 'Order barcode'} className="h-20 max-w-full object-contain border rounded-xl bg-white p-2" />
+                              ) : (
+                                <div className="h-20 min-w-[220px] rounded-xl border bg-gray-50 flex items-center justify-center text-xs font-bold text-gray-400">No barcode generated</div>
+                              )}
+                              <div className="text-sm text-gray-700 space-y-1">
+                                <p><b>Order No:</b> {o.orderNumber || 'N/A'}</p>
+                                <p><b>Barcode ID:</b> <span className="font-black tracking-widest">{o.orderBarcodeValue || 'N/A'}</span></p>
+                                <p className="text-xs text-gray-500">Generated automatically when customer places the order.</p>
+                              </div>
+                            </div>
+                          </div>
                           <div className="bg-white border rounded-2xl p-4 lg:col-span-1">
                             <h3 className="font-black text-gray-900 mb-2 flex items-center gap-2"><MapPin size={16}/> Delivery Details</h3>
                             <div className="text-sm text-gray-700 space-y-1">

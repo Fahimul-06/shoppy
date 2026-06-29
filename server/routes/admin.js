@@ -3,7 +3,7 @@ import bcrypt from 'bcryptjs';
 import User from '../models/User.js';
 import Seller from '../models/Seller.js';
 import Product from '../models/Product.js';
-import Order from '../models/Order.js';
+import Order, { ensureOrderBarcode } from '../models/Order.js';
 import PromoCode from '../models/PromoCode.js';
 import ReturnRequest from '../models/ReturnRequest.js';
 import CancellationRequest from '../models/CancellationRequest.js';
@@ -671,6 +671,16 @@ router.get('/orders', requireAdminPermission('orders'), async (_req, res) => {
     .populate('items.product')
     .populate('deliveryMan')
     .sort({ createdAt: -1 });
+  let changed = false;
+  for (const order of orders) {
+    const beforeValue = order.orderBarcodeValue;
+    const beforeBarcode = order.orderBarcode;
+    await ensureOrderBarcode(order);
+    if (order.orderBarcodeValue !== beforeValue || order.orderBarcode !== beforeBarcode) {
+      await order.save();
+      changed = true;
+    }
+  }
   res.json({ orders });
 });
 router.patch('/orders/:id', requireAdminPermission('orders'), async (req, res) => {

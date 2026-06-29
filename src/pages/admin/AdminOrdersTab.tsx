@@ -58,7 +58,7 @@ export default function AdminOrdersTab() {
     if (!selectedDeliveryMan || !selectedOrders.length) { setAssignMessage('Select a delivery man and at least one order.'); return; }
     try {
       const r = await api.post<{ message: string; assignedCount: number }>('/admin/orders/assign-delivery', { deliveryManId: selectedDeliveryMan, orderIds: selectedOrders }, getToken('admin'));
-      setAssignMessage(`${r.assignedCount || selectedOrders.length} order(s) assigned successfully.`);
+      setAssignMessage(`${r.assignedCount || selectedOrders.length} order(s) assigned. Set status to Shipped to show them in the delivery dashboard.`);
       setSelectedOrders([]);
       await load();
     } catch (error) {
@@ -79,6 +79,7 @@ export default function AdminOrdersTab() {
             {deliveryMen.map((d)=><option key={d.id} value={d.id}>{d.fullName} — {d.phone}</option>)}
           </select>
           <button onClick={assignDelivery} className="bg-blue-600 text-white rounded-xl px-4 py-2 font-black text-sm">Assign {selectedOrders.length ? `(${selectedOrders.length})` : ''}</button>
+          <span className="text-xs font-semibold text-blue-700">Delivery man sees assigned orders only after status is Shipped.</span>
           {assignMessage && <span className={`text-xs font-bold ${assignMessage.includes('success') ? 'text-green-700' : 'text-red-600'}`}>{assignMessage}</span>}
         </div>
       </div>

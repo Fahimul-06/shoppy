@@ -658,30 +658,55 @@ router.post('/sales/apply', requireAdminPermission('sales'), async (req, res, ne
     next(error);
   }
 });
-router.get('/orders', requireAdminPermission('orders'), async (_req, res) => {
-  await Order.updateMany(
-    {
-      paymentStatus: { $ne: 'paid' },
-      paymentMethod: { $in: [/^bkash$/i, /^nagad$/i, /^nogod$/i, /^card$/i, /^bank$/i, /^mobile_banking$/i, /^prepaid$/i, /^online$/i] },
-    },
-    { $set: { paymentStatus: 'paid' } }
-  );
-  const orders = await Order.find()
-    .populate('user')
-    .populate('items.product')
-    .populate('deliveryMan')
-    .sort({ createdAt: -1 });
-  let changed = false;
-  for (const order of orders) {
-    const beforeValue = order.orderBarcodeValue;
-    const beforeBarcode = order.orderBarcode;
-    await ensureOrderBarcode(order);
-    if (order.orderBarcodeValue !== beforeValue || order.orderBarcode !== beforeBarcode) {
-      await order.save();
-      changed = true;
+router.get('/orders', requireAdminPermission('orders'), async (_req, res, next) => {
+  try {
+    // Keep prepaid/online orders marked as paid, but do not let a maintenance update
+    // break the order list page if the database has an old/unusual payment value.
+    try {
+      await Order.updateMany(
+        {
+          paymentStatus: { $ne: 'paid' },
+          paymentMethod: { $in: [/^bkash$/i, /^nagad$/i, /^nogod$/i, /^card$/i, /^bank$/i, /^mobile_banking$/i, /^prepaid$/i, /^online$/i] },
+        },
+        { $set: { paymentStatus: 'paid' } }
+      );
+    } catch (paymentSyncError) {
+      console.error('Admin order payment sync failed:', paymentSyncError);
     }
+
+    const orders = await Order.find()
+      .populate('user')
+      .populate('items.product')
+      .populate('deliveryMan')
+      .sort({ createdAt: -1 });
+
+    // Backfill barcodes for old orders without using order.save(). Saving a fully
+    // populated historical order can re-run unrelated validations and can make the
+    // whole Admin Orders page appear empty. updateOne only touches barcode fields.
+    for (const order of orders) {
+      if (order.orderNumber && order.orderBarcodeValue && order.orderBarcode) continue;
+      try {
+        await ensureOrderBarcode(order);
+        await Order.updateOne(
+          { _id: order._id },
+          {
+            $set: {
+              orderNumber: order.orderNumber,
+              orderBarcodeValue: order.orderBarcodeValue,
+              orderBarcode: order.orderBarcode,
+            },
+          },
+          { runValidators: false }
+        );
+      } catch (barcodeError) {
+        console.error(`Order barcode backfill failed for ${order._id}:`, barcodeError);
+      }
+    }
+
+    res.json({ orders });
+  } catch (error) {
+    next(error);
   }
-  res.json({ orders });
 });
 router.patch('/orders/:id', requireAdminPermission('orders'), async (req, res) => {
   const existing = await Order.findById(req.params.id).populate('user');

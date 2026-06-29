@@ -27,9 +27,11 @@ export default function AdminOrdersTab() {
   const [selectedOrders, setSelectedOrders] = useState<string[]>([]);
   const [selectedDeliveryMan, setSelectedDeliveryMan] = useState('');
   const [assignMessage, setAssignMessage] = useState('');
+  const [error, setError] = useState('');
 
   const load = async () => {
     setLoading(true);
+    setError('');
     try {
       const [ordersRes, deliveryRes] = await Promise.all([
         api.get<{ orders: any[] }>('/admin/orders', getToken('admin')),
@@ -37,6 +39,9 @@ export default function AdminOrdersTab() {
       ]);
       setOrders(ordersRes.orders || []);
       setDeliveryMen(deliveryRes.deliveryMen || []);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not load orders');
+      setOrders([]);
     } finally {
       setLoading(false);
     }
@@ -72,6 +77,7 @@ export default function AdminOrdersTab() {
     <div className="bg-white rounded-2xl border overflow-hidden">
       <div className="p-4 border-b space-y-4">
         <div className="flex items-center justify-between"><h2 className="text-xl font-black">Orders</h2><span className="text-xs font-bold text-gray-500">{orders.length} total</span></div>
+        {error && <div className="rounded-2xl border border-red-200 bg-red-50 p-3 text-sm font-bold text-red-700">{error}</div>}
         <div className="bg-blue-50 border border-blue-100 rounded-2xl p-3 flex flex-col lg:flex-row gap-3 lg:items-center">
           <div className="flex items-center gap-2 font-black text-blue-900"><Bike size={18}/> Assign selected orders</div>
           <select value={selectedDeliveryMan} onChange={(e)=>setSelectedDeliveryMan(e.target.value)} className="border rounded-xl px-3 py-2 text-sm bg-white min-w-[220px]">

@@ -29,6 +29,8 @@ import SellerLoginPage from './pages/seller/SellerLoginPage';
 import SellerDashboardPage from './pages/seller/SellerDashboardPage';
 import AdminLoginPage from './pages/admin/AdminLoginPage';
 import AdminPage from './pages/admin/AdminPage';
+import DeliveryLoginPage from './pages/delivery/DeliveryLoginPage';
+import DeliveryDashboardPage from './pages/delivery/DeliveryDashboardPage';
 
 function StoreLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -75,6 +77,10 @@ export default function App() {
           <Route path="/seller/register" element={<SellerRegisterPage />} />
           <Route path="/seller/login" element={<SellerLoginPage />} />
           <Route path="/seller/dashboard/*" element={<SellerDashboardPage />} />
+
+          {/* Delivery routes */}
+          <Route path="/delivery/login" element={<DeliveryLoginPage />} />
+          <Route path="/delivery" element={<DeliveryDashboardPage />} />
 
           {/* Admin routes. These are intentionally outside StoreLayout so the admin login page always renders cleanly. */}
           <Route path="/admin/login" element={<AdminLoginPage />} />

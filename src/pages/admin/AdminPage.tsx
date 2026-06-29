@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BarChart3, Bell, Headphones, Image as ImageIcon, LogOut, MessageCircle, Package, RotateCcw, UserCog, ShieldX, ShoppingBag, Tag, UserPlus, UserRound, Users, Percent } from 'lucide-react';
+import { BarChart3, Bell, Headphones, Image as ImageIcon, LogOut, MessageCircle, Package, RotateCcw, UserCog, ShieldX, ShoppingBag, Tag, UserPlus, UserRound, Users, Percent, Bike } from 'lucide-react';
 import { api, clearSession, getSessionUser, getToken } from '../../lib/api';
 import AdminSellersTab from './AdminSellersTab';
 import AdminProductsTab from './AdminProductsTab';
@@ -16,8 +16,9 @@ import AdminSalesTab from './AdminSalesTab';
 import AdminBannersTab from './AdminBannersTab';
 import AdminSettingsTab from './AdminSettingsTab';
 import AdminEmployeesTab from './AdminEmployeesTab';
+import AdminDeliveryMenTab from './AdminDeliveryMenTab';
 
-type AdminTab = 'dashboard' | 'sellers' | 'customers' | 'products' | 'sales' | 'banners' | 'orders' | 'returns' | 'cancellations' | 'messages' | 'customerCare' | 'promos' | 'notifications' | 'employees' | 'settings';
+type AdminTab = 'dashboard' | 'sellers' | 'customers' | 'products' | 'sales' | 'banners' | 'orders' | 'returns' | 'cancellations' | 'messages' | 'customerCare' | 'promos' | 'notifications' | 'employees' | 'deliveryMen' | 'settings';
 
 export default function AdminPage() {
   const navigate = useNavigate();
@@ -43,7 +44,7 @@ export default function AdminPage() {
     return () => window.clearInterval(timer);
   }, []);
   const logout = () => { clearSession('admin'); navigate('/admin/login'); };
-  const allNav = [ ['dashboard', BarChart3], ['sellers', Users], ['customers', UserRound], ['products', Package], ['sales', Percent], ['banners', ImageIcon], ['orders', ShoppingBag], ['returns', RotateCcw], ['cancellations', ShieldX], ['messages', MessageCircle], ['customerCare', Headphones], ['promos', Tag], ['notifications', Bell], ['employees', UserPlus], ['settings', UserCog] ] as const;
+  const allNav = [ ['dashboard', BarChart3], ['sellers', Users], ['customers', UserRound], ['products', Package], ['sales', Percent], ['banners', ImageIcon], ['orders', ShoppingBag], ['returns', RotateCcw], ['cancellations', ShieldX], ['messages', MessageCircle], ['customerCare', Headphones], ['promos', Tag], ['notifications', Bell], ['employees', UserPlus], ['deliveryMen', Bike], ['settings', UserCog] ] as const;
   const isOwnerAdmin = admin?.adminType !== 'employee';
   const allowed = new Set<string>(isOwnerAdmin ? allNav.map(([id]) => id) : ['dashboard', ...(admin?.adminPermissions || [])]);
   const nav = allNav.filter(([id]) => allowed.has(id) || (id === 'settings' && isOwnerAdmin) || (id === 'employees' && isOwnerAdmin));
@@ -57,7 +58,7 @@ export default function AdminPage() {
       {tab==='dashboard' && <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">{[
         ['Total Sellers', stats.totalSellers], ['Pending Sellers', stats.pendingSellers], ['Total Products', stats.totalProducts], ['Total Orders', stats.totalOrders], ['Paid Revenue', `৳${stats.revenue.toLocaleString()}`], ['Active Promos', stats.activePromos]
       ].map(([k,v])=><div key={k} className="bg-white rounded-2xl p-6 border"><p className="text-sm text-gray-500">{k}</p><p className="text-3xl font-black text-gray-900 mt-1">{v}</p></div>)}</div>}
-      {tab==='sellers' && <AdminSellersTab/>}{tab==='customers' && <AdminCustomersTab/>}{tab==='products' && <AdminProductsTab/>}{tab==='sales' && <AdminSalesTab/>}{tab==='banners' && <AdminBannersTab/>}{tab==='orders' && <AdminOrdersTab/>}{tab==='returns' && <AdminReturnsTab/>}{tab==='cancellations' && <AdminCancellationsTab/>}{tab==='messages' && <AdminMessagesTab/>}{tab==='customerCare' && <AdminCustomerCareTab/>}{tab==='promos' && <AdminPromoCodesTab/>}{tab==='notifications' && <AdminCustomerNotificationsTab/>}{tab==='employees' && <AdminEmployeesTab/>}{tab==='settings' && <AdminSettingsTab/>}
+      {tab==='sellers' && <AdminSellersTab/>}{tab==='customers' && <AdminCustomersTab/>}{tab==='products' && <AdminProductsTab/>}{tab==='sales' && <AdminSalesTab/>}{tab==='banners' && <AdminBannersTab/>}{tab==='orders' && <AdminOrdersTab/>}{tab==='returns' && <AdminReturnsTab/>}{tab==='cancellations' && <AdminCancellationsTab/>}{tab==='messages' && <AdminMessagesTab/>}{tab==='customerCare' && <AdminCustomerCareTab/>}{tab==='promos' && <AdminPromoCodesTab/>}{tab==='notifications' && <AdminCustomerNotificationsTab/>}{tab==='employees' && <AdminEmployeesTab/>}{tab==='deliveryMen' && <AdminDeliveryMenTab/>}{tab==='settings' && <AdminSettingsTab/>}
     </div>
   </div>;
 }

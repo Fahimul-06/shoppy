@@ -13,21 +13,21 @@ const API_BASE_URL = defaultApiBaseUrl().replace(/\/$/, '');
 
 type ApiOptions = RequestInit & { token?: string | null; timeoutMs?: number };
 
-export function getToken(role: 'user' | 'seller' | 'admin' = 'user') {
+export function getToken(role: 'user' | 'seller' | 'admin' | 'delivery' = 'user') {
   return localStorage.getItem(`${role}Token`);
 }
 
-export function setSession(role: 'user' | 'seller' | 'admin', token: string, user: unknown) {
+export function setSession(role: 'user' | 'seller' | 'admin' | 'delivery', token: string, user: unknown) {
   localStorage.setItem(`${role}Token`, token);
   localStorage.setItem(`${role}User`, JSON.stringify(user));
 }
 
-export function clearSession(role: 'user' | 'seller' | 'admin') {
+export function clearSession(role: 'user' | 'seller' | 'admin' | 'delivery') {
   localStorage.removeItem(`${role}Token`);
   localStorage.removeItem(`${role}User`);
 }
 
-export function getSessionUser<T = any>(role: 'user' | 'seller' | 'admin' = 'user'): T | null {
+export function getSessionUser<T = any>(role: 'user' | 'seller' | 'admin' | 'delivery' = 'user'): T | null {
   const raw = localStorage.getItem(`${role}User`);
   if (!raw) return null;
   try { return JSON.parse(raw) as T; } catch { return null; }

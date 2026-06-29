@@ -19,6 +19,7 @@ import supportRoutes from './routes/support.js';
 import notificationRoutes from './routes/notifications.js';
 import shopRoutes from './routes/shops.js';
 import settingsRoutes from './routes/settings.js';
+import deliveryRoutes from './routes/delivery.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -52,6 +53,7 @@ app.use('/api/support', supportRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/shops', shopRoutes);
 app.use('/api/settings', settingsRoutes);
+app.use('/api/delivery', deliveryRoutes);
 
 
 app.use((err, _req, res, _next) => {

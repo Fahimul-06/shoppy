@@ -71,3 +71,17 @@ export function requireOwnerAdmin(req, res, next) {
     next();
   });
 }
+
+export async function requireDeliveryMan(req, res, next) {
+  try {
+    const token = req.headers.authorization?.replace('Bearer ', '');
+    if (!token) return res.status(401).json({ message: 'Delivery man authentication required' });
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'dev-secret');
+    const user = await User.findById(decoded.id);
+    if (!user || user.role !== 'delivery') return res.status(401).json({ message: 'Invalid delivery man session' });
+    req.deliveryMan = user;
+    next();
+  } catch {
+    res.status(401).json({ message: 'Invalid delivery man session' });
+  }
+}

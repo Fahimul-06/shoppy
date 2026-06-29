@@ -16,7 +16,7 @@ import { isPromoActive } from '../utils/promo.js';
 import { requireAdmin, requireOwnerAdmin, requireAdminPermission, signToken } from '../middleware/auth.js';
 import { getPlatformSettings } from './settings.js';
 const router = express.Router();
-const ADMIN_PERMISSION_KEYS = ['dashboard','sellers','customers','products','sales','banners','orders','returns','cancellations','messages','customerCare','promos','notifications'];
+const ADMIN_PERMISSION_KEYS = ['dashboard','sellers','customers','products','sales','banners','orders','returns','cancellations','messages','customerCare','promos','notifications','deliveryMen'];
 const normalizePermissions = (permissions = []) => [...new Set((Array.isArray(permissions) ? permissions : []).map((p) => String(p || '').trim()).filter((p) => ADMIN_PERMISSION_KEYS.includes(p)))];
 const adminUser = (u) => ({
   id: u.id,
@@ -28,6 +28,15 @@ const adminUser = (u) => ({
   adminPosition: u.adminPosition || '',
   adminPermissions: u.adminType === 'employee' ? normalizePermissions(u.adminPermissions) : ADMIN_PERMISSION_KEYS,
   adminStatus: u.adminStatus || 'active',
+});
+
+
+const deliveryManPayload = (u) => ({
+  id: u.id,
+  fullName: u.fullName,
+  phone: u.phone,
+  nid: u.nid || '',
+  createdAt: u.createdAt,
 });
 
 const safeNumber = (value) => Number(value || 0);
@@ -433,6 +442,69 @@ router.delete('/employees/:id', requireOwnerAdmin, async (req, res) => {
   res.json({ ok: true });
 });
 
+
+router.get('/delivery-men', requireAdminPermission('deliveryMen'), async (_req, res) => {
+  const deliveryMen = await User.find({ role: 'delivery' }).sort({ createdAt: -1 });
+  res.json({ deliveryMen: deliveryMen.map(deliveryManPayload) });
+});
+
+router.post('/delivery-men', requireAdminPermission('deliveryMen'), async (req, res) => {
+  const fullName = String(req.body?.fullName || req.body?.name || '').trim();
+  const phone = String(req.body?.phone || '').trim();
+  const nid = String(req.body?.nid || '').trim();
+  const password = String(req.body?.password || '');
+  if (!fullName || !phone || !nid || !password) return res.status(400).json({ message: 'Name, phone, NID, and password are required' });
+  if (password.length < 6) return res.status(400).json({ message: 'Password must be at least 6 characters' });
+  const exists = await User.findOne({ role: 'delivery', phone });
+  if (exists) return res.status(409).json({ message: 'A delivery man with this phone already exists' });
+  const digits = phone.replace(/\D/g, '') || Date.now();
+  let email = `${digits}@delivery.shoppy.local`;
+  let counter = 1;
+  while (await User.exists({ email })) email = `${digits}.${counter++}@delivery.shoppy.local`;
+  const deliveryMan = await User.create({
+    fullName,
+    phone,
+    nid,
+    email,
+    role: 'delivery',
+    passwordHash: await bcrypt.hash(password, 10),
+    createdByAdmin: req.user._id,
+  });
+  res.status(201).json({ deliveryMan: deliveryManPayload(deliveryMan), loginPhone: phone });
+});
+
+router.put('/delivery-men/:id', requireAdminPermission('deliveryMen'), async (req, res) => {
+  const deliveryMan = await User.findOne({ _id: req.params.id, role: 'delivery' });
+  if (!deliveryMan) return res.status(404).json({ message: 'Delivery man not found' });
+  if (req.body?.fullName !== undefined || req.body?.name !== undefined) deliveryMan.fullName = String(req.body.fullName || req.body.name || '').trim();
+  if (req.body?.phone !== undefined) deliveryMan.phone = String(req.body.phone || '').trim();
+  if (req.body?.nid !== undefined) deliveryMan.nid = String(req.body.nid || '').trim();
+  if (req.body?.password) deliveryMan.passwordHash = await bcrypt.hash(String(req.body.password), 10);
+  await deliveryMan.save();
+  res.json({ deliveryMan: deliveryManPayload(deliveryMan) });
+});
+
+router.delete('/delivery-men/:id', requireAdminPermission('deliveryMen'), async (req, res) => {
+  await Promise.all([
+    User.deleteOne({ _id: req.params.id, role: 'delivery' }),
+    Order.updateMany({ deliveryMan: req.params.id }, { $set: { deliveryMan: null }, $unset: { assignedToDeliveryAt: '' } }),
+  ]);
+  res.json({ ok: true });
+});
+
+router.post('/orders/assign-delivery', requireAdminPermission('orders'), async (req, res) => {
+  const deliveryManId = String(req.body?.deliveryManId || '').trim();
+  const orderIds = Array.isArray(req.body?.orderIds) ? req.body.orderIds.map((id) => String(id || '').trim()).filter(Boolean) : [];
+  if (!deliveryManId || !orderIds.length) return res.status(400).json({ message: 'Delivery man and at least one order are required' });
+  const deliveryMan = await User.findOne({ _id: deliveryManId, role: 'delivery' });
+  if (!deliveryMan) return res.status(404).json({ message: 'Delivery man not found' });
+  const result = await Order.updateMany(
+    { _id: { $in: orderIds } },
+    { $set: { deliveryMan: deliveryMan._id, assignedToDeliveryAt: new Date(), status: 'shipped' } }
+  );
+  res.json({ message: 'Orders assigned to delivery man', assignedCount: result.modifiedCount || result.matchedCount || 0 });
+});
+
 router.get('/sellers', requireAdminPermission('sellers'), async (_req, res) => {
   const sellers = await Seller.find().sort({ createdAt: -1 });
   res.json({ sellers });
@@ -503,6 +575,7 @@ router.get('/orders', requireAdminPermission('orders'), async (_req, res) => {
   const orders = await Order.find()
     .populate('user')
     .populate('items.product')
+    .populate('deliveryMan')
     .sort({ createdAt: -1 });
   res.json({ orders });
 });
@@ -510,7 +583,7 @@ router.patch('/orders/:id', requireAdminPermission('orders'), async (req, res) =
   const existing = await Order.findById(req.params.id).populate('user');
   if (!existing) return res.status(404).json({ message: 'Order not found' });
   const previousStatus = existing.status;
-  const order = await Order.findByIdAndUpdate(req.params.id, req.body, { new: true }).populate('user');
+  const order = await Order.findByIdAndUpdate(req.params.id, req.body, { new: true }).populate('user').populate('deliveryMan');
 
   if (req.body?.status && req.body.status !== previousStatus && ['processing', 'shipped', 'delivered'].includes(req.body.status)) {
     const typeMap = {

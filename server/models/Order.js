@@ -29,6 +29,8 @@ const orderSchema = new mongoose.Schema({
   paymentStatus: { type: String, enum: ['pending', 'paid', 'failed', 'refunded'], default: 'pending' },
   status: { type: String, enum: ['pending', 'processing', 'shipped', 'delivered', 'cancelled'], default: 'pending' },
   shippingAddress: Object,
+  deliveryMan: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+  assignedToDeliveryAt: Date,
   cancelReason: String,
   cancelledAt: Date,
 }, { timestamps: true });

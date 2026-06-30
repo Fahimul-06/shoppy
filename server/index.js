@@ -258,8 +258,8 @@ io.on('connection', (socket) => {
       if (!check.allowed) throw new Error('You cannot relay audio in this call');
       if (!chunk) throw new Error('Audio chunk missing');
       const byteLength = chunk?.byteLength || chunk?.length || 0;
-      if (byteLength > 1024 * 256) throw new Error('Audio chunk too large');
-      socket.to(`call:${roomId}`).emit('call:relay-audio', {
+      if (byteLength > 1024 * 64) throw new Error('Audio chunk too large');
+      socket.to(`call:${roomId}`).volatile.emit('call:relay-audio', {
         from: check.role,
         mimeType,
         format,

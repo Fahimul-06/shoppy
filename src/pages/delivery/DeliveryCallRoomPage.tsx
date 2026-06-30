@@ -44,30 +44,6 @@ function getAudioContextConstructor() {
   return window.AudioContext || (window as any).webkitAudioContext;
 }
 
-const RELAY_SAMPLE_RATE = 16000;
-const RELAY_BUFFER_SIZE = 1024;
-const RELAY_TARGET_LATENCY_SECONDS = 0.08;
-const RELAY_MAX_LATENCY_SECONDS = 0.32;
-
-function downsampleFloat32(input: Float32Array, inputSampleRate: number, outputSampleRate = RELAY_SAMPLE_RATE) {
-  if (inputSampleRate === outputSampleRate) return input;
-  const ratio = inputSampleRate / outputSampleRate;
-  const outputLength = Math.max(1, Math.floor(input.length / ratio));
-  const output = new Float32Array(outputLength);
-  for (let i = 0; i < outputLength; i += 1) {
-    const start = Math.floor(i * ratio);
-    const end = Math.min(input.length, Math.floor((i + 1) * ratio));
-    let sum = 0;
-    let count = 0;
-    for (let j = start; j < end; j += 1) {
-      sum += input[j];
-      count += 1;
-    }
-    output[i] = count ? sum / count : input[Math.min(start, input.length - 1)] || 0;
-  }
-  return output;
-}
-
 function floatToPcm16(input: Float32Array) {
   const output = new Int16Array(input.length);
   for (let i = 0; i < input.length; i += 1) {
@@ -75,6 +51,26 @@ function floatToPcm16(input: Float32Array) {
     output[i] = sample < 0 ? sample * 0x8000 : sample * 0x7fff;
   }
   return output.buffer as ArrayBuffer;
+}
+
+function downsampleFloat32(input: Float32Array, inputRate: number, outputRate = 16000) {
+  if (!inputRate || inputRate <= outputRate) return input;
+  const ratio = inputRate / outputRate;
+  const outputLength = Math.max(1, Math.floor(input.length / ratio));
+  const output = new Float32Array(outputLength);
+  let inputOffset = 0;
+  for (let i = 0; i < outputLength; i += 1) {
+    const nextOffset = Math.round((i + 1) * ratio);
+    let sum = 0;
+    let count = 0;
+    for (let j = inputOffset; j < nextOffset && j < input.length; j += 1) {
+      sum += input[j];
+      count += 1;
+    }
+    output[i] = count ? sum / count : 0;
+    inputOffset = nextOffset;
+  }
+  return output;
 }
 
 function normalizeBinaryPayload(input: any): ArrayBuffer {
@@ -203,13 +199,12 @@ export default function DeliveryCallRoomPage() {
       const source = ctx.createBufferSource();
       source.buffer = audioBuffer;
       source.connect(ctx.destination);
-      const minStart = ctx.currentTime + RELAY_TARGET_LATENCY_SECONDS;
-      const maxStart = ctx.currentTime + RELAY_MAX_LATENCY_SECONDS;
-      let startAt = Math.max(minStart, relayNextPlayTimeRef.current || 0);
-      if (startAt > maxStart) {
-        // Drop accumulated delay instead of letting the call get later and later.
-        startAt = minStart;
+      const maxBufferedAhead = 0.16;
+      const minLead = 0.018;
+      if (!relayNextPlayTimeRef.current || relayNextPlayTimeRef.current > ctx.currentTime + maxBufferedAhead) {
+        relayNextPlayTimeRef.current = ctx.currentTime + minLead;
       }
+      const startAt = Math.max(ctx.currentTime + minLead, relayNextPlayTimeRef.current);
       source.start(startAt);
       relayNextPlayTimeRef.current = startAt + audioBuffer.duration;
     } catch (e) {
@@ -253,10 +248,10 @@ export default function DeliveryCallRoomPage() {
       stopRelayCapture();
       const ctx = await ensureAudioContext(relayAudioContextRef.current);
       relayAudioContextRef.current = ctx;
-      relayNextPlayTimeRef.current = Math.max(ctx.currentTime + RELAY_TARGET_LATENCY_SECONDS, relayNextPlayTimeRef.current || 0);
+      relayNextPlayTimeRef.current = Math.max(ctx.currentTime + 0.035, relayNextPlayTimeRef.current || 0);
 
       const source = ctx.createMediaStreamSource(stream);
-      const processor = ctx.createScriptProcessor(RELAY_BUFFER_SIZE, 1, 1);
+      const processor = ctx.createScriptProcessor(1024, 1, 1);
       const silentGain = ctx.createGain();
       silentGain.gain.value = 0;
 
@@ -287,18 +282,23 @@ export default function DeliveryCallRoomPage() {
       processor.onaudioprocess = (event) => {
         if (hasEndedRef.current || !socket.connected || mutedRef.current) return;
         const input = event.inputBuffer.getChannelData(0);
-        const downsampled = downsampleFloat32(input, ctx.sampleRate, RELAY_SAMPLE_RATE);
+        const targetSampleRate = 16000;
+        const downsampled = downsampleFloat32(input, ctx.sampleRate, targetSampleRate);
         const pcmBuffer = floatToPcm16(downsampled);
         relaySentCountRef.current += 1;
-        const audioPacket = {
+        const payload = {
           roomId,
-          format: 'pcm16',
-          sampleRate: RELAY_SAMPLE_RATE,
+          format: 'pcm16-low-latency',
+          sampleRate: targetSampleRate,
           channels: 1,
           chunk: pcmBuffer,
+          sentAt: Date.now(),
         };
-        const volatileSocket = socket as Socket & { volatile?: { emit: Socket['emit'] } };
-        (volatileSocket.volatile || socket).emit('call:relay-audio', audioPacket);
+        if ((socket as any).volatile?.emit) {
+          (socket as any).volatile.emit('call:relay-audio', payload);
+        } else {
+          socket.emit('call:relay-audio', payload);
+        }
       };
     } catch (e) {
       relayModeRef.current = false;
@@ -415,15 +415,7 @@ export default function DeliveryCallRoomPage() {
 
   const startMedia = async () => {
     if (localStreamRef.current) return;
-    const stream = await navigator.mediaDevices.getUserMedia({
-      audio: {
-        echoCancellation: true,
-        noiseSuppression: true,
-        autoGainControl: true,
-        channelCount: 1,
-      },
-      video: false,
-    });
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
     localStreamRef.current = stream;
     if (localAudioRef.current) localAudioRef.current.srcObject = stream;
     const pc = createPeer();
@@ -550,7 +542,7 @@ export default function DeliveryCallRoomPage() {
             relayReceivedCountRef.current += 1;
             setRelayReceivedCount(relayReceivedCountRef.current);
             setConnected(true);
-            if (format === 'pcm16') {
+            if (String(format || '').startsWith('pcm16')) {
               playRelayPcmChunk(binary, sampleRate || 48000);
               return;
             }

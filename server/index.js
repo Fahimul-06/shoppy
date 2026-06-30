@@ -130,6 +130,13 @@ if (clientDist) {
 
 io.use(authenticateSocket);
 
+const callDisconnectTimers = new Map();
+function clearCallDisconnectTimer(roomId) {
+  const timer = callDisconnectTimers.get(roomId);
+  if (timer) clearTimeout(timer);
+  callDisconnectTimers.delete(roomId);
+}
+
 async function canJoinCallRoom(user, roomId) {
   const room = await InternetCallRoom.findOne({ roomId }).populate('deliveryMan', 'fullName phone deliveryCode role');
   if (!room) return { allowed: false };
@@ -212,8 +219,9 @@ io.on('connection', (socket) => {
     try {
       const check = await canJoinCallRoom(user, String(roomId || ''));
       if (!check.allowed) throw new Error('You cannot join this call room');
+      clearCallDisconnectTimer(String(roomId));
       socket.join(`call:${roomId}`);
-      socket.callRoomId = roomId;
+      socket.callRoomId = String(roomId);
       socket.callRole = check.role;
       const patch = check.role === 'delivery'
         ? { deliveryJoinedAt: new Date() }
@@ -336,9 +344,20 @@ io.on('connection', (socket) => {
   });
 
   socket.on('disconnect', () => {
-    if (socket.callRoomId) {
-      endSocketCall(socket.callRoomId, 'left-page').catch(() => {});
-    }
+    const roomId = socket.callRoomId;
+    if (!roomId) return;
+    // Do not end a live call immediately on socket disconnect. Mobile browsers
+    // often reconnect after network switches/background wakeups. Give the user
+    // a grace period; explicit End Call / page unload still ends immediately.
+    io.to(`call:${roomId}`).emit('call:peer-disconnected', { role: socket.callRole, roomId, graceMs: 30000 });
+    clearCallDisconnectTimer(roomId);
+    const timer = setTimeout(async () => {
+      const activeSockets = await io.in(`call:${roomId}`).fetchSockets();
+      const hasSameRoleBack = activeSockets.some((peerSocket) => peerSocket.callRole === socket.callRole);
+      if (!hasSameRoleBack) await endSocketCall(roomId, 'connection-lost');
+      callDisconnectTimers.delete(roomId);
+    }, 30000);
+    callDisconnectTimers.set(roomId, timer);
   });
 });
 

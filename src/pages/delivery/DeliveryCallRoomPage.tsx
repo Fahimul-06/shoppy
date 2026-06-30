@@ -129,6 +129,7 @@ export default function DeliveryCallRoomPage() {
   const relayAudioContextRef = useRef<AudioContext | null>(null);
   const relayInputSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const relayProcessorRef = useRef<ScriptProcessorNode | null>(null);
+  const relayWorkletNodeRef = useRef<AudioWorkletNode | null>(null);
   const relaySilentGainRef = useRef<GainNode | null>(null);
   const relayNextPlayTimeRef = useRef(0);
   const relaySentCountRef = useRef(0);
@@ -181,9 +182,12 @@ export default function DeliveryCallRoomPage() {
     try { recorderRef.current?.stop(); } catch { /* recorder may already be stopped */ }
     recorderRef.current = null;
     try { relayProcessorRef.current?.disconnect(); } catch { /* ignore */ }
+    try { relayWorkletNodeRef.current?.disconnect(); } catch { /* ignore */ }
+    try { relayWorkletNodeRef.current?.port.close(); } catch { /* ignore */ }
     try { relayInputSourceRef.current?.disconnect(); } catch { /* ignore */ }
     try { relaySilentGainRef.current?.disconnect(); } catch { /* ignore */ }
     relayProcessorRef.current = null;
+    relayWorkletNodeRef.current = null;
     relayInputSourceRef.current = null;
     relaySilentGainRef.current = null;
   };
@@ -219,6 +223,25 @@ export default function DeliveryCallRoomPage() {
     playNextRelayChunk();
   };
 
+  const emitRelayAudio = (sampleRate: number, chunk: ArrayBuffer) => {
+    const socket = socketRef.current;
+    if (!socket?.connected || hasEndedRef.current || mutedRef.current) return;
+    relaySentCountRef.current += 1;
+    const payload = {
+      roomId,
+      format: 'pcm16-audioworklet-low-latency',
+      sampleRate,
+      channels: 1,
+      chunk,
+      sentAt: Date.now(),
+    };
+    if ((socket as any).volatile?.emit) {
+      (socket as any).volatile.emit('call:relay-audio', payload);
+    } else {
+      socket.emit('call:relay-audio', payload);
+    }
+  };
+
   const startOwnServerRelay = async (reason = 'network fallback') => {
     if (relayModeRef.current || hasEndedRef.current) return;
     const socket = socketRef.current;
@@ -251,17 +274,46 @@ export default function DeliveryCallRoomPage() {
       relayNextPlayTimeRef.current = Math.max(ctx.currentTime + 0.035, relayNextPlayTimeRef.current || 0);
 
       const source = ctx.createMediaStreamSource(stream);
-      const processor = ctx.createScriptProcessor(1024, 1, 1);
       const silentGain = ctx.createGain();
       silentGain.gain.value = 0;
 
-      source.connect(processor);
-      processor.connect(silentGain);
-      silentGain.connect(ctx.destination);
-
       relayInputSourceRef.current = source;
-      relayProcessorRef.current = processor;
       relaySilentGainRef.current = silentGain;
+
+      if (ctx.audioWorklet) {
+        await ctx.audioWorklet.addModule('/audio-relay-worklet.js');
+        const workletNode = new AudioWorkletNode(ctx, 'shoppy-relay-capture', {
+          numberOfInputs: 1,
+          numberOfOutputs: 1,
+          outputChannelCount: [1],
+          processorOptions: { targetSampleRate: 16000, packetSize: 320 },
+        });
+        workletNode.port.onmessage = (event) => {
+          if (hasEndedRef.current || mutedRef.current) return;
+          const chunk = event.data?.chunk;
+          const sampleRate = Number(event.data?.sampleRate || 16000);
+          if (chunk) emitRelayAudio(sampleRate, normalizeBinaryPayload(chunk));
+        };
+        source.connect(workletNode);
+        workletNode.connect(silentGain);
+        silentGain.connect(ctx.destination);
+        relayWorkletNodeRef.current = workletNode;
+      } else {
+        // Fallback only for older browsers. Modern Chrome/Edge/Safari use AudioWorklet above.
+        const processor = ctx.createScriptProcessor(1024, 1, 1);
+        source.connect(processor);
+        processor.connect(silentGain);
+        silentGain.connect(ctx.destination);
+        relayProcessorRef.current = processor;
+        processor.onaudioprocess = (event) => {
+          if (hasEndedRef.current || !socket.connected || mutedRef.current) return;
+          const input = event.inputBuffer.getChannelData(0);
+          const targetSampleRate = 16000;
+          const downsampled = downsampleFloat32(input, ctx.sampleRate, targetSampleRate);
+          emitRelayAudio(targetSampleRate, floatToPcm16(downsampled));
+        };
+      }
+
       await socketAck(socket, 'call:relay-ready', { roomId }, 2500).catch(() => {});
       setStatus(`Low-latency own-server relay active. Waiting for live audio from ${peerRole === 'admin' ? 'customer care' : 'delivery man'}...`);
       if (relayMonitorRef.current) window.clearInterval(relayMonitorRef.current);
@@ -277,29 +329,7 @@ export default function DeliveryCallRoomPage() {
         } else if (sent > 0) {
           setStatus(`Own-server relay is sending audio (${sent} packets). Waiting for the other side audio...`);
         }
-      }, 1200);
-
-      processor.onaudioprocess = (event) => {
-        if (hasEndedRef.current || !socket.connected || mutedRef.current) return;
-        const input = event.inputBuffer.getChannelData(0);
-        const targetSampleRate = 16000;
-        const downsampled = downsampleFloat32(input, ctx.sampleRate, targetSampleRate);
-        const pcmBuffer = floatToPcm16(downsampled);
-        relaySentCountRef.current += 1;
-        const payload = {
-          roomId,
-          format: 'pcm16-low-latency',
-          sampleRate: targetSampleRate,
-          channels: 1,
-          chunk: pcmBuffer,
-          sentAt: Date.now(),
-        };
-        if ((socket as any).volatile?.emit) {
-          (socket as any).volatile.emit('call:relay-audio', payload);
-        } else {
-          socket.emit('call:relay-audio', payload);
-        }
-      };
+      }, 1000);
     } catch (e) {
       relayModeRef.current = false;
       setRelayMode(false);
@@ -344,7 +374,7 @@ export default function DeliveryCallRoomPage() {
       if (socketRef.current?.connected) {
         await socketAck(socketRef.current, 'call:end', { roomId, reason }, 2500).catch(() => {});
       } else {
-        await api.patch(`/calls/${roomId}/status`, { status: 'ended' }, token).catch(() => {});
+        await api.patch(`/calls/${roomId}/status`, { status: 'ended' }, role).catch(() => {});
       }
     } finally {
       closeLocalCall(true);
@@ -415,6 +445,11 @@ export default function DeliveryCallRoomPage() {
 
   const startMedia = async () => {
     if (localStreamRef.current) return;
+    const isLocalhost = ['localhost', '127.0.0.1', '::1'].includes(window.location.hostname);
+    if (window.location.protocol !== 'https:' && !isLocalhost) {
+      throw new Error('Microphone access needs HTTPS in production. Deploy the site with HTTPS before using live calls.');
+    }
+    if (!navigator.mediaDevices?.getUserMedia) throw new Error('This browser does not support microphone access.');
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
     localStreamRef.current = stream;
     if (localAudioRef.current) localAudioRef.current.srcObject = stream;
@@ -487,12 +522,7 @@ export default function DeliveryCallRoomPage() {
     if (relayFallbackTimerRef.current) window.clearTimeout(relayFallbackTimerRef.current);
     relayFallbackTimerRef.current = window.setTimeout(() => {
       if (!connected && !hasEndedRef.current) startOwnServerRelay('direct connection timeout');
-    }, 5000);
-    window.setTimeout(() => {
-      if (!hasEndedRef.current && !relayModeRef.current && currentRoom?.deliveryJoinedAt && currentRoom?.adminJoinedAt) {
-        startOwnServerRelay('stable own-server audio path').catch(() => {});
-      }
-    }, 1200);
+    }, 9000);
   };
 
   const toggleMute = () => {
@@ -511,7 +541,7 @@ export default function DeliveryCallRoomPage() {
       }
       try {
         setStatus('Joining realtime call room...');
-        const detail = await api.get<{ room: any }>(`/calls/${roomId}`, token);
+        const detail = await api.get<{ room: any }>(`/calls/${roomId}`, role);
         setRoom(detail.room);
         await startMedia();
 
@@ -522,8 +552,8 @@ export default function DeliveryCallRoomPage() {
           if (payload?.room) {
             setRoom(payload.room);
             maybeStartOffer(payload.room);
-            if (payload.room?.relayEnabled || (payload.room?.deliveryJoinedAt && payload.room?.adminJoinedAt)) {
-              window.setTimeout(() => startOwnServerRelay(payload.room?.relayEnabled ? 'room relay active' : 'both sides joined').catch(() => {}), 800);
+            if (payload.room?.relayEnabled) {
+              window.setTimeout(() => startOwnServerRelay('room relay active').catch(() => {}), 800);
             }
           }
         });
@@ -551,6 +581,9 @@ export default function DeliveryCallRoomPage() {
             setError(e instanceof Error ? e.message : 'Could not receive relay audio');
           }
         });
+        socket.on('call:peer-disconnected', (payload: any) => {
+          if (payload?.role && payload.role !== role) setStatus('Peer connection dropped. Waiting up to 30 seconds for reconnect...');
+        });
         socket.on('call:ended', () => {
           if (!hasEndedRef.current) {
             hasEndedRef.current = true;
@@ -564,8 +597,8 @@ export default function DeliveryCallRoomPage() {
           if (mountedRef.current) setRoom(joined.room);
           setStatus(role === 'admin' ? 'Waiting for delivery man answer...' : 'Waiting for customer care to answer...');
           maybeStartOffer(joined.room);
-          if (joined.room?.relayEnabled || (joined.room?.deliveryJoinedAt && joined.room?.adminJoinedAt)) {
-            window.setTimeout(() => startOwnServerRelay(joined.room?.relayEnabled ? 'room already in relay mode' : 'both sides joined').catch(() => {}), 800);
+          if (joined.room?.relayEnabled) {
+            window.setTimeout(() => startOwnServerRelay('room already in relay mode').catch(() => {}), 800);
           }
         });
         socket.on('connect_error', (e) => setError(e.message || 'Realtime call connection failed'));

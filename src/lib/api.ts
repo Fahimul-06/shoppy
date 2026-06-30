@@ -11,26 +11,37 @@ function defaultApiBaseUrl() {
 
 export const API_BASE_URL = defaultApiBaseUrl().replace(/\/$/, '');
 
+type SessionRole = 'user' | 'seller' | 'admin' | 'delivery';
+type TokenOrRole = string | null | undefined | SessionRole;
 type ApiOptions = RequestInit & { token?: string | null; timeoutMs?: number };
 
-export function getToken(role: 'user' | 'seller' | 'admin' | 'delivery' = 'user') {
+const SESSION_ROLES = new Set(['user', 'seller', 'admin', 'delivery']);
+
+export function getToken(role: SessionRole = 'user') {
   return localStorage.getItem(`${role}Token`);
 }
 
-export function setSession(role: 'user' | 'seller' | 'admin' | 'delivery', token: string, user: unknown) {
+export function setSession(role: SessionRole, token: string, user: unknown) {
   localStorage.setItem(`${role}Token`, token);
   localStorage.setItem(`${role}User`, JSON.stringify(user));
 }
 
-export function clearSession(role: 'user' | 'seller' | 'admin' | 'delivery') {
+export function clearSession(role: SessionRole) {
   localStorage.removeItem(`${role}Token`);
   localStorage.removeItem(`${role}User`);
 }
 
-export function getSessionUser<T = any>(role: 'user' | 'seller' | 'admin' | 'delivery' = 'user'): T | null {
+export function getSessionUser<T = any>(role: SessionRole = 'user'): T | null {
   const raw = localStorage.getItem(`${role}User`);
   if (!raw) return null;
   try { return JSON.parse(raw) as T; } catch { return null; }
+}
+
+
+export function resolveToken(tokenOrRole?: TokenOrRole) {
+  if (!tokenOrRole) return null;
+  const value = String(tokenOrRole);
+  return SESSION_ROLES.has(value) ? getToken(value as SessionRole) : value;
 }
 
 function parsePayload(text: string, contentType: string | null) {
@@ -84,13 +95,13 @@ export async function apiFetch<T>(path: string, options: ApiOptions = {}): Promi
 }
 
 export const api = {
-  get: <T>(path: string, token?: string | null) => apiFetch<T>(path, { token }),
-  post: <T>(path: string, body?: unknown, token?: string | null) => apiFetch<T>(path, { method: 'POST', body: JSON.stringify(body ?? {}), token }),
-  postWithTimeout: <T>(path: string, body: unknown, token: string | null | undefined, timeoutMs: number) => apiFetch<T>(path, { method: 'POST', body: JSON.stringify(body ?? {}), token, timeoutMs }),
-  put: <T>(path: string, body?: unknown, token?: string | null) => apiFetch<T>(path, { method: 'PUT', body: JSON.stringify(body ?? {}), token }),
-  patch: <T>(path: string, body?: unknown, token?: string | null) => apiFetch<T>(path, { method: 'PATCH', body: JSON.stringify(body ?? {}), token }),
-  delete: <T>(path: string, token?: string | null) => apiFetch<T>(path, { method: 'DELETE', token }),
-  upload: <T>(path: string, formData: FormData, token?: string | null) => apiFetch<T>(path, { method: 'POST', body: formData, token, timeoutMs: 120000 }),
+  get: <T>(path: string, tokenOrRole?: TokenOrRole) => apiFetch<T>(path, { token: resolveToken(tokenOrRole) }),
+  post: <T>(path: string, body?: unknown, tokenOrRole?: TokenOrRole) => apiFetch<T>(path, { method: 'POST', body: JSON.stringify(body ?? {}), token: resolveToken(tokenOrRole) }),
+  postWithTimeout: <T>(path: string, body: unknown, tokenOrRole: TokenOrRole, timeoutMs: number) => apiFetch<T>(path, { method: 'POST', body: JSON.stringify(body ?? {}), token: resolveToken(tokenOrRole), timeoutMs }),
+  put: <T>(path: string, body?: unknown, tokenOrRole?: TokenOrRole) => apiFetch<T>(path, { method: 'PUT', body: JSON.stringify(body ?? {}), token: resolveToken(tokenOrRole) }),
+  patch: <T>(path: string, body?: unknown, tokenOrRole?: TokenOrRole) => apiFetch<T>(path, { method: 'PATCH', body: JSON.stringify(body ?? {}), token: resolveToken(tokenOrRole) }),
+  delete: <T>(path: string, tokenOrRole?: TokenOrRole) => apiFetch<T>(path, { method: 'DELETE', token: resolveToken(tokenOrRole) }),
+  upload: <T>(path: string, formData: FormData, tokenOrRole?: TokenOrRole) => apiFetch<T>(path, { method: 'POST', body: formData, token: resolveToken(tokenOrRole), timeoutMs: 120000 }),
 };
 
 

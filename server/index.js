@@ -252,22 +252,28 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('call:relay-audio', async ({ roomId = '', chunk, mimeType = 'audio/webm;codecs=opus', format = 'pcm16', sampleRate = 48000, channels = 1 } = {}, ack) => {
+  socket.on('call:relay-audio', ({ roomId = '', chunk, mimeType = 'audio/webm;codecs=opus', format = 'pcm16-low-latency', sampleRate = 16000, channels = 1, sentAt = null } = {}, ack) => {
     try {
-      const check = await canJoinCallRoom(user, String(roomId));
-      if (!check.allowed) throw new Error('You cannot relay audio in this call');
+      const safeRoomId = String(roomId || '');
+      if (!safeRoomId || socket.callRoomId !== safeRoomId || !socket.callRole) throw new Error('You are not joined to this call room');
       if (!chunk) throw new Error('Audio chunk missing');
       const byteLength = chunk?.byteLength || chunk?.length || 0;
-      if (byteLength > 1024 * 64) throw new Error('Audio chunk too large');
-      socket.to(`call:${roomId}`).volatile.emit('call:relay-audio', {
-        from: check.role,
+      if (byteLength > 1024 * 32) throw new Error('Audio chunk too large');
+      const payload = {
+        from: socket.callRole,
         mimeType,
         format,
         sampleRate,
         channels,
         chunk,
-        createdAt: new Date().toISOString(),
-      });
+        sentAt,
+        createdAt: Date.now(),
+      };
+      if (socket.to(`call:${safeRoomId}`).volatile?.emit) {
+        socket.to(`call:${safeRoomId}`).volatile.emit('call:relay-audio', payload);
+      } else {
+        socket.to(`call:${safeRoomId}`).emit('call:relay-audio', payload);
+      }
       ack?.({ ok: true });
     } catch (error) {
       ack?.({ ok: false, message: error.message || 'Audio relay failed' });

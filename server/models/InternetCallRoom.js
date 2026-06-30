@@ -16,6 +16,9 @@ const internetCallRoomSchema = new mongoose.Schema({
   deliveryJoinedAt: Date,
   adminJoinedAt: Date,
   endedAt: Date,
+  relayEnabled: { type: Boolean, default: false },
+  deliveryRelayReadyAt: Date,
+  adminRelayReadyAt: Date,
   signals: [signalSchema],
 }, { timestamps: true });
 

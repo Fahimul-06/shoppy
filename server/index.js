@@ -221,6 +221,9 @@ io.on('connection', (socket) => {
       const room = await InternetCallRoom.findOneAndUpdate({ roomId }, { $set: patch }, { new: true }).populate('deliveryMan', 'fullName phone deliveryCode role');
       if (room?.supportMessage) await DeliverySupportMessage.findByIdAndUpdate(room.supportMessage, { $set: { callStatus: room.status } });
       io.to(`call:${roomId}`).emit('call:room', { room, role: check.role });
+      if (room?.relayEnabled) {
+        io.to(`call:${roomId}`).emit('call:relay-mode', { enabled: true, by: 'server', reason: 'room already in relay mode' });
+      }
       if (check.role === 'admin' && room?.deliveryMan) {
         io.to(`delivery:${room.deliveryMan._id || room.deliveryMan}:support`).emit('delivery-support:call-answered', {
           roomId,
@@ -249,14 +252,19 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('call:relay-audio', async ({ roomId = '', chunk, mimeType = 'audio/webm;codecs=opus' } = {}, ack) => {
+  socket.on('call:relay-audio', async ({ roomId = '', chunk, mimeType = 'audio/webm;codecs=opus', format = 'pcm16', sampleRate = 48000, channels = 1 } = {}, ack) => {
     try {
       const check = await canJoinCallRoom(user, String(roomId));
       if (!check.allowed) throw new Error('You cannot relay audio in this call');
       if (!chunk) throw new Error('Audio chunk missing');
+      const byteLength = chunk?.byteLength || chunk?.length || 0;
+      if (byteLength > 1024 * 256) throw new Error('Audio chunk too large');
       socket.to(`call:${roomId}`).emit('call:relay-audio', {
         from: check.role,
         mimeType,
+        format,
+        sampleRate,
+        channels,
         chunk,
         createdAt: new Date().toISOString(),
       });
@@ -266,14 +274,36 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('call:relay-mode', async ({ roomId = '', enabled = true } = {}, ack) => {
+  socket.on('call:relay-mode', async ({ roomId = '', enabled = true, reason = 'manual' } = {}, ack) => {
     try {
       const check = await canJoinCallRoom(user, String(roomId));
       if (!check.allowed) throw new Error('You cannot update this call mode');
-      io.to(`call:${roomId}`).emit('call:relay-mode', { enabled: Boolean(enabled), by: check.role });
-      ack?.({ ok: true });
+      const room = await InternetCallRoom.findOneAndUpdate(
+        { roomId },
+        { $set: { relayEnabled: Boolean(enabled) } },
+        { new: true }
+      ).populate('deliveryMan', 'fullName phone deliveryCode role');
+      io.to(`call:${roomId}`).emit('call:relay-mode', { enabled: Boolean(enabled), by: check.role, reason, room });
+      ack?.({ ok: true, room });
     } catch (error) {
       ack?.({ ok: false, message: error.message || 'Relay mode update failed' });
+    }
+  });
+
+  socket.on('call:relay-ready', async ({ roomId = '' } = {}, ack) => {
+    try {
+      const check = await canJoinCallRoom(user, String(roomId));
+      if (!check.allowed) throw new Error('You cannot update relay readiness');
+      const field = check.role === 'delivery' ? 'deliveryRelayReadyAt' : 'adminRelayReadyAt';
+      const room = await InternetCallRoom.findOneAndUpdate(
+        { roomId },
+        { $set: { [field]: new Date(), relayEnabled: true } },
+        { new: true }
+      ).populate('deliveryMan', 'fullName phone deliveryCode role');
+      io.to(`call:${roomId}`).emit('call:relay-ready', { role: check.role, room });
+      ack?.({ ok: true, room });
+    } catch (error) {
+      ack?.({ ok: false, message: error.message || 'Relay ready update failed' });
     }
   });
 

@@ -40,6 +40,34 @@ function pickRecorderMimeType() {
   return choices.find((type) => typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(type)) || '';
 }
 
+function getAudioContextConstructor() {
+  return window.AudioContext || (window as any).webkitAudioContext;
+}
+
+function floatToPcm16(input: Float32Array) {
+  const output = new Int16Array(input.length);
+  for (let i = 0; i < input.length; i += 1) {
+    const sample = Math.max(-1, Math.min(1, input[i]));
+    output[i] = sample < 0 ? sample * 0x8000 : sample * 0x7fff;
+  }
+  return output.buffer;
+}
+
+function pcm16ToFloat(input: ArrayBuffer) {
+  const pcm = new Int16Array(input);
+  const output = new Float32Array(pcm.length);
+  for (let i = 0; i < pcm.length; i += 1) output[i] = pcm[i] / 0x8000;
+  return output;
+}
+
+async function ensureAudioContext(existing?: AudioContext | null) {
+  const AudioContextCtor = getAudioContextConstructor();
+  if (!AudioContextCtor) throw new Error('This browser does not support live audio relay.');
+  const ctx = existing && existing.state !== 'closed' ? existing : new AudioContextCtor();
+  if (ctx.state === 'suspended') await ctx.resume();
+  return ctx;
+}
+
 export default function DeliveryCallRoomPage() {
   const { roomId = '' } = useParams();
   const [searchParams] = useSearchParams();
@@ -64,6 +92,12 @@ export default function DeliveryCallRoomPage() {
   const relayQueueRef = useRef<{ blob: Blob; url: string }[]>([]);
   const relayPlayingRef = useRef(false);
   const relayModeRef = useRef(false);
+  const mutedRef = useRef(false);
+  const relayAudioContextRef = useRef<AudioContext | null>(null);
+  const relayInputSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
+  const relayProcessorRef = useRef<ScriptProcessorNode | null>(null);
+  const relaySilentGainRef = useRef<GainNode | null>(null);
+  const relayNextPlayTimeRef = useRef(0);
 
   const [room, setRoom] = useState<any>(null);
   const [status, setStatus] = useState('Preparing live call room...');
@@ -104,6 +138,43 @@ export default function DeliveryCallRoomPage() {
     });
   };
 
+  const stopRelayCapture = () => {
+    try { recorderRef.current?.stop(); } catch { /* recorder may already be stopped */ }
+    recorderRef.current = null;
+    try { relayProcessorRef.current?.disconnect(); } catch { /* ignore */ }
+    try { relayInputSourceRef.current?.disconnect(); } catch { /* ignore */ }
+    try { relaySilentGainRef.current?.disconnect(); } catch { /* ignore */ }
+    relayProcessorRef.current = null;
+    relayInputSourceRef.current = null;
+    relaySilentGainRef.current = null;
+  };
+
+  const playRelayPcmChunk = async (chunk: ArrayBuffer, sampleRate = 48000) => {
+    if (hasEndedRef.current) return;
+    try {
+      const ctx = await ensureAudioContext(relayAudioContextRef.current);
+      relayAudioContextRef.current = ctx;
+      const floatData = pcm16ToFloat(chunk);
+      const audioBuffer = ctx.createBuffer(1, floatData.length, sampleRate || ctx.sampleRate);
+      audioBuffer.copyToChannel(floatData, 0);
+      const source = ctx.createBufferSource();
+      source.buffer = audioBuffer;
+      source.connect(ctx.destination);
+      const startAt = Math.max(ctx.currentTime + 0.04, relayNextPlayTimeRef.current || 0);
+      source.start(startAt);
+      relayNextPlayTimeRef.current = startAt + audioBuffer.duration;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not play relay audio');
+    }
+  };
+
+  const playRelayBlobChunk = (chunk: ArrayBuffer, mimeType = 'audio/webm') => {
+    const blob = new Blob([chunk], { type: mimeType || 'audio/webm' });
+    const url = URL.createObjectURL(blob);
+    relayQueueRef.current.push({ blob, url });
+    playNextRelayChunk();
+  };
+
   const startOwnServerRelay = async (reason = 'network fallback') => {
     if (relayModeRef.current || hasEndedRef.current) return;
     const socket = socketRef.current;
@@ -111,7 +182,13 @@ export default function DeliveryCallRoomPage() {
     if (!socket?.connected || !stream) return;
 
     const audioTracks = stream.getAudioTracks();
-    if (!audioTracks.length || typeof MediaRecorder === 'undefined') {
+    if (!audioTracks.length) {
+      setError('Microphone track missing. Please rejoin the call.');
+      return;
+    }
+
+    const AudioContextCtor = getAudioContextConstructor();
+    if (!AudioContextCtor) {
       setError('This browser does not support own-server audio relay. Try Chrome/Edge mobile or desktop.');
       return;
     }
@@ -120,21 +197,43 @@ export default function DeliveryCallRoomPage() {
     setRelayMode(true);
     setConnected(true);
     setError('');
-    setStatus(`Connected using own-server relay mode (${reason}). Works through strict NAT/mobile networks because audio passes through your backend.`);
+    setStatus(`Connected using own-server relay mode (${reason}). Audio is passing through your own backend Socket.IO server.`);
 
     try {
       await socketAck(socket, 'call:relay-mode', { roomId, enabled: true }, 2500).catch(() => {});
-      const mimeType = pickRecorderMimeType();
-      const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
-      recorderRef.current = recorder;
-      recorder.ondataavailable = async (event) => {
-        if (!event.data?.size || hasEndedRef.current || !socket.connected || muted) return;
-        const chunk = await event.data.arrayBuffer();
-        socket.emit('call:relay-audio', { roomId, chunk, mimeType: event.data.type || mimeType || 'audio/webm' });
+      stopRelayCapture();
+      const ctx = await ensureAudioContext(relayAudioContextRef.current);
+      relayAudioContextRef.current = ctx;
+      relayNextPlayTimeRef.current = Math.max(ctx.currentTime + 0.12, relayNextPlayTimeRef.current || 0);
+
+      const source = ctx.createMediaStreamSource(stream);
+      const processor = ctx.createScriptProcessor(2048, 1, 1);
+      const silentGain = ctx.createGain();
+      silentGain.gain.value = 0;
+
+      source.connect(processor);
+      processor.connect(silentGain);
+      silentGain.connect(ctx.destination);
+
+      relayInputSourceRef.current = source;
+      relayProcessorRef.current = processor;
+      relaySilentGainRef.current = silentGain;
+
+      processor.onaudioprocess = (event) => {
+        if (hasEndedRef.current || !socket.connected || mutedRef.current) return;
+        const input = event.inputBuffer.getChannelData(0);
+        const pcmBuffer = floatToPcm16(input);
+        socket.emit('call:relay-audio', {
+          roomId,
+          format: 'pcm16',
+          sampleRate: ctx.sampleRate,
+          channels: 1,
+          chunk: pcmBuffer,
+        });
       };
-      recorder.onerror = () => setError('Audio relay recorder failed. Please rejoin the call.');
-      recorder.start(700);
     } catch (e) {
+      relayModeRef.current = false;
+      setRelayMode(false);
       setError(e instanceof Error ? e.message : 'Could not start own-server audio relay');
     }
   };
@@ -144,8 +243,10 @@ export default function DeliveryCallRoomPage() {
     if (relayFallbackTimerRef.current) window.clearTimeout(relayFallbackTimerRef.current);
     offerTimerRef.current = null;
     relayFallbackTimerRef.current = null;
-    try { recorderRef.current?.stop(); } catch { /* recorder may already be stopped */ }
-    recorderRef.current = null;
+    stopRelayCapture();
+    try { relayAudioContextRef.current?.close(); } catch { /* ignore */ }
+    relayAudioContextRef.current = null;
+    relayNextPlayTimeRef.current = 0;
     relayModeRef.current = false;
     relayQueueRef.current.splice(0).forEach((item) => URL.revokeObjectURL(item.url));
     relayPlayingRef.current = false;
@@ -321,6 +422,7 @@ export default function DeliveryCallRoomPage() {
 
   const toggleMute = () => {
     const next = !muted;
+    mutedRef.current = next;
     localStreamRef.current?.getAudioTracks().forEach((track) => { track.enabled = !next; });
     setMuted(next);
   };
@@ -348,12 +450,13 @@ export default function DeliveryCallRoomPage() {
           }
         });
         socket.on('call:relay-mode', () => startOwnServerRelay('peer switched to relay').catch(() => {}));
-        socket.on('call:relay-audio', ({ from, chunk, mimeType }: { from: Role; chunk: ArrayBuffer; mimeType: string }) => {
-          if (from === role || hasEndedRef.current) return;
-          const blob = new Blob([chunk], { type: mimeType || 'audio/webm' });
-          const url = URL.createObjectURL(blob);
-          relayQueueRef.current.push({ blob, url });
-          playNextRelayChunk();
+        socket.on('call:relay-audio', ({ from, chunk, mimeType, format, sampleRate }: { from: Role; chunk: ArrayBuffer; mimeType?: string; format?: string; sampleRate?: number }) => {
+          if (from === role || hasEndedRef.current || !chunk) return;
+          if (format === 'pcm16') {
+            playRelayPcmChunk(chunk, sampleRate || 48000);
+            return;
+          }
+          playRelayBlobChunk(chunk, mimeType || 'audio/webm');
         });
         socket.on('call:ended', () => {
           if (!hasEndedRef.current) {

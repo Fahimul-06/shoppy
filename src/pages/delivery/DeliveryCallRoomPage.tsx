@@ -50,7 +50,20 @@ function floatToPcm16(input: Float32Array) {
     const sample = Math.max(-1, Math.min(1, input[i]));
     output[i] = sample < 0 ? sample * 0x8000 : sample * 0x7fff;
   }
-  return output.buffer;
+  return output.buffer as ArrayBuffer;
+}
+
+function normalizeBinaryPayload(input: any): ArrayBuffer {
+  if (input instanceof ArrayBuffer) return input;
+  if (ArrayBuffer.isView(input)) {
+    const view = input as ArrayBufferView;
+    return view.buffer.slice(view.byteOffset, view.byteOffset + view.byteLength) as ArrayBuffer;
+  }
+  if (input?.type === 'Buffer' && Array.isArray(input.data)) {
+    return new Uint8Array(input.data).buffer as ArrayBuffer;
+  }
+  if (Array.isArray(input)) return new Uint8Array(input).buffer as ArrayBuffer;
+  throw new Error('Unsupported relay audio payload');
 }
 
 function pcm16ToFloat(input: ArrayBuffer) {
@@ -98,6 +111,9 @@ export default function DeliveryCallRoomPage() {
   const relayProcessorRef = useRef<ScriptProcessorNode | null>(null);
   const relaySilentGainRef = useRef<GainNode | null>(null);
   const relayNextPlayTimeRef = useRef(0);
+  const relaySentCountRef = useRef(0);
+  const relayReceivedCountRef = useRef(0);
+  const relayMonitorRef = useRef<number | null>(null);
 
   const [room, setRoom] = useState<any>(null);
   const [status, setStatus] = useState('Preparing live call room...');
@@ -106,6 +122,9 @@ export default function DeliveryCallRoomPage() {
   const [connected, setConnected] = useState(false);
   const [ending, setEnding] = useState(false);
   const [relayMode, setRelayMode] = useState(false);
+  const [relaySentCount, setRelaySentCount] = useState(0);
+  const [relayReceivedCount, setRelayReceivedCount] = useState(0);
+  const [peerRelayReady, setPeerRelayReady] = useState(false);
 
   const callHome = () => role === 'admin' ? '/admin' : '/delivery/support';
 
@@ -197,10 +216,10 @@ export default function DeliveryCallRoomPage() {
     setRelayMode(true);
     setConnected(true);
     setError('');
-    setStatus(`Connected using own-server relay mode (${reason}). Audio is passing through your own backend Socket.IO server.`);
+    setStatus(`Own-server relay mode activated (${reason}). Starting microphone relay...`);
 
     try {
-      await socketAck(socket, 'call:relay-mode', { roomId, enabled: true }, 2500).catch(() => {});
+      await socketAck(socket, 'call:relay-mode', { roomId, enabled: true, reason }, 2500).catch(() => {});
       stopRelayCapture();
       const ctx = await ensureAudioContext(relayAudioContextRef.current);
       relayAudioContextRef.current = ctx;
@@ -218,11 +237,28 @@ export default function DeliveryCallRoomPage() {
       relayInputSourceRef.current = source;
       relayProcessorRef.current = processor;
       relaySilentGainRef.current = silentGain;
+      await socketAck(socket, 'call:relay-ready', { roomId }, 2500).catch(() => {});
+      setStatus(`Own-server relay mode active. Waiting for live audio from ${peerRole === 'admin' ? 'customer care' : 'delivery man'}...`);
+      if (relayMonitorRef.current) window.clearInterval(relayMonitorRef.current);
+      relayMonitorRef.current = window.setInterval(() => {
+        if (hasEndedRef.current || !relayModeRef.current) return;
+        const sent = relaySentCountRef.current;
+        const received = relayReceivedCountRef.current;
+        setRelaySentCount(sent);
+        setRelayReceivedCount(received);
+        if (received > 0) {
+          setConnected(true);
+          setStatus(`Live audio connected using own-server relay. Sent ${sent} audio packets, received ${received}.`);
+        } else if (sent > 0) {
+          setStatus(`Own-server relay is sending audio (${sent} packets). Waiting for the other side audio...`);
+        }
+      }, 1200);
 
       processor.onaudioprocess = (event) => {
         if (hasEndedRef.current || !socket.connected || mutedRef.current) return;
         const input = event.inputBuffer.getChannelData(0);
         const pcmBuffer = floatToPcm16(input);
+        relaySentCountRef.current += 1;
         socket.emit('call:relay-audio', {
           roomId,
           format: 'pcm16',
@@ -241,6 +277,7 @@ export default function DeliveryCallRoomPage() {
   const closeLocalCall = (stopTracks = true) => {
     if (offerTimerRef.current) window.clearTimeout(offerTimerRef.current);
     if (relayFallbackTimerRef.current) window.clearTimeout(relayFallbackTimerRef.current);
+    if (relayMonitorRef.current) window.clearInterval(relayMonitorRef.current);
     offerTimerRef.current = null;
     relayFallbackTimerRef.current = null;
     stopRelayCapture();
@@ -417,7 +454,12 @@ export default function DeliveryCallRoomPage() {
     if (relayFallbackTimerRef.current) window.clearTimeout(relayFallbackTimerRef.current);
     relayFallbackTimerRef.current = window.setTimeout(() => {
       if (!connected && !hasEndedRef.current) startOwnServerRelay('direct connection timeout');
-    }, 9000);
+    }, 5000);
+    window.setTimeout(() => {
+      if (!hasEndedRef.current && !relayModeRef.current && currentRoom?.deliveryJoinedAt && currentRoom?.adminJoinedAt) {
+        startOwnServerRelay('stable own-server audio path').catch(() => {});
+      }
+    }, 1200);
   };
 
   const toggleMute = () => {
@@ -447,16 +489,34 @@ export default function DeliveryCallRoomPage() {
           if (payload?.room) {
             setRoom(payload.room);
             maybeStartOffer(payload.room);
+            if (payload.room?.relayEnabled || (payload.room?.deliveryJoinedAt && payload.room?.adminJoinedAt)) {
+              window.setTimeout(() => startOwnServerRelay(payload.room?.relayEnabled ? 'room relay active' : 'both sides joined').catch(() => {}), 800);
+            }
           }
         });
-        socket.on('call:relay-mode', () => startOwnServerRelay('peer switched to relay').catch(() => {}));
-        socket.on('call:relay-audio', ({ from, chunk, mimeType, format, sampleRate }: { from: Role; chunk: ArrayBuffer; mimeType?: string; format?: string; sampleRate?: number }) => {
+        socket.on('call:relay-mode', (payload: any) => {
+          if (payload?.room) setRoom(payload.room);
+          if (payload?.enabled !== false) startOwnServerRelay(payload?.reason || 'peer switched to relay').catch(() => {});
+        });
+        socket.on('call:relay-ready', (payload: any) => {
+          if (payload?.room) setRoom(payload.room);
+          if (payload?.role && payload.role !== role) setPeerRelayReady(true);
+        });
+        socket.on('call:relay-audio', ({ from, chunk, mimeType, format, sampleRate }: { from: Role; chunk: any; mimeType?: string; format?: string; sampleRate?: number }) => {
           if (from === role || hasEndedRef.current || !chunk) return;
-          if (format === 'pcm16') {
-            playRelayPcmChunk(chunk, sampleRate || 48000);
-            return;
+          try {
+            const binary = normalizeBinaryPayload(chunk);
+            relayReceivedCountRef.current += 1;
+            setRelayReceivedCount(relayReceivedCountRef.current);
+            setConnected(true);
+            if (format === 'pcm16') {
+              playRelayPcmChunk(binary, sampleRate || 48000);
+              return;
+            }
+            playRelayBlobChunk(binary, mimeType || 'audio/webm');
+          } catch (e) {
+            setError(e instanceof Error ? e.message : 'Could not receive relay audio');
           }
-          playRelayBlobChunk(chunk, mimeType || 'audio/webm');
         });
         socket.on('call:ended', () => {
           if (!hasEndedRef.current) {
@@ -471,6 +531,9 @@ export default function DeliveryCallRoomPage() {
           if (mountedRef.current) setRoom(joined.room);
           setStatus(role === 'admin' ? 'Waiting for delivery man answer...' : 'Waiting for customer care to answer...');
           maybeStartOffer(joined.room);
+          if (joined.room?.relayEnabled || (joined.room?.deliveryJoinedAt && joined.room?.adminJoinedAt)) {
+            window.setTimeout(() => startOwnServerRelay(joined.room?.relayEnabled ? 'room already in relay mode' : 'both sides joined').catch(() => {}), 800);
+          }
         });
         socket.on('connect_error', (e) => setError(e.message || 'Realtime call connection failed'));
       } catch (e) {
@@ -519,6 +582,7 @@ export default function DeliveryCallRoomPage() {
             <div>
               <p className="font-black">{error || status}</p>
               <p className="text-xs text-slate-400">You are joined as: {role === 'admin' ? 'Customer Care/Admin' : 'Delivery Man'}</p>
+              {relayMode && <p className="text-xs text-emerald-200 mt-1">Relay packets — sent: {relaySentCount} • received: {relayReceivedCount} {peerRelayReady ? '• peer ready' : '• waiting peer relay'}</p>}
             </div>
           </div>
           {room?.deliveryMan && <p className="text-sm text-slate-300">Delivery: <b>{room.deliveryMan.fullName}</b> • ID: {room.deliveryMan.deliveryCode}</p>}

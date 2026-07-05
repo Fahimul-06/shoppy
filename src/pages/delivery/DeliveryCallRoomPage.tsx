@@ -15,13 +15,52 @@ type Signal = {
   payload: any;
 };
 
-function buildRtcConfig(): RTCConfiguration {
-  const urls = String(import.meta.env.VITE_TURN_URLS || import.meta.env.VITE_TURN_URL || '').split(',').map((url) => url.trim()).filter(Boolean);
+function envFlag(name: string, defaultValue: boolean) {
+  const raw = String(import.meta.env[name] ?? '').trim().toLowerCase();
+  if (!raw) return defaultValue;
+  return !['0', 'false', 'no', 'off', 'disabled'].includes(raw);
+}
+
+function envList(name: string, fallback = '') {
+  return String(import.meta.env[name] || fallback)
+    .split(',')
+    .map((url) => url.trim())
+    .filter(Boolean);
+}
+
+function buildIceServers(): RTCIceServer[] {
+  const stunEnabled = envFlag('VITE_CALL_STUN_ENABLED', true);
+  const turnEnabled = envFlag('VITE_CALL_TURN_ENABLED', true);
+  const stunUrls = stunEnabled
+    ? envList('VITE_STUN_URLS', 'stun:stun.l.google.com:19302,stun:stun1.l.google.com:19302')
+    : [];
+  const turnUrls = turnEnabled
+    ? envList('VITE_TURN_URLS', String(import.meta.env.VITE_TURN_URL || ''))
+    : [];
   const username = String(import.meta.env.VITE_TURN_USERNAME || '').trim();
   const credential = String(import.meta.env.VITE_TURN_CREDENTIAL || '').trim();
+
   const iceServers: RTCIceServer[] = [];
-  if (urls.length) iceServers.push(username || credential ? { urls, username, credential } : { urls });
-  return { iceServers, iceTransportPolicy: 'all', bundlePolicy: 'balanced' };
+  if (stunUrls.length) iceServers.push({ urls: stunUrls });
+  if (turnUrls.length) iceServers.push(username || credential ? { urls: turnUrls, username, credential } : { urls: turnUrls });
+  return iceServers;
+}
+
+function hasConfiguredIceServers() {
+  return buildIceServers().length > 0;
+}
+
+function shouldUseDirectWebRtc() {
+  if (envFlag('VITE_CALL_FORCE_OWN_RELAY', false)) return false;
+  if (!hasConfiguredIceServers() && envFlag('VITE_CALL_RELAY_IF_NO_ICE', true)) return false;
+  return true;
+}
+
+function buildRtcConfig(): RTCConfiguration {
+  const iceServers = buildIceServers();
+  const configuredPolicy = String(import.meta.env.VITE_CALL_ICE_TRANSPORT_POLICY || 'all').trim();
+  const iceTransportPolicy = configuredPolicy === 'relay' ? 'relay' : 'all';
+  return { iceServers, iceTransportPolicy, bundlePolicy: 'balanced' };
 }
 
 function pickRole(requested: string | null): Role {
@@ -134,6 +173,7 @@ export default function DeliveryCallRoomPage() {
   const relaySentCountRef = useRef(0);
   const relayReceivedCountRef = useRef(0);
   const relayMonitorRef = useRef<number | null>(null);
+  const directWebRtcEnabledRef = useRef(shouldUseDirectWebRtc());
 
   const [room, setRoom] = useState<any>(null);
   const [status, setStatus] = useState('Preparing live call room...');
@@ -365,6 +405,9 @@ export default function DeliveryCallRoomPage() {
   };
 
   const createPeer = () => {
+    if (!directWebRtcEnabledRef.current) {
+      throw new Error('Direct WebRTC is disabled. Using own-server relay mode.');
+    }
     if (pcRef.current) return pcRef.current;
     const pc = new RTCPeerConnection(buildRtcConfig());
     pcRef.current = pc;
@@ -418,11 +461,17 @@ export default function DeliveryCallRoomPage() {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
     localStreamRef.current = stream;
     if (localAudioRef.current) localAudioRef.current.srcObject = stream;
-    const pc = createPeer();
-    stream.getTracks().forEach((track) => pc.addTrack(track, stream));
+    if (directWebRtcEnabledRef.current) {
+      const pc = createPeer();
+      stream.getTracks().forEach((track) => pc.addTrack(track, stream));
+    }
   };
 
   const makeAdminOffer = async (iceRestart = false) => {
+    if (!directWebRtcEnabledRef.current) {
+      await startOwnServerRelay('STUN/TURN disabled or forced relay');
+      return;
+    }
     const pc = createPeer();
     if (role !== 'admin' || makingOfferRef.current || hasEndedRef.current) return;
     if (pc.signalingState !== 'stable') return;
@@ -439,6 +488,10 @@ export default function DeliveryCallRoomPage() {
 
   const handleSignal = async (signal: Signal) => {
     if (hasEndedRef.current || signal.from === role) return;
+    if (!directWebRtcEnabledRef.current) {
+      await startOwnServerRelay('STUN/TURN disabled or forced relay');
+      return;
+    }
     const pc = createPeer();
 
     if (signal.type === 'offer' && role === 'delivery') {
@@ -476,23 +529,26 @@ export default function DeliveryCallRoomPage() {
   };
 
   const maybeStartOffer = (nextRoom?: any) => {
-    if (role !== 'admin' || hasEndedRef.current) return;
+    if (hasEndedRef.current) return;
     const currentRoom = nextRoom || room;
     if (!currentRoom?.deliveryJoinedAt || !currentRoom?.adminJoinedAt) {
       setStatus('Waiting for both sides to enter the call page...');
       return;
     }
+
+    if (!directWebRtcEnabledRef.current) {
+      setStatus('STUN/TURN is disabled or unavailable. Starting own-server relay mode automatically...');
+      window.setTimeout(() => startOwnServerRelay('STUN/TURN disabled or unavailable').catch(() => {}), 350);
+      return;
+    }
+
+    if (role !== 'admin') return;
     if (offerTimerRef.current) window.clearTimeout(offerTimerRef.current);
     offerTimerRef.current = window.setTimeout(() => makeAdminOffer().catch((e) => setError(e instanceof Error ? e.message : 'Could not start live call')), 400);
     if (relayFallbackTimerRef.current) window.clearTimeout(relayFallbackTimerRef.current);
     relayFallbackTimerRef.current = window.setTimeout(() => {
-      if (!connected && !hasEndedRef.current) startOwnServerRelay('direct connection timeout');
-    }, 5000);
-    window.setTimeout(() => {
-      if (!hasEndedRef.current && !relayModeRef.current && currentRoom?.deliveryJoinedAt && currentRoom?.adminJoinedAt) {
-        startOwnServerRelay('stable own-server audio path').catch(() => {});
-      }
-    }, 1200);
+      if (!connected && !hasEndedRef.current) startOwnServerRelay('STUN/TURN direct connection timeout');
+    }, 8000);
   };
 
   const toggleMute = () => {
@@ -522,8 +578,10 @@ export default function DeliveryCallRoomPage() {
           if (payload?.room) {
             setRoom(payload.room);
             maybeStartOffer(payload.room);
-            if (payload.room?.relayEnabled || (payload.room?.deliveryJoinedAt && payload.room?.adminJoinedAt)) {
-              window.setTimeout(() => startOwnServerRelay(payload.room?.relayEnabled ? 'room relay active' : 'both sides joined').catch(() => {}), 800);
+            if (payload.room?.relayEnabled) {
+              window.setTimeout(() => startOwnServerRelay('room relay active').catch(() => {}), 350);
+            } else if (!directWebRtcEnabledRef.current && payload.room?.deliveryJoinedAt && payload.room?.adminJoinedAt) {
+              window.setTimeout(() => startOwnServerRelay('STUN/TURN disabled or unavailable').catch(() => {}), 350);
             }
           }
         });
@@ -564,8 +622,10 @@ export default function DeliveryCallRoomPage() {
           if (mountedRef.current) setRoom(joined.room);
           setStatus(role === 'admin' ? 'Waiting for delivery man answer...' : 'Waiting for customer care to answer...');
           maybeStartOffer(joined.room);
-          if (joined.room?.relayEnabled || (joined.room?.deliveryJoinedAt && joined.room?.adminJoinedAt)) {
-            window.setTimeout(() => startOwnServerRelay(joined.room?.relayEnabled ? 'room already in relay mode' : 'both sides joined').catch(() => {}), 800);
+          if (joined.room?.relayEnabled) {
+            window.setTimeout(() => startOwnServerRelay('room already in relay mode').catch(() => {}), 350);
+          } else if (!directWebRtcEnabledRef.current && joined.room?.deliveryJoinedAt && joined.room?.adminJoinedAt) {
+            window.setTimeout(() => startOwnServerRelay('STUN/TURN disabled or unavailable').catch(() => {}), 350);
           }
         });
         socket.on('connect_error', (e) => setError(e.message || 'Realtime call connection failed'));
@@ -602,7 +662,7 @@ export default function DeliveryCallRoomPage() {
       <div className="w-full max-w-xl rounded-3xl border border-white/10 bg-white/10 backdrop-blur p-6 shadow-2xl">
         <div className="flex items-start justify-between gap-4 mb-6">
           <div>
-            <p className="text-xs uppercase tracking-[0.25em] text-blue-200 font-black">Realtime Own Internet Call Room</p>
+            <p className="text-xs uppercase tracking-[0.25em] text-blue-200 font-black">Realtime STUN/TURN Internet Call Room</p>
             <h1 className="text-2xl font-black mt-1 flex items-center gap-2"><PhoneCall/> Delivery Support Call</h1>
             <p className="text-sm text-slate-300 mt-1">Room: {roomId}</p>
           </div>
@@ -616,10 +676,11 @@ export default function DeliveryCallRoomPage() {
               <p className="font-black">{error || status}</p>
               <p className="text-xs text-slate-400">You are joined as: {role === 'admin' ? 'Customer Care/Admin' : 'Delivery Man'}</p>
               {relayMode && <p className="text-xs text-emerald-200 mt-1">Relay packets — sent: {relaySentCount} • received: {relayReceivedCount} {peerRelayReady ? '• peer ready' : '• waiting peer relay'}</p>}
+              {!relayMode && <p className="text-xs text-blue-200 mt-1">Direct mode: {directWebRtcEnabledRef.current ? 'STUN/TURN WebRTC enabled' : 'STUN/TURN disabled → own relay auto mode'}</p>}
             </div>
           </div>
           {room?.deliveryMan && <p className="text-sm text-slate-300">Delivery: <b>{room.deliveryMan.fullName}</b> • ID: {room.deliveryMan.deliveryCode}</p>}
-          <div className="rounded-xl bg-blue-950/60 border border-blue-500/20 p-3 text-xs text-blue-100 flex gap-2"><ShieldCheck size={16}/> No Jitsi and no third-party meeting room. The app tries direct WebRTC first; if strict NAT/mobile networks block it, the call automatically switches to your own backend Socket.IO audio relay.</div>
+          <div className="rounded-xl bg-blue-950/60 border border-blue-500/20 p-3 text-xs text-blue-100 flex gap-2"><ShieldCheck size={16}/> No Jitsi and no third-party meeting room. The app tries WebRTC with configured STUN/TURN first. If STUN/TURN is disabled, missing, blocked, or times out, it automatically switches to your own backend Socket.IO audio relay.</div>
         </div>
 
         <audio ref={localAudioRef} autoPlay muted className="hidden" />
@@ -631,7 +692,7 @@ export default function DeliveryCallRoomPage() {
           <button onClick={() => stopRoomAndExit('ended')} disabled={ending} className="rounded-2xl px-6 py-3 font-black flex items-center gap-2 bg-red-600 hover:bg-red-700 disabled:bg-gray-500"><PhoneOff/>{ending ? 'Ending...' : 'End Call'}</button>
         </div>
 
-        {relayMode && <p className="mt-4 text-sm text-emerald-100 bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-3">Own-server relay mode is active. This works on strict NAT/mobile networks because audio travels through your backend WebSocket connection instead of requiring direct peer-to-peer NAT traversal.</p>}
+        {relayMode && <p className="mt-4 text-sm text-emerald-100 bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-3">Own-server relay mode is active. This is the automatic fallback when STUN/TURN is disabled, missing, blocked, or direct WebRTC cannot connect.</p>}
         {error && <p className="mt-4 text-sm text-red-200 bg-red-500/10 border border-red-500/20 rounded-xl p-3">{error}</p>}
       </div>
     </div>

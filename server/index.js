@@ -72,14 +72,50 @@ app.use(cors({ origin: process.env.CLIENT_URL?.split(',') || true, credentials: 
 app.use(express.json({ limit: '10mb' }));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
+
+function cleanPortalSlug(value, fallback) {
+  return String(value || fallback).trim().replace(/^\/+|\/+$/g, '') || fallback;
+}
+
+function requirePortalSecret({ envEnabled, envSlug, headerName, fallback }) {
+  return (req, res, next) => {
+    if (process.env[envEnabled] === 'false') return next();
+    const expected = cleanPortalSlug(process.env[envSlug], fallback);
+    const provided = String(req.headers[headerName] || '').trim().replace(/^\/+|\/+$/g, '');
+    if (!provided || provided !== expected) return res.status(404).json({ message: 'Not found' });
+    next();
+  };
+}
+
+const requireAdminPortalSecret = requirePortalSecret({
+  envEnabled: 'ADMIN_PORTAL_SECRET_ENABLED',
+  envSlug: 'ADMIN_PORTAL_SLUG',
+  headerName: 'x-admin-portal',
+  fallback: 'secure-shoppy-admin',
+});
+
+const requireSellerPortalSecret = requirePortalSecret({
+  envEnabled: 'SELLER_PORTAL_SECRET_ENABLED',
+  envSlug: 'SELLER_PORTAL_SLUG',
+  headerName: 'x-seller-portal',
+  fallback: 'secure-shoppy-seller',
+});
+
+const requireDeliveryPortalSecret = requirePortalSecret({
+  envEnabled: 'DELIVERY_PORTAL_SECRET_ENABLED',
+  envSlug: 'DELIVERY_PORTAL_SLUG',
+  headerName: 'x-delivery-portal',
+  fallback: 'secure-shoppy-delivery',
+});
+
 app.get('/api/health', (_req, res) => res.json({ ok: true }));
 app.use('/api/auth', authRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/categories', categoryRoutes);
 app.use('/api/hero-slides', heroRoutes);
 app.use('/api/orders', orderRoutes);
-app.use('/api/admin', adminRoutes);
-app.use('/api/seller', sellerRoutes);
+app.use('/api/admin', requireAdminPortalSecret, adminRoutes);
+app.use('/api/seller', requireSellerPortalSecret, sellerRoutes);
 app.use('/api/wishlist', wishlistRoutes);
 app.use('/api/uploads', uploadRoutes);
 app.use('/api/promos', promoRoutes);
@@ -89,7 +125,7 @@ app.use('/api/shops', shopRoutes);
 app.use('/api/settings', settingsRoutes);
 
 app.use('/api/calls', callRoutes);
-app.use('/api/delivery', deliveryRoutes);
+app.use('/api/delivery', requireDeliveryPortalSecret, deliveryRoutes);
 
 
 app.use((err, _req, res, _next) => {

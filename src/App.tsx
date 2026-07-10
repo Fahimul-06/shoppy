@@ -47,6 +47,7 @@ import PrivacyPolicyPage from './pages/PrivacyPolicyPage';
 import TermsConditionsPage from './pages/TermsConditionsPage';
 import CookiePolicyPage from './pages/CookiePolicyPage';
 import SitemapPage from './pages/SitemapPage';
+import { ADMIN_LOGIN_PATH, ADMIN_PORTAL_PATH, SELLER_LOGIN_PATH, SELLER_REGISTER_PATH, SELLER_DASHBOARD_PATH, DELIVERY_LOGIN_PATH, DELIVERY_DASHBOARD_PATH, DELIVERY_ORDERS_PATH, DELIVERY_SUPPORT_PATH } from './lib/adminPortal';
 
 function StoreLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -103,22 +104,39 @@ export default function App() {
           <Route path="/sitemap" element={<StorePage><SitemapPage /></StorePage>} />
 
           {/* Seller routes */}
-          <Route path="/seller/register" element={<SellerRegisterPage />} />
-          <Route path="/seller/login" element={<SellerLoginPage />} />
-          <Route path="/seller/dashboard/*" element={<SellerDashboardPage />} />
+          <Route path={SELLER_REGISTER_PATH} element={<SellerRegisterPage />} />
+          <Route path={SELLER_LOGIN_PATH} element={<SellerLoginPage />} />
+          <Route path={`${SELLER_DASHBOARD_PATH}/*`} element={<SellerDashboardPage />} />
 
           {/* Delivery routes */}
-          <Route path="/delivery/login" element={<DeliveryLoginPage />} />
-          <Route path="/delivery" element={<DeliveryDashboardPage />} />
-          <Route path="/delivery/orders" element={<DeliveryOrdersPage />} />
-          <Route path="/delivery/support" element={<DeliverySupportPage />} />
+          <Route path={DELIVERY_LOGIN_PATH} element={<DeliveryLoginPage />} />
+          <Route path={DELIVERY_DASHBOARD_PATH} element={<DeliveryDashboardPage />} />
+          <Route path={DELIVERY_ORDERS_PATH} element={<DeliveryOrdersPage />} />
+          <Route path={DELIVERY_SUPPORT_PATH} element={<DeliverySupportPage />} />
           <Route path="/call/:roomId" element={<DeliveryCallRoomPage />} />
 
-          {/* Admin routes. These are intentionally outside StoreLayout so the admin login page always renders cleanly. */}
-          <Route path="/admin/login" element={<AdminLoginPage />} />
-          <Route path="/admin-login" element={<AdminLoginPage />} />
-          <Route path="/admin" element={<AdminPage />} />
-          <Route path="/admin/*" element={<AdminPage />} />
+          {/* Hidden admin portal. Set VITE_ADMIN_PORTAL_SLUG to change this private URL. */}
+          <Route path={ADMIN_LOGIN_PATH} element={<AdminLoginPage />} />
+          <Route path={`${ADMIN_PORTAL_PATH}/*`} element={<AdminPage />} />
+
+
+
+          {/* Old/public seller URLs are disabled so only the private seller portal path works. */}
+          <Route path="/seller/register" element={<StorePage><HomePage /></StorePage>} />
+          <Route path="/seller/login" element={<StorePage><HomePage /></StorePage>} />
+          <Route path="/seller/dashboard/*" element={<StorePage><HomePage /></StorePage>} />
+
+          {/* Old/public delivery URLs are disabled so only the private delivery portal path works. */}
+          <Route path="/delivery/login" element={<StorePage><HomePage /></StorePage>} />
+          <Route path="/delivery" element={<StorePage><HomePage /></StorePage>} />
+          <Route path="/delivery/orders" element={<StorePage><HomePage /></StorePage>} />
+          <Route path="/delivery/support" element={<StorePage><HomePage /></StorePage>} />
+
+          {/* Old/public admin URLs are intentionally disabled so visitors cannot discover the portal from common paths. */}
+          <Route path="/admin/login" element={<StorePage><HomePage /></StorePage>} />
+          <Route path="/admin-login" element={<StorePage><HomePage /></StorePage>} />
+          <Route path="/admin" element={<StorePage><HomePage /></StorePage>} />
+          <Route path="/admin/*" element={<StorePage><HomePage /></StorePage>} />
 
           <Route path="*" element={<StorePage><HomePage /></StorePage>} />
         </Routes>

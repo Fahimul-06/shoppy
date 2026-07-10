@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Bike, Hash, Lock } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { api, setSession } from '../../lib/api';
+import { DELIVERY_DASHBOARD_PATH } from '../../lib/adminPortal';
 
 export default function DeliveryLoginPage() {
   const navigate = useNavigate();
@@ -17,7 +18,7 @@ export default function DeliveryLoginPage() {
     try {
       const r = await api.post<{ token: string; user: any }>('/delivery/login', { loginId, password });
       setSession('delivery', r.token, r.user);
-      navigate('/delivery');
+      navigate(DELIVERY_DASHBOARD_PATH);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed');
     } finally {

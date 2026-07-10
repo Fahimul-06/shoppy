@@ -10,6 +10,7 @@ import PasswordOtpPanel from '../../components/forms/PasswordOtpPanel';
 import PhoneOtpPanel from '../../components/forms/PhoneOtpPanel';
 import CategoryDropdowns from '../../components/forms/CategoryDropdowns';
 import AddressManager from '../../components/forms/AddressManager';
+import { SELLER_LOGIN_PATH, SELLER_DASHBOARD_PATH } from '../../lib/adminPortal';
 
 const EMPTY = {
   name: '',
@@ -104,7 +105,7 @@ export default function SellerDashboardPage() {
   useEffect(() => {
     const t = getToken('seller');
     if (!t) {
-      nav('/seller/login');
+      nav(SELLER_LOGIN_PATH);
       return;
     }
 
@@ -117,7 +118,7 @@ export default function SellerDashboardPage() {
       })
       .catch(() => {
         clearSession('seller');
-        nav('/seller/login');
+        nav(SELLER_LOGIN_PATH);
       })
       .finally(() => setLoading(false));
 
@@ -127,7 +128,7 @@ export default function SellerDashboardPage() {
 
   const logout = () => {
     clearSession('seller');
-    nav('/seller/login');
+    nav(SELLER_LOGIN_PATH);
   };
 
   const saveProfile = async () => {
@@ -208,12 +209,12 @@ export default function SellerDashboardPage() {
   const activeSellerOrderCount = sellerOrders.filter((order: any) => ['pending', 'processing'].includes(String(order.status || '').toLowerCase())).length;
 
   const navItems = [
-    { to: '/seller/dashboard', key: 'home', label: 'Home', icon: Home },
-    { to: '/seller/dashboard/profile', key: 'profile', label: 'Profile', icon: User },
-    { to: '/seller/dashboard/products', key: 'products', label: 'Products', icon: Package },
-    { to: '/seller/dashboard/orders', key: 'orders', label: 'Orders', icon: ShoppingBag },
-    { to: '/seller/dashboard/returns', key: 'returns', label: 'Returns', icon: RotateCcw },
-    { to: '/seller/dashboard/cancellations', key: 'cancellations', label: 'Cancellations', icon: ShieldX },
+    { to: SELLER_DASHBOARD_PATH, key: 'home', label: 'Home', icon: Home },
+    { to: `${SELLER_DASHBOARD_PATH}/profile`, key: 'profile', label: 'Profile', icon: User },
+    { to: `${SELLER_DASHBOARD_PATH}/products`, key: 'products', label: 'Products', icon: Package },
+    { to: `${SELLER_DASHBOARD_PATH}/orders`, key: 'orders', label: 'Orders', icon: ShoppingBag },
+    { to: `${SELLER_DASHBOARD_PATH}/returns`, key: 'returns', label: 'Returns', icon: RotateCcw },
+    { to: `${SELLER_DASHBOARD_PATH}/cancellations`, key: 'cancellations', label: 'Cancellations', icon: ShieldX },
   ];
 
   if (loading) return <div className="min-h-screen flex items-center justify-center"><Loader2 className="animate-spin" /></div>;
@@ -256,7 +257,7 @@ export default function SellerDashboardPage() {
 
       <main className="max-w-6xl mx-auto p-4">
         {seller?.status !== 'approved' && <div className="bg-amber-50 border border-amber-200 text-amber-700 rounded-2xl p-4 mb-4 text-sm">Your seller account is not approved yet. You can prepare products, but admin approval is required.</div>}
-        {notificationCounts.orders > 0 && <Link to="/seller/dashboard/orders" className="block bg-orange-50 border border-orange-200 text-orange-800 rounded-2xl p-4 mb-4 text-sm font-bold">🔔 You have {notificationCounts.orders} active product order{notificationCounts.orders > 1 ? 's' : ''}. Click here to view and message customers.</Link>}
+        {notificationCounts.orders > 0 && <Link to={`${SELLER_DASHBOARD_PATH}/orders`} className="block bg-orange-50 border border-orange-200 text-orange-800 rounded-2xl p-4 mb-4 text-sm font-bold">🔔 You have {notificationCounts.orders} active product order{notificationCounts.orders > 1 ? 's' : ''}. Click here to view and message customers.</Link>}
 
         {section === 'home' && (
           <>
@@ -268,27 +269,27 @@ export default function SellerDashboardPage() {
             </div>
 
             <div className="grid md:grid-cols-4 gap-4">
-              <Link to="/seller/dashboard/profile" className="bg-white rounded-3xl border p-6 hover:border-orange-300 hover:shadow-sm transition group">
+              <Link to={`${SELLER_DASHBOARD_PATH}/profile`} className="bg-white rounded-3xl border p-6 hover:border-orange-300 hover:shadow-sm transition group">
                 <div className="w-14 h-14 rounded-2xl bg-orange-50 text-orange-500 flex items-center justify-center mb-4 group-hover:bg-orange-500 group-hover:text-white transition"><User size={28} /></div>
                 <h2 className="font-black text-xl mb-1">Profile</h2>
                 <p className="text-sm text-gray-500">Edit seller/shop details, set or change phone using OTP, and change password using OTP.</p>
               </Link>
-              <Link to="/seller/dashboard/products" className="bg-white rounded-3xl border p-6 hover:border-orange-300 hover:shadow-sm transition group">
+              <Link to={`${SELLER_DASHBOARD_PATH}/products`} className="bg-white rounded-3xl border p-6 hover:border-orange-300 hover:shadow-sm transition group">
                 <div className="w-14 h-14 rounded-2xl bg-orange-50 text-orange-500 flex items-center justify-center mb-4 group-hover:bg-orange-500 group-hover:text-white transition"><Package size={28} /></div>
                 <h2 className="font-black text-xl mb-1">Products</h2>
                 <p className="text-sm text-gray-500">Add, edit, upload product photos, update price and stock, or delete products.</p>
               </Link>
-              <Link to="/seller/dashboard/orders" className="bg-white rounded-3xl border p-6 hover:border-orange-300 hover:shadow-sm transition group">
+              <Link to={`${SELLER_DASHBOARD_PATH}/orders`} className="bg-white rounded-3xl border p-6 hover:border-orange-300 hover:shadow-sm transition group">
                 <div className="w-14 h-14 rounded-2xl bg-orange-50 text-orange-500 flex items-center justify-center mb-4 group-hover:bg-orange-500 group-hover:text-white transition"><ShoppingBag size={28} /></div>
                 <h2 className="font-black text-xl mb-1">Orders</h2>
                 <p className="text-sm text-gray-500">See orders that contain your products and chat with the customer.</p>
               </Link>
-              <Link to="/seller/dashboard/returns" className="bg-white rounded-3xl border p-6 hover:border-orange-300 hover:shadow-sm transition group">
+              <Link to={`${SELLER_DASHBOARD_PATH}/returns`} className="bg-white rounded-3xl border p-6 hover:border-orange-300 hover:shadow-sm transition group">
                 <div className="w-14 h-14 rounded-2xl bg-orange-50 text-orange-500 flex items-center justify-center mb-4 group-hover:bg-orange-500 group-hover:text-white transition"><RotateCcw size={28} /></div>
                 <h2 className="font-black text-xl mb-1">Returns</h2>
                 <p className="text-sm text-gray-500">See return requests for products that belong to your seller account.</p>
               </Link>
-              <Link to="/seller/dashboard/cancellations" className="bg-white rounded-3xl border p-6 hover:border-orange-300 hover:shadow-sm transition group">
+              <Link to={`${SELLER_DASHBOARD_PATH}/cancellations`} className="bg-white rounded-3xl border p-6 hover:border-orange-300 hover:shadow-sm transition group">
                 <div className="w-14 h-14 rounded-2xl bg-red-50 text-red-500 flex items-center justify-center mb-4 group-hover:bg-red-500 group-hover:text-white transition"><ShieldX size={28} /></div>
                 <h2 className="font-black text-xl mb-1">Cancellations</h2>
                 <p className="text-sm text-gray-500">See ordered products cancelled by customers within 12 hours.</p>

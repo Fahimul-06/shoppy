@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { ArrowLeft, Loader2, Lock, Shield, UserCircle2 } from 'lucide-react';
 import { api, setSession } from '../../lib/api';
+import { ADMIN_PORTAL_PATH } from '../../lib/adminPortal';
 
 export default function AdminLoginPage() {
   const navigate = useNavigate();
@@ -15,7 +16,7 @@ export default function AdminLoginPage() {
     try {
       const res = await api.post<{ token: string; user: any }>('/admin/login', { email, phone: email, password });
       setSession('admin', res.token, res.user);
-      navigate('/admin');
+      navigate(ADMIN_PORTAL_PATH);
     } catch (e) { setError(e instanceof Error ? e.message : 'Admin login failed'); }
     finally { setLoading(false); }
   };

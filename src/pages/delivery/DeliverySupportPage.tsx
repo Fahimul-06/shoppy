@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { api, getSessionUser, getToken } from '../../lib/api';
 import { createRealtimeSocket, socketAck } from '../../lib/socket';
 import type { Socket } from 'socket.io-client';
+import { DELIVERY_LOGIN_PATH, DELIVERY_DASHBOARD_PATH } from '../../lib/adminPortal';
 
 export default function DeliverySupportPage() {
   const navigate = useNavigate();
@@ -28,7 +29,7 @@ export default function DeliverySupportPage() {
 
   const loadSupport = async () => {
     const token = getToken('delivery');
-    if (!token) { navigate('/delivery/login'); return; }
+    if (!token) { navigate(DELIVERY_LOGIN_PATH); return; }
     try {
       const res = await api.get<{ messages: any[] }>('/delivery/support', token);
       mergeSupportMessages(res.messages || []);
@@ -99,7 +100,7 @@ export default function DeliverySupportPage() {
     <header className="bg-slate-950 text-white">
       <div className="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between gap-3">
         <div>
-          <button onClick={() => navigate('/delivery')} className="text-xs text-slate-300 hover:text-white font-bold flex items-center gap-1 mb-1"><ArrowLeft size={14}/> Back to dashboard</button>
+          <button onClick={() => navigate(DELIVERY_DASHBOARD_PATH)} className="text-xs text-slate-300 hover:text-white font-bold flex items-center gap-1 mb-1"><ArrowLeft size={14}/> Back to dashboard</button>
           <h1 className="text-xl font-black flex items-center gap-2"><Headphones size={22}/> Customer Care Support</h1>
           <p className="text-xs text-slate-300">{user?.fullName} • ID: {user?.deliveryCode || '------'}</p>
         </div>

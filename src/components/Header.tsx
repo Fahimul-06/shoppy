@@ -11,6 +11,7 @@ import { products } from '../data/products';
 import { subSubMap } from '../data/categoryOptions';
 import { searchProductsByImage } from '../lib/db';
 import { api, getToken } from '../lib/api';
+import { SELLER_LOGIN_PATH } from '../lib/adminPortal';
 
 const categoryUrl = (categorySlug: string, sub?: string, child?: string) => {
   const params = new URLSearchParams();
@@ -302,7 +303,7 @@ export default function Header() {
 
           <div className="flex items-center gap-1 sm:gap-2">
             <Link
-              to="/seller/login"
+              to={SELLER_LOGIN_PATH}
               className="hidden md:flex items-center gap-1.5 px-3 py-2 text-sm text-orange-600 font-semibold hover:bg-orange-50 rounded-lg transition-colors border border-orange-200 hover:border-orange-400"
             >
               <Store size={16} />
@@ -374,7 +375,7 @@ export default function Header() {
               );
             })}
             <hr className="border-gray-100 my-2" />
-            <Link to="/seller/login" className="flex items-center gap-2 px-3 py-2 text-sm text-orange-600 font-semibold hover:bg-orange-50 rounded-lg transition-colors" onClick={() => setMobileMenuOpen(false)}>
+            <Link to={SELLER_LOGIN_PATH} className="flex items-center gap-2 px-3 py-2 text-sm text-orange-600 font-semibold hover:bg-orange-50 rounded-lg transition-colors" onClick={() => setMobileMenuOpen(false)}>
               <Store size={15} />Sell on Shoppy
             </Link>
             <Link to="/notifications" className="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:text-orange-500 hover:bg-orange-50 rounded-lg transition-colors" onClick={() => setMobileMenuOpen(false)}>

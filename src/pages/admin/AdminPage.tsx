@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { BarChart3, Bell, Headphones, Image as ImageIcon, LogOut, MessageCircle, Package, RotateCcw, UserCog, ShieldX, ShoppingBag, Tag, UserPlus, UserRound, Users, Percent, Bike } from 'lucide-react';
 import { api, clearSession, getSessionUser, getToken } from '../../lib/api';
+import { ADMIN_LOGIN_PATH } from '../../lib/adminPortal';
 import AdminSellersTab from './AdminSellersTab';
 import AdminProductsTab from './AdminProductsTab';
 import AdminOrdersTab from './AdminOrdersTab';
@@ -29,8 +30,8 @@ export default function AdminPage() {
 
   useEffect(() => {
     const token = getToken('admin');
-    if (!token) { navigate('/admin/login'); return; }
-    api.get<{ user: any }>('/admin/me', token).then(({ user }) => { setAdmin(user); localStorage.setItem('adminUser', JSON.stringify(user)); }).catch(() => { clearSession('admin'); navigate('/admin/login'); });
+    if (!token) { navigate(ADMIN_LOGIN_PATH); return; }
+    api.get<{ user: any }>('/admin/me', token).then(({ user }) => { setAdmin(user); localStorage.setItem('adminUser', JSON.stringify(user)); }).catch(() => { clearSession('admin'); navigate(ADMIN_LOGIN_PATH); });
   }, [navigate]);
   const loadNotificationCounts = () => {
     api.get<{ counts: any }>('/admin/notification-counts', getToken('admin'))
@@ -43,7 +44,7 @@ export default function AdminPage() {
     const timer = window.setInterval(loadNotificationCounts, 15000);
     return () => window.clearInterval(timer);
   }, []);
-  const logout = () => { clearSession('admin'); navigate('/admin/login'); };
+  const logout = () => { clearSession('admin'); navigate(ADMIN_LOGIN_PATH); };
   const allNav = [ ['dashboard', BarChart3], ['sellers', Users], ['customers', UserRound], ['products', Package], ['sales', Percent], ['banners', ImageIcon], ['orders', ShoppingBag], ['returns', RotateCcw], ['cancellations', ShieldX], ['messages', MessageCircle], ['customerCare', Headphones], ['promos', Tag], ['notifications', Bell], ['employees', UserPlus], ['deliveryMen', Bike], ['settings', UserCog] ] as const;
   const isOwnerAdmin = admin?.adminType !== 'employee';
   const allowed = new Set<string>(isOwnerAdmin ? allNav.map(([id]) => id) : ['dashboard', ...(admin?.adminPermissions || [])]);

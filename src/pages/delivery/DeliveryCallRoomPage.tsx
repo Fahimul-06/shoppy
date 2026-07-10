@@ -4,6 +4,7 @@ import { Bike, Loader2, Mic, MicOff, PhoneCall, PhoneOff, ShieldCheck, Volume2, 
 import { api, getToken } from '../../lib/api';
 import { createRealtimeSocket, socketAck } from '../../lib/socket';
 import type { Socket } from 'socket.io-client';
+import { ADMIN_LOGIN_PATH, ADMIN_PORTAL_PATH, DELIVERY_LOGIN_PATH, DELIVERY_SUPPORT_PATH } from '../../lib/adminPortal';
 
 type Role = 'delivery' | 'admin';
 
@@ -186,7 +187,7 @@ export default function DeliveryCallRoomPage() {
   const [relayReceivedCount, setRelayReceivedCount] = useState(0);
   const [peerRelayReady, setPeerRelayReady] = useState(false);
 
-  const callHome = () => role === 'admin' ? '/admin' : '/delivery/support';
+  const callHome = () => role === 'admin' ? ADMIN_PORTAL_PATH : DELIVERY_SUPPORT_PATH;
 
   const sendSignal = async (type: Signal['type'], payload: any = {}) => {
     const socket = socketRef.current;
@@ -562,7 +563,7 @@ export default function DeliveryCallRoomPage() {
     mountedRef.current = true;
     const init = async () => {
       if (!token) {
-        navigate(role === 'admin' ? '/admin/login' : '/delivery/login');
+        navigate(role === 'admin' ? ADMIN_LOGIN_PATH : DELIVERY_LOGIN_PATH);
         return;
       }
       try {

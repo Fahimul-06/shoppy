@@ -1,12 +1,13 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { Map } from 'lucide-react';
+import { SELLER_REGISTER_PATH } from '../lib/adminPortal';
 
 const links = [
   ['Home', '/'], ['Search', '/search'], ['New Arrivals', '/new-arrivals'], ['Daily Sale', '/daily-sale'], ['Flash Sale', '/flash-sale'],
   ['Cart', '/cart'], ['Orders', '/orders'], ['Wishlist', '/wishlist'], ['Coupons', '/coupons'], ['Help Center', '/help-center'],
   ['How to Buy', '/how-to-buy'], ['Returns & Refunds', '/returns-refunds'], ['Contact Us', '/contact-us'], ['Order Tracking', '/order-tracking'],
-  ['About Shoppy', '/about-shoppy'], ['Careers', '/careers'], ['Sell on Shoppy', '/seller/register'], ['Blog', '/blog'], ['Press Room', '/press-room'],
+  ['About Shoppy', '/about-shoppy'], ['Careers', '/careers'], ['Sell on Shoppy', SELLER_REGISTER_PATH], ['Blog', '/blog'], ['Press Room', '/press-room'],
   ['Privacy Policy', '/privacy-policy'], ['Terms & Conditions', '/terms-conditions'], ['Cookie Policy', '/cookie-policy'],
 ];
 

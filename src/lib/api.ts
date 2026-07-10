@@ -1,4 +1,7 @@
 const configuredApiUrl = import.meta.env.VITE_API_URL;
+const adminPortalSlug = String(import.meta.env.VITE_ADMIN_PORTAL_SLUG || 'secure-shoppy-admin').replace(/^\/+|\/+$/g, '') || 'secure-shoppy-admin';
+const sellerPortalSlug = String(import.meta.env.VITE_SELLER_PORTAL_SLUG || 'secure-shoppy-seller').replace(/^\/+|\/+$/g, '') || 'secure-shoppy-seller';
+const deliveryPortalSlug = String(import.meta.env.VITE_DELIVERY_PORTAL_SLUG || 'secure-shoppy-delivery').replace(/^\/+|\/+$/g, '') || 'secure-shoppy-delivery';
 
 function defaultApiBaseUrl() {
   if (configuredApiUrl) return configuredApiUrl;
@@ -51,6 +54,9 @@ export async function apiFetch<T>(path: string, options: ApiOptions = {}): Promi
   const isForm = options.body instanceof FormData;
   if (!isForm && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
   if (options.token) headers.set('Authorization', `Bearer ${options.token}`);
+  if (path === '/admin/login' || path.startsWith('/admin/')) headers.set('X-Admin-Portal', adminPortalSlug);
+  if (path === '/seller/login' || path === '/seller/register' || path.startsWith('/seller/')) headers.set('X-Seller-Portal', sellerPortalSlug);
+  if (path === '/delivery/login' || path.startsWith('/delivery/')) headers.set('X-Delivery-Portal', deliveryPortalSlug);
 
   const controller = new AbortController();
   const timeoutMs = options.timeoutMs ?? (isForm ? 120000 : 30000);

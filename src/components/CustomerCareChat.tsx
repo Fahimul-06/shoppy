@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Headphones, Loader2, MessageCircle, Send, X } from 'lucide-react';
 import { api, getSessionUser, getToken } from '../lib/api';
+import { isAdminPortalPath, isSellerPortalPath, isDeliveryPortalPath } from '../lib/adminPortal';
 
 type CareMessage = {
   id?: string;
@@ -27,8 +28,11 @@ export default function CustomerCareChat() {
   const user = getSessionUser('user');
   const hidden = useMemo(() => (
     location.pathname.startsWith('/admin') ||
+    isAdminPortalPath(location.pathname) ||
     location.pathname.startsWith('/seller') ||
+    isSellerPortalPath(location.pathname) ||
     location.pathname.startsWith('/delivery') ||
+    isDeliveryPortalPath(location.pathname) ||
     location.pathname.startsWith('/call')
   ), [location.pathname]);
 

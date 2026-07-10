@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { api, clearSession, getSessionUser, getToken } from '../../lib/api';
 import { createRealtimeSocket } from '../../lib/socket';
 import type { Socket } from 'socket.io-client';
+import { DELIVERY_LOGIN_PATH, DELIVERY_ORDERS_PATH, DELIVERY_SUPPORT_PATH } from '../../lib/adminPortal';
 
 function playLoudAlert() {
   try {
@@ -37,11 +38,11 @@ export default function DeliveryDashboardPage() {
   const knownOrderIds = useRef<Set<string>>(new Set());
   const firstLoadDone = useRef(false);
 
-  const logout = () => { clearSession('delivery'); navigate('/delivery/login'); };
+  const logout = () => { clearSession('delivery'); navigate(DELIVERY_LOGIN_PATH); };
 
   const load = async (silent = false) => {
     const token = getToken('delivery');
-    if (!token) { navigate('/delivery/login'); return; }
+    if (!token) { navigate(DELIVERY_LOGIN_PATH); return; }
     if (!silent) setLoading(true);
     try {
       const [me, orderRes] = await Promise.all([
@@ -61,7 +62,7 @@ export default function DeliveryDashboardPage() {
       firstLoadDone.current = true;
       setOrders(incoming);
     } catch {
-      clearSession('delivery'); navigate('/delivery/login');
+      clearSession('delivery'); navigate(DELIVERY_LOGIN_PATH);
     } finally { if (!silent) setLoading(false); }
   };
 
@@ -106,7 +107,7 @@ export default function DeliveryDashboardPage() {
       {loading && <div className="bg-white border rounded-2xl p-4 text-sm text-gray-500">Loading dashboard...</div>}
 
       <div className="grid md:grid-cols-2 gap-4">
-        <button onClick={() => navigate('/delivery/orders')} className="bg-white border rounded-2xl p-5 text-left hover:border-green-300 hover:shadow-md transition flex items-center justify-between gap-4">
+        <button onClick={() => navigate(DELIVERY_ORDERS_PATH)} className="bg-white border rounded-2xl p-5 text-left hover:border-green-300 hover:shadow-md transition flex items-center justify-between gap-4">
           <div className="flex items-center gap-4">
             <div className="h-14 w-14 rounded-2xl bg-green-600 text-white flex items-center justify-center"><ShoppingBag size={26}/></div>
             <div>
@@ -117,7 +118,7 @@ export default function DeliveryDashboardPage() {
           <span className="bg-green-50 text-green-700 rounded-xl px-4 py-2 text-sm font-black">Open</span>
         </button>
 
-      <button onClick={() => navigate('/delivery/support')} className="bg-white border rounded-2xl p-5 text-left hover:border-blue-300 hover:shadow-md transition flex items-center justify-between gap-4">
+      <button onClick={() => navigate(DELIVERY_SUPPORT_PATH)} className="bg-white border rounded-2xl p-5 text-left hover:border-blue-300 hover:shadow-md transition flex items-center justify-between gap-4">
         <div className="flex items-center gap-4">
           <div className="h-14 w-14 rounded-2xl bg-blue-600 text-white flex items-center justify-center"><Headphones size={26}/></div>
           <div>

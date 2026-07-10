@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { MapPin, Phone, Mail, Facebook, Twitter, Instagram, Youtube, ShoppingCart } from 'lucide-react';
+import { SELLER_REGISTER_PATH } from '../lib/adminPortal';
 
 const customerCare = [
   { label: 'Help Center', to: '/help-center' },
@@ -12,7 +13,7 @@ const customerCare = [
 const aboutLinks = [
   { label: 'About Shoppy', to: '/about-shoppy' },
   { label: 'Careers', to: '/careers' },
-  { label: 'Sell on Shoppy', to: '/seller/register' },
+  { label: 'Sell on Shoppy', to: SELLER_REGISTER_PATH },
   { label: 'Blog', to: '/blog' },
   { label: 'Press Room', to: '/press-room' },
 ];

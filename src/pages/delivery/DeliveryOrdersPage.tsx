@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { ArrowLeft, Bike, LogOut, MapPin, Phone, User } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { api, clearSession, getSessionUser, getToken } from '../../lib/api';
+import { DELIVERY_LOGIN_PATH, DELIVERY_DASHBOARD_PATH } from '../../lib/adminPortal';
 
 const formatAddress = (address?: any) => {
   if (!address) return 'No address';
@@ -15,11 +16,11 @@ export default function DeliveryOrdersPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  const logout = () => { clearSession('delivery'); navigate('/delivery/login'); };
+  const logout = () => { clearSession('delivery'); navigate(DELIVERY_LOGIN_PATH); };
 
   const load = async () => {
     const token = getToken('delivery');
-    if (!token) { navigate('/delivery/login'); return; }
+    if (!token) { navigate(DELIVERY_LOGIN_PATH); return; }
     setLoading(true);
     setError('');
     try {
@@ -34,7 +35,7 @@ export default function DeliveryOrdersPage() {
       setError(err?.message || 'Could not load assigned orders.');
       if (/unauthorized|invalid|expired/i.test(err?.message || '')) {
         clearSession('delivery');
-        navigate('/delivery/login');
+        navigate(DELIVERY_LOGIN_PATH);
       }
     } finally {
       setLoading(false);
@@ -56,7 +57,7 @@ export default function DeliveryOrdersPage() {
           <p className="text-xs text-slate-300">{user?.fullName} • ID: {user?.deliveryCode || '------'} • {user?.phone}</p>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={() => navigate('/delivery')} className="bg-white/10 rounded-xl px-4 py-2 text-sm font-bold flex gap-2 items-center"><ArrowLeft size={15}/> Dashboard</button>
+          <button onClick={() => navigate(DELIVERY_DASHBOARD_PATH)} className="bg-white/10 rounded-xl px-4 py-2 text-sm font-bold flex gap-2 items-center"><ArrowLeft size={15}/> Dashboard</button>
           <button onClick={logout} className="bg-white/10 rounded-xl px-4 py-2 text-sm font-bold flex gap-2 items-center"><LogOut size={15}/> Logout</button>
         </div>
       </div>

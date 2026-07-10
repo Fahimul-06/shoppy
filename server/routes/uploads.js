@@ -1,15 +1,12 @@
 import express from 'express';
 import multer from 'multer';
-import path from 'path';
-import fs from 'fs';
 import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
 import Seller from '../models/Seller.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
+import { uploadImageBuffer } from '../utils/cloudinary.js';
 
 const router = express.Router();
-const dir = path.join(process.cwd(), 'server', 'uploads');
-fs.mkdirSync(dir, { recursive: true });
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -47,23 +44,13 @@ async function requireLoggedInUploader(req, res, next) {
   }
 }
 
-function safeExt(file) {
-  const fromName = path.extname(file.originalname || '').toLowerCase();
-  if (['.jpg', '.jpeg', '.png', '.webp', '.gif'].includes(fromName)) return fromName;
-  if (file.mimetype === 'image/png') return '.png';
-  if (file.mimetype === 'image/webp') return '.webp';
-  if (file.mimetype === 'image/gif') return '.gif';
-  return '.jpg';
-}
-
 router.post('/', requireLoggedInUploader, upload.single('file'), asyncHandler(async (req, res) => {
   if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
-  const filename = `${Date.now()}-${Math.round(Math.random() * 1e9)}${safeExt(req.file)}`;
-  const filepath = path.join(dir, filename);
-  await fs.promises.writeFile(filepath, req.file.buffer);
-  const publicPath = `/uploads/${filename}`;
-  const origin = `${req.protocol}://${req.get('host')}`;
-  res.json({ url: `${origin}${publicPath}`, path: publicPath });
+
+  const folder = String(req.body?.folder || process.env.CLOUDINARY_UPLOAD_FOLDER || 'shoppy').replace(/[^a-zA-Z0-9_/-]+/g, '-').replace(/^\/+|\/+$/g, '') || 'shoppy';
+  const uploaded = await uploadImageBuffer(req.file, { folder });
+
+  res.json(uploaded);
 }));
 
 router.use((err, _req, res, _next) => {
